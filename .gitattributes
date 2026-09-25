@@ -1,0 +1,13 @@
+# Normalize line endings in the repository regardless of contributor platform.
+# This checkout is on Windows with core.autocrlf=true; Stage 1.2 adds Python and
+# shell entrypoints for the agent workers, and CI runs on Linux.
+* text=auto eol=lf
+
+# Note: git has no attribute for the executable bit. This file prevents CRLF
+# problems, NOT the "Permission denied / exit 126" class of CI failure. Because
+# core.fileMode is false on Windows, chmod is invisible to git — every new
+# executable must be staged with `git update-index --chmod=+x <file>`.
+
+*.png binary
+*.jpg binary
+*.ico binary

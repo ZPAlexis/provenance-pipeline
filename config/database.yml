@@ -1,0 +1,19 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
+development:
+  <<: *default
+  database: provenance_pipeline_development
+
+test:
+  <<: *default
+  database: provenance_pipeline_test
+  url: <%= ENV['DATABASE_URL'] %>
+
+production:
+  <<: *default
+  database: provenance_pipeline_production
+  username: <%= ENV.fetch("PROVENANCE_PIPELINE_DATABASE_USERNAME", "provenance_pipeline") %>
+  password: <%= ENV["PROVENANCE_PIPELINE_DATABASE_PASSWORD"] %>
