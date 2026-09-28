@@ -1,6 +1,7 @@
 class Company < ApplicationRecord
   has_many :postings, dependent: :destroy
-  has_many :audit_events, as: :target, dependent: :nullify
+  # No `dependent:` on purpose — see Posting#audit_events.
+  has_many :audit_events, as: :target
 
   ATS_TYPES = %w[greenhouse lever ashby workable own_site other unknown].freeze
 
@@ -12,13 +13,18 @@ class Company < ApplicationRecord
   scope :needing_careers_page, -> { where(careers_page_url: nil) }
 
   # Domain is the dedup key; fall back to a normalized name only when absent.
-  def self.find_or_create_for!(name:, domain: nil)
+  #
+  # Returns an unsaved record when nothing matches, so the caller can set every
+  # attribute and save once — one write, one audit event — and can tell a create
+  # from a match by `new_record?` without a second lookup.
+  def self.find_or_initialize_for(name:, domain: nil)
+    name = name.to_s.strip
     domain = domain.to_s.strip.downcase.presence
 
     if domain
-      find_or_create_by!(domain: domain) { |c| c.name = name }
+      find_or_initialize_by(domain: domain) { |c| c.name = name }
     else
-      find_or_create_by!(name: name.to_s.strip)
+      find_or_initialize_by(name: name)
     end
   end
 end

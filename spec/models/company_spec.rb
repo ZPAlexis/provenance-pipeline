@@ -36,34 +36,36 @@ RSpec.describe Company do
     end
   end
 
-  describe ".find_or_create_for!" do
-    it "creates a company with a normalized domain" do
-      company = described_class.find_or_create_for!(name: "Acme", domain: "  ACME.example ")
+  # Returns an unsaved record when nothing matches, so the caller can set every
+  # attribute and save once — one write, one audit event — and can tell a
+  # create from a match without a second lookup.
+  describe ".find_or_initialize_for" do
+    it "initializes an unsaved company with a normalized domain and name" do
+      company = described_class.find_or_initialize_for(name: " Acme ", domain: "  ACME.example ")
 
-      expect(company).to be_persisted
-      expect(company.domain).to eq("acme.example")
+      expect(company).to be_new_record
+      expect(company).to have_attributes(name: "Acme", domain: "acme.example")
     end
 
     it "matches an existing company on domain regardless of case, keeping its name" do
       existing = create(:company, name: "Acme Robotics", domain: "acme.example")
+      found = described_class.find_or_initialize_for(name: "ACME Robotics Ltd", domain: "Acme.Example")
 
-      expect {
-        found = described_class.find_or_create_for!(name: "ACME Robotics Ltd", domain: "Acme.Example")
-        expect(found).to eq(existing)
-        expect(found.name).to eq("Acme Robotics")
-      }.not_to change(described_class, :count)
+      expect(found).to eq(existing)
+      expect(found).to have_attributes(persisted?: true, name: "Acme Robotics")
     end
 
     it "falls back to the stripped name when no domain is given" do
       existing = create(:company, :without_domain, name: "Nameless Co")
 
-      expect(described_class.find_or_create_for!(name: " Nameless Co ", domain: "")).to eq(existing)
+      expect(described_class.find_or_initialize_for(name: " Nameless Co ", domain: "")).to eq(existing)
     end
 
-    it "creates a domainless company when no name matches" do
-      expect {
-        described_class.find_or_create_for!(name: "Brand New Co", domain: nil)
-      }.to change(described_class, :count).by(1)
+    it "initializes a domainless company when no name matches" do
+      company = described_class.find_or_initialize_for(name: "Brand New Co", domain: nil)
+
+      expect(company).to be_new_record
+      expect(company.domain).to be_nil
     end
   end
 
@@ -75,15 +77,26 @@ RSpec.describe Company do
       expect { company.destroy }.to change(Posting, :count).by(-1)
     end
 
-    # The audit trail outlives the records it describes.
-    it "keeps audit events about it and about its postings" do
+    # The audit trail outlives the records it describes, untouched: events keep
+    # both target_type and target_id, so a deleted record's history stays
+    # queryable by id and no event is modified after it is written.
+    it "leaves audit events about it and its postings exactly as written" do
       posting = create(:posting, company: company)
       company_event = create(:audit_event, target: company)
       posting_event = create(:audit_event, target: posting)
 
       expect { company.destroy }.not_to change(AuditEvent, :count)
-      expect(company_event.reload.target_id).to be_nil
-      expect(posting_event.reload.target_id).to be_nil
+      expect(company_event.reload).to have_attributes(target_type: "Company", target_id: company.id, target: nil)
+      expect(posting_event.reload).to have_attributes(target_type: "Posting", target_id: posting.id, target: nil)
+    end
+
+    it "keeps a deleted record's whole history linked by its id" do
+      create(:audit_event, target: company, action: "create")
+      create(:audit_event, target: company, action: "update")
+      company.destroy
+
+      history = AuditEvent.where(target_type: "Company", target_id: company.id)
+      expect(history.pluck(:action)).to contain_exactly("create", "update")
     end
   end
 end

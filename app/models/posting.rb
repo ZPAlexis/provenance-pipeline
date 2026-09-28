@@ -1,6 +1,11 @@
 class Posting < ApplicationRecord
   belongs_to :company
-  has_many :audit_events, as: :target, dependent: :nullify
+  # No `dependent:` on purpose. The audit trail outlives the records it
+  # describes: when a record is deleted its events keep target_type and
+  # target_id, so its whole history stays queryable by id and no audit event is
+  # ever modified after it is written. `event.target` returns nil once the record
+  # is gone. (`dependent: :nullify` would clear both columns.)
+  has_many :audit_events, as: :target
 
   VERIFICATION_STATES = %w[pending verified_live not_found inaccessible].freeze
   WORK_MODES = %w[remote hybrid onsite unknown].freeze

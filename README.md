@@ -108,12 +108,14 @@ bundle install
 bin/rails db:create db:migrate
 ```
 
-Import Clay CSV exports (a directory or a single file):
+Import Clay CSV exports (a directory or a single file). Clay carries no per-row verification date, so for exports that include verdicts, pass the date they were reached; without it, `last_checked_at` is left unknown rather than guessed:
 
 ```bash
-bin/rails "clay:import[/path/to/clay-exports]"
+VERIFIED_AT=2026-09-22 bin/rails "clay:import[/path/to/clay-exports]"
 bin/rails clay:summary
 ```
+
+Every write the importer makes is recorded in `audit_events` as a create or an update, with `changes_made` holding `{ attribute => [before, after] }` (JSONB enrichment is diffed key by key). Rows are atomic, and re-importing a file writes nothing.
 
 `clay:summary` breaks down postings by slice, verification state, and work mode, and lists **suspect negatives** — `not_found` verdicts with zero roles listed. Those are the renderer's first targets in Stage 1.2.
 

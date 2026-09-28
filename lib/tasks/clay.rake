@@ -1,15 +1,22 @@
 namespace :clay do
-  desc "Import Clay CSV exports. Usage: rails clay:import[path/to/dir_or_file]"
+  desc "Import Clay CSV exports. Usage: [VERIFIED_AT=YYYY-MM-DD] rails clay:import[path/to/dir_or_file]"
   task :import, [ :path ] => :environment do |_t, args|
-    path = args[:path] or abort "Usage: rails clay:import[path/to/dir_or_file]"
+    path = args[:path] or abort "Usage: [VERIFIED_AT=YYYY-MM-DD] rails clay:import[path/to/dir_or_file]"
     pathname = Pathname.new(path)
     abort "Not found: #{path}" unless pathname.exist?
 
+    # When the export's verdicts were reached. Clay carries no per-row date.
+    verified_at = ENV["VERIFIED_AT"].presence
+
     results =
-      if pathname.directory?
-        ClayImporter.import_dir(pathname)
-      else
-        [ [ pathname.basename.to_s, ClayImporter.call(pathname) ] ]
+      begin
+        if pathname.directory?
+          ClayImporter.import_dir(pathname, verified_at: verified_at)
+        else
+          [ [ pathname.basename.to_s, ClayImporter.call(pathname, verified_at: verified_at) ] ]
+        end
+      rescue ArgumentError => e
+        abort "VERIFIED_AT must be ISO 8601 (e.g. 2026-09-22 or 2026-09-22T15:30:00Z): #{e.message}"
       end
 
     puts "\n--- Import summary ---"
@@ -19,6 +26,13 @@ namespace :clay do
     end
 
     puts "\nCompanies: #{Company.count}   Postings: #{Posting.count}   Audit events: #{AuditEvent.count}"
+
+    undated = results.sum { |_, result| result.verdicts_undated }
+    if undated.positive?
+      puts "\nWarning: #{undated} imported postings carry a verdict but no verification date,"
+      puts "so their last_checked_at is unknown. Re-importing skips existing postings and will"
+      puts "not fill it in — supply VERIFIED_AT on the first import of an export with verdicts."
+    end
   end
 
   desc "Summarize imported data — counts by slice, verification state, and work mode"
@@ -35,6 +49,9 @@ namespace :clay do
     suspect = Posting.suspect_negatives.count
     credible = Posting.credible_negatives.count
     puts "\nNegative verdicts: #{credible} credible, #{suspect} suspect (likely parse failures)"
+
+    undated = Posting.where("enrichment ? 'raw_verification'").where(last_checked_at: nil).count
+    puts "Verdicts with no verification date: #{undated}" if undated.positive?
 
     if suspect.positive?
       puts "\nSuspect negatives — these are the renderer's first targets:"

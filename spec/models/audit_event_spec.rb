@@ -64,6 +64,57 @@ RSpec.describe AuditEvent do
     end
   end
 
+  describe ".record_write!" do
+    it "records a create as a snapshot of everything the write set, as [before, after] pairs" do
+      posting = create(:posting, role_title: "GTM Engineer", location: nil, enrichment: { "hiring_evidence" => "Listed." })
+      event = described_class.record_write!(posting, actor: "agent:test", reasoning: "Imported.")
+
+      expect(event).to have_attributes(action: "create", target: posting, actor: "agent:test", reasoning: "Imported.")
+      expect(event.changes_made).to include(
+        "role_title" => [ nil, "GTM Engineer" ],
+        "company_id" => [ nil, posting.company_id ],
+        "verification_state" => [ nil, "pending" ],
+        "enrichment" => { "hiring_evidence" => [ nil, "Listed." ] }
+      )
+    end
+
+    it "leaves out ids, timestamps, and attributes the create left empty" do
+      event = described_class.record_write!(create(:posting, location: nil), actor: "agent:test")
+
+      expect(event.changes_made.keys).not_to include("id", "created_at", "updated_at", "location", "enrichment")
+    end
+
+    it "records an update with before and after for only what changed" do
+      company = create(:company, careers_page_url: nil)
+      company.update!(careers_page_url: "https://acme.example/careers")
+
+      event = described_class.record_write!(company, actor: "agent:test")
+
+      expect(event.action).to eq("update")
+      expect(event.changes_made).to eq("careers_page_url" => [ nil, "https://acme.example/careers" ])
+    end
+
+    # An overwrite must never lose the previous value, and an event must never
+    # carry the whole enrichment blob twice.
+    it "diffs enrichment key by key" do
+      company = create(:company, enrichment: { "Industry" => "Software", "Founded" => "2001" })
+      company.update!(enrichment: { "Industry" => "Enterprise Software", "Founded" => "2001", "Stage" => "Series B" })
+
+      event = described_class.record_write!(company, actor: "agent:test")
+
+      expect(event.changes_made).to eq(
+        "enrichment" => { "Industry" => [ "Software", "Enterprise Software" ], "Stage" => [ nil, "Series B" ] }
+      )
+    end
+
+    it "records nothing when the save changed nothing" do
+      company = create(:company)
+      company.save!
+
+      expect { described_class.record_write!(company, actor: "agent:test") }.not_to change(described_class, :count)
+    end
+  end
+
   describe "scopes" do
     let!(:agent_event) { create(:audit_event, actor: "agent:clay_importer") }
     let!(:human_event) { create(:audit_event, :by_human) }
