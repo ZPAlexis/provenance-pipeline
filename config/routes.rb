@@ -3,7 +3,7 @@ Rails.application.routes.draw do
     mount LetterOpenerWeb::Engine, at: "/letter_opener"
   end
 
-  # Health check endpoint (used by Kamal and load balancers)
+  # Health check endpoint for whatever host or uptime monitor runs the app
   get "up" => "rails/health#show", as: :rails_health_check
 
   get "about", to: "pages#about"
