@@ -141,13 +141,14 @@ class ClayImporter
       posted_on: parse_date(core[:posted_on]),
       source_slice: @slice,
       verification_state: normalize_state(research[:verification_state]),
-      roles_listed_count: research[:roles_listed_count].presence&.to_i,
+      roles_listed_count: normalize_count(research[:roles_listed_count]),
       work_mode: normalize_work_mode(research[:work_mode]),
       last_checked_at: research[:verification_state].present? ? File.mtime(@path) : nil,
       enrichment: {
         "hiring_evidence"     => research[:hiring_evidence],
-        "verified_role_title" => research[:verified_role_title],
-        "raw_verification"    => research[:verification_state]
+        "verified_role_title"    => research[:verified_role_title],
+        "raw_verification"       => research[:verification_state],
+        "raw_roles_listed_count" => research[:roles_listed_count]
       }.compact_blank
     )
 
@@ -168,6 +169,15 @@ class ClayImporter
   def normalize_state(value)
     v = value.to_s.strip.downcase
     Posting::VERIFICATION_STATES.include?(v) ? v : "pending"
+  end
+
+  # Clay emits a negative count as a "could not count" sentinel. Anything that
+  # is not a non-negative integer becomes nil (unknown), which the
+  # negative-verdict scopes already treat as suspect; the original is preserved
+  # in enrichment["raw_roles_listed_count"].
+  def normalize_count(value)
+    count = Integer(value.to_s.strip, exception: false)
+    count if count && count >= 0
   end
 
   def normalize_work_mode(value)

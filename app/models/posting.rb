@@ -10,6 +10,11 @@ class Posting < ApplicationRecord
   validates :work_mode, inclusion: { in: WORK_MODES }, allow_nil: true
   validates :posting_url, uniqueness: true, allow_nil: true
 
+  # Roles seen on the careers page — nothing else. An unknown count is nil,
+  # never a sentinel: a negative would escape both negative-verdict scopes and
+  # silently disable the parse-failure check.
+  validates :roles_listed_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
+
   scope :pending, -> { where(verification_state: "pending") }
   scope :live, -> { where(verification_state: "verified_live") }
   scope :remote, -> { where(work_mode: "remote") }

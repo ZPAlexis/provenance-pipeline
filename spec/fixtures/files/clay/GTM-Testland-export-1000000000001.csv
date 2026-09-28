@@ -1,0 +1,6 @@
+"Testland, Engineering Roles","Company Name","Job Title","Location","Company Domain","Job LinkedIn URL","Posted On"
+,"Acme Robotics","RevOps Engineer","Remote, Testland","acme.example","https://jobs.example/postings/101","2026-09-01T00:00:00.000Z"
+,"Acme Robotics","GTM Systems Analyst","Remote, Testland","ACME.example","https://jobs.example/postings/102","2026-09-02T00:00:00.000Z"
+,"Globex","Solutions Engineer","Testville","globex.example","https://jobs.example/postings/103","2026-08-15T00:00:00.000Z"
+,"Nameless Co","Data Engineer","Testville",,"https://jobs.example/postings/104","not a date"
+,,"Orphan Role","Testville","orphan.example","https://jobs.example/postings/105","2026-09-03T00:00:00.000Z"
