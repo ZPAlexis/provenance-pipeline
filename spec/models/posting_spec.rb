@@ -28,6 +28,18 @@ RSpec.describe Posting do
       expect(build(:posting, posting_url: "https://jobs.example/postings/1")).not_to be_valid
     end
 
+    # A check date means a usable verdict, and a usable verdict means a check
+    # date: nil last_checked_at has exactly one meaning, "never checked".
+    it "requires a check date on a verdict" do
+      %w[verified_live not_found inaccessible].each do |state|
+        expect(build(:posting, verification_state: state, last_checked_at: nil)).not_to be_valid, state
+      end
+    end
+
+    it "rejects a check date without a verdict" do
+      expect(build(:posting, verification_state: "pending", last_checked_at: Time.current)).not_to be_valid
+    end
+
     it "allows many postings without a URL" do
       create(:posting, posting_url: nil)
       expect(build(:posting, posting_url: nil)).to be_valid

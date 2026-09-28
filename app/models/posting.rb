@@ -7,13 +7,41 @@ class Posting < ApplicationRecord
   # is gone. (`dependent: :nullify` would clear both columns.)
   has_many :audit_events, as: :target
 
+  # --- Verification fields: the contract ------------------------------------
+  #
+  # A *check* is an observation at the employer's own careers page that
+  # produced a verdict: verified_live, not_found, or inaccessible. An upstream
+  # answer that maps to none of them is not a check: the posting stays pending,
+  # with no date, and the raw answer is kept in enrichment["raw_verification"].
+  #
+  # verification_state  The last check's verdict, or "pending" (never nil)
+  #                     while there is no usable one.
+  # last_checked_at     When that verdict was observed. Present exactly when
+  #                     the posting has a verdict (validated below), so nil
+  #                     means one thing only: never checked.
+  # roles_listed_count  Roles visible on the page at that check, matched or
+  #                     not: the corroborating observable that separates a
+  #                     credible negative from a parse failure. nil = unknown,
+  #                     never a sentinel.
+  # work_mode           As observed at that check. nil = not observed.
+  #
+  # Writers and precision. ClayImporter sets these once, when it creates a
+  # posting from a research export. Clay exports carry no per-row check date,
+  # so the operator supplies it (VERIFIED_AT, required whenever an export has
+  # verdicts); a bare date is stored at 12:00 UTC and is day precision, and
+  # the posting's create event says where the date came from. From Stage 1.2
+  # the verifier is the main writer and records the exact time it observed the
+  # page. How it records checks that change nothing is defined in Stage 1.2.
   VERIFICATION_STATES = %w[pending verified_live not_found inaccessible].freeze
+  VERDICTS = (VERIFICATION_STATES - %w[pending]).freeze
   WORK_MODES = %w[remote hybrid onsite unknown].freeze
 
   validates :role_title, presence: true
   validates :verification_state, inclusion: { in: VERIFICATION_STATES }
   validates :work_mode, inclusion: { in: WORK_MODES }, allow_nil: true
   validates :posting_url, uniqueness: true, allow_nil: true
+  validates :last_checked_at, presence: true, if: :verdict?
+  validates :last_checked_at, absence: true, unless: :verdict?
 
   # Roles seen on the careers page — nothing else. An unknown count is nil,
   # never a sentinel: a negative would escape both negative-verdict scopes and
@@ -36,6 +64,10 @@ class Posting < ApplicationRecord
   scope :credible_negatives, -> {
     where(verification_state: "not_found").where("roles_listed_count > 0")
   }
+
+  def verdict?
+    VERDICTS.include?(verification_state)
+  end
 
   def suspect_negative?
     verification_state == "not_found" && roles_listed_count.to_i.zero?

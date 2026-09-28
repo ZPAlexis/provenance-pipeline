@@ -21,7 +21,7 @@ RSpec.describe ClayImporter do
     it "reports what it did" do
       expect(result).to have_attributes(
         rows: 5, companies_created: 3, companies_matched: 1,
-        postings_created: 4, postings_skipped: 0, verdicts_undated: 0, errors: []
+        postings_created: 4, postings_skipped: 0, errors: []
       )
     end
 
@@ -115,7 +115,7 @@ RSpec.describe ClayImporter do
     it "reports what it did" do
       expect(result).to have_attributes(
         rows: 9, companies_created: 8, companies_matched: 1,
-        postings_created: 9, postings_skipped: 0, verdicts_undated: 0, errors: []
+        postings_created: 9, postings_skipped: 0, errors: []
       )
     end
 
@@ -204,7 +204,7 @@ RSpec.describe ClayImporter do
       result
       event = AuditEvent.find_by!(target: posting_for("GTM Engineer"))
 
-      expect(event.reasoning).to eq("Careers page lists 23 roles; this one is not among them.")
+      expect(event.reasoning).to start_with("Careers page lists 23 roles; this one is not among them.")
     end
 
     it "records each posting create as a snapshot of what the import set" do
@@ -253,8 +253,15 @@ RSpec.describe ClayImporter do
     end
   end
 
-  describe "verification dates" do
-    it "stamps researched postings with the supplied date, at noon UTC so the calendar day never shifts" do
+  # A check is an observation at the employer's careers page that produced a
+  # recognized verdict, and last_checked_at is set exactly when a posting has
+  # one. Clay exports carry no per-row check date, so the operator supplies it.
+  describe "check dates" do
+    def reasoning_for(title)
+      AuditEvent.find_by!(target: posting_for(title)).reasoning
+    end
+
+    it "stamps each recognized verdict with the supplied date, at noon UTC so the calendar day never shifts" do
       described_class.call(research_csv, verified_at: "2026-09-22")
 
       expect(posting_for("Senior RevOps Engineer").last_checked_at).to eq(Time.utc(2026, 9, 22, 12))
@@ -266,11 +273,57 @@ RSpec.describe ClayImporter do
       expect(posting_for("GTM Engineer").last_checked_at).to eq(Time.utc(2026, 9, 22, 15, 30))
     end
 
-    it "leaves the check date unknown rather than guessing when none is supplied" do
-      result = described_class.call(research_csv)
+    it "does not count an unrecognized verdict as a check" do
+      described_class.call(research_csv, verified_at: "2026-09-22")
+      expect(posting_for("Systems Analyst")).to have_attributes(verification_state: "pending", last_checked_at: nil)
+    end
 
-      expect(Posting.where.not(last_checked_at: nil)).to be_empty
-      expect(result.verdicts_undated).to eq(8)
+    it "says in the create event that the operator supplied the date, and at day precision" do
+      described_class.call(research_csv, verified_at: "2026-09-22")
+      expect(reasoning_for("GTM Engineer")).to include("VERIFIED_AT", "operator", "2026-09-22", "day precision")
+    end
+
+    it "does not call an operator-supplied full timestamp day precision" do
+      described_class.call(research_csv, verified_at: "2026-09-22T15:30:00Z")
+
+      expect(reasoning_for("GTM Engineer")).to include("VERIFIED_AT", "2026-09-22T15:30:00Z")
+      expect(reasoning_for("GTM Engineer")).not_to include("day precision")
+    end
+
+    it "adds no date note to a posting without a verdict" do
+      described_class.call(research_csv, verified_at: "2026-09-22")
+      expect(reasoning_for("Data Engineer")).not_to include("VERIFIED_AT")
+    end
+
+    it "refuses an export with verdicts when no date is supplied, before writing anything" do
+      expect { described_class.call(research_csv) }
+        .to raise_error(described_class::MissingVerifiedAt, /GTM-Researchland-export-1000000000002\.csv.*VERIFIED_AT/)
+      expect([ Company.count, Posting.count, AuditEvent.count ]).to eq([ 0, 0, 0 ])
+    end
+
+    it "needs no date for an export without verdicts" do
+      expect(described_class.call(sourcing_csv).errors).to be_empty
+    end
+
+    it "needs no date when an export's only verdicts are unrecognized" do
+      Dir.mktmpdir do |dir|
+        header, *rows = File.readlines(research_csv)
+        path = File.join(dir, "GTM-Researchland-export-1.csv")
+        File.write(path, header + rows.grep(/umbrella\.example/).join)
+
+        expect(described_class.call(path).errors).to be_empty
+      end
+      expect(posting_for("Systems Analyst").last_checked_at).to be_nil
+    end
+
+    it "checks a whole directory before importing any of it" do
+      Dir.mktmpdir do |dir|
+        FileUtils.cp(sourcing_csv, File.join(dir, "GTM-Alpha-export-1.csv"))
+        FileUtils.cp(research_csv, File.join(dir, "GTM-Beta-export-2.csv"))
+
+        expect { described_class.import_dir(dir) }.to raise_error(described_class::MissingVerifiedAt)
+      end
+      expect(Posting.count).to eq(0)
     end
 
     it "rejects a date that is not ISO 8601" do
@@ -340,7 +393,7 @@ RSpec.describe ClayImporter do
         GTM-Researchland-export-1000000000002.csv
         GTM-Testland-export-1000000000001.csv
       ])
-      expect(results.map(&:last)).to all(have_attributes(errors: [], verdicts_undated: 0))
+      expect(results.map(&:last)).to all(have_attributes(errors: []))
     end
   end
 end

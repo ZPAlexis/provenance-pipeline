@@ -4,13 +4,13 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1.1** — schema and CSV ingest. See [Build stages](#build-stages).
+> **Status: Stage 1.1 complete** (schema and CSV ingest). Stage 1.2, the verification agent, is next. See [Build stages](#build-stages).
 
 ---
 
 ## The problem it solves
 
-The first agent in the system is a **job finder**: it sources postings, then verifies at the employer's own applicant tracking system whether they are actually still open.
+The first agent in the system is a **job finder**: it watches a curated set of companies (see [Sourcing](#sourcing-a-watch-list-not-a-search)), and verifies at each employer's own applicant tracking system which postings are actually still open.
 
 That verification step is the product. Job aggregators scrape listing URLs but never check the employer's careers page, so they cannot distinguish a live posting from a filled one. Both failure directions are real:
 
@@ -28,6 +28,26 @@ That produces the worst available failure mode: the agent *reaches* the page, so
 There's no pattern-match shortcut either. Measured across 20 resolved careers pages, roughly **70% were hosted on the company's own domain** rather than a recognizable ATS URL — and those frequently embed a client-side job board anyway. The vendor is often invisible from the URL while the rendering requirement stays identical.
 
 **So the verification worker needs a headless browser, not an HTTP client.**
+
+## Sourcing: a watch list, not a search
+
+The system does not search the job market. **It watches a chosen set of companies and reports what changed.**
+
+That separates two jobs that browsing job sites does at once, badly:
+
+| Job | How often | Who does it |
+|---|---|---|
+| Deciding which companies are worth watching | Rarely | A human — it's a judgment call |
+| Checking whether those companies opened or closed a role | Constantly | The system — it's mechanical |
+
+**Two inputs feed the watch list:**
+
+1. **An imported base of companies.** The seed data came from job-listing exports, and many of those listings turned out to be stale. That matters less than it sounds: postings are perishable, but the companies behind them are durable, and every posting is re-verified at the source, so a stale listing corrects itself on its first check. The listings were just how the companies were found.
+2. **Manual capture.** Paste a posting URL or a company domain; the system resolves the company's careers page and ATS, verifies, and adds the company to the watch list for good. Job boards and ordinary browsing keep feeding the system — a find gets captured instead of living in a notes file.
+
+**The tradeoff, stated plainly: roles at companies outside the list are missed.** There is no crawl, so the list only grows by judgment. That is deliberate. Search-then-filter optimizes for recall; watching a curated list optimizes for precision and fit, which is what this system is for.
+
+Two consequences shape the build. A company's careers page becomes a **watch target**, re-checked on a schedule for months — a higher bar than resolving a page once for a single check. And re-verification makes postings **stateful**: `verified_live` → `not_found` is a lifecycle transition, not a correction, and the audit log is what makes "when did this role close?" answerable.
 
 ## Design principles
 
@@ -81,14 +101,26 @@ Notes on a few choices:
 - **`source_slice` lives on postings, not companies**, because one company can surface in several geographic pulls — the slice describes where the posting was found.
 - **`changes_made`, not `changes`** — the latter collides with `ActiveModel::Dirty#changes`.
 
+### Verification fields
+
+A **check** is an observation at the employer's own careers page that produced a verdict: `verified_live`, `not_found`, or `inaccessible`. An upstream answer that maps to none of these is not a check: the posting stays `pending`, and the raw answer is kept in `enrichment`.
+
+- **`verification_state`** — the last check's verdict, or `pending` while there is no usable one.
+- **`last_checked_at`** — when that verdict was observed. It is present exactly when a posting has a verdict (enforced by validation), so `nil` means one thing: never checked.
+- **`roles_listed_count`** — roles visible on the page at that check, matched or not. This is the corroborating observable; `nil` means unknown, never a sentinel value.
+- **`work_mode`** — as observed at that check.
+
+Imported verdicts carry an operator-supplied check date. A bare date is day precision (stored at 12:00 UTC so the calendar day never shifts), and the posting's create event records where the date came from. The Stage 1.2 verifier becomes the main writer and records the exact time it looked; how it records a check that changes nothing is defined in Stage 1.2.
+
 ## Build stages
 
 **Stage 1 — Job Finder.** A thin vertical slice through the whole stack rather than a horizontal layer, so something useful ships before the CRUD work and the governance model is proven on real data early.
 
-- **1.1 — Schema and ingest** ← *current*
-- 1.2 — Verification agent (Playwright + LLM, Python worker)
+- **1.1 — Schema and ingest** ✅
+- **1.2 — Verification agent** (Playwright + LLM, Python worker) ← *next*: resolve a company's careers page, render it, extract listings, return a verdict
 - 1.3 — Scoped writes and provenance
-- 1.4 — Weekly digest
+- 1.4 — Scheduled monitoring and digest: re-verify every watched company on a cadence — the sourcing mechanism, a scheduled re-run of 1.2 that catches both new roles and closures — then report what changed
+- 1.5 — Manual capture ("add by URL"): paste a posting URL or company domain to resolve, verify, and add it to the watch list. Needs only 1.2, so it can ship before 1.4
 
 **Stage 2 — Pipeline system.** Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents.
 
@@ -97,7 +129,7 @@ Notes on a few choices:
 ## Stack
 
 - **Rails 8.1 / Ruby 3.4.8 / PostgreSQL** — core application and system of record
-- **solid_queue** — async verification across many postings
+- **solid_queue** — scheduled re-verification in Stage 1.4; until then the verifier runs on demand
 - **Python + Playwright** — agent workers. Required rather than preferred: the verification step needs headless rendering plus LLM tooling, and both are strongest there.
 - **RSpec, Rubocop, Brakeman, bundler-audit**
 
@@ -108,7 +140,7 @@ bundle install
 bin/rails db:create db:migrate
 ```
 
-Import Clay CSV exports (a directory or a single file). Clay carries no per-row verification date, so for exports that include verdicts, pass the date they were reached; without it, `last_checked_at` is left unknown rather than guessed:
+Import Clay CSV exports (a directory or a single file). Clay carries no per-row check date, so an export that includes verdicts needs `VERIFIED_AT`, the date the verdicts were reached (ISO 8601). Without it, the import refuses to run and writes nothing; exports without verdicts don't need it. See [Verification fields](#verification-fields).
 
 ```bash
 VERIFIED_AT=2026-09-22 bin/rails "clay:import[/path/to/clay-exports]"

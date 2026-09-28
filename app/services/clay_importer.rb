@@ -16,6 +16,10 @@ require "csv"
 class ClayImporter
   ACTOR = "agent:clay_importer".freeze
 
+  # Raised, before anything is written, when an export carries verdicts but no
+  # check date was supplied. See Posting's verification-fields contract.
+  class MissingVerifiedAt < ArgumentError; end
+
   CORE_COLUMNS = {
     "Company Name"     => :company_name,
     "Job Title"        => :role_title,
@@ -43,11 +47,13 @@ class ClayImporter
   # reasoning. Matching by prefix keeps new researcher fields there too.
   RESEARCH_OUTPUT_PREFIX = "Career Search".freeze
 
+  VERDICT_HEADER = RESEARCH_COLUMNS.key(:verification_state)
+
   DATE_ONLY = /\A\d{4}-\d{2}-\d{2}\z/
 
   Result = Struct.new(
     :rows, :companies_created, :companies_matched,
-    :postings_created, :postings_skipped, :verdicts_undated, :errors,
+    :postings_created, :postings_skipped, :errors,
     keyword_init: true
   ) do
     def to_s
@@ -57,30 +63,51 @@ class ClayImporter
   end
 
   # `verified_at` is when the export's verdicts were reached. Clay exports carry
-  # no per-row verification date, so whoever runs the import supplies it;
-  # without one, last_checked_at stays nil (unknown) rather than being guessed.
+  # no per-row check date, so the operator supplies it, and it is required
+  # whenever the export has verdicts: a verdict without a date would make nil
+  # last_checked_at ambiguous, and re-imports never revisit a posting.
   def self.call(path, slice: nil, verified_at: nil)
     new(path, slice: slice, verified_at: verified_at).call
   end
 
-  # Import every CSV in a directory.
+  # Import every CSV in a directory. Every file is checked for a missing check
+  # date before any of them is imported, so a refusal writes nothing.
   def self.import_dir(dir, verified_at: nil)
-    Pathname.glob(Pathname.new(dir).join("*.csv")).sort.map do |path|
-      [ path.basename.to_s, call(path, verified_at: verified_at) ]
-    end
+    importers = Pathname.glob(Pathname.new(dir).join("*.csv")).sort.map { |path| new(path, verified_at: verified_at) }
+    importers.each(&:require_verified_at!)
+    importers.map { |importer| [ importer.path.basename.to_s, importer.call ] }
   end
 
+  attr_reader :path
+
   def initialize(path, slice: nil, verified_at: nil)
-    @path        = Pathname.new(path)
-    @slice       = slice || derive_slice(@path)
-    @verified_at = parse_verified_at(verified_at)
-    @result      = Result.new(
+    @path  = Pathname.new(path)
+    @slice = slice || derive_slice(@path)
+    @verified_at, @verified_at_precision = parse_verified_at(verified_at)
+    @result = Result.new(
       rows: 0, companies_created: 0, companies_matched: 0,
-      postings_created: 0, postings_skipped: 0, verdicts_undated: 0, errors: []
+      postings_created: 0, postings_skipped: 0, errors: []
     )
   end
 
+  # Refuses, before anything is written, to import an export that carries
+  # verdicts without a check date.
+  def require_verified_at!
+    return if @verified_at
+
+    verdicts = CSV.foreach(@path, headers: true, encoding: "bom|utf-8").count do |row|
+      Posting::VERDICTS.include?(normalize_state(row[VERDICT_HEADER]))
+    end
+    return if verdicts.zero?
+
+    raise MissingVerifiedAt,
+      "#{@path.basename} has #{verdicts} rows with verdicts but no check date. Set VERIFIED_AT to when " \
+      "they were reached (ISO 8601, e.g. 2026-09-22) — Clay exports carry no per-row check date."
+  end
+
   def call
+    require_verified_at!
+
     CSV.foreach(@path, headers: true, encoding: "bom|utf-8") do |csv_row|
       @result.rows += 1
       outcome = import_row(csv_row.to_h)
@@ -99,19 +126,20 @@ class ClayImporter
     path.basename(path.extname).to_s.split("-export").first.to_s.split("-").last.to_s.downcase.presence || "unknown"
   end
 
-  # ISO 8601 only: this value becomes provenance, so nothing fuzzy is accepted.
-  # A bare date is pinned to noon UTC, which falls on the same calendar day in
-  # every time zone from UTC-11 to UTC+11.
+  # Returns [time, precision], precision being :day or :exact. ISO 8601 only:
+  # this value becomes provenance, so nothing fuzzy is accepted. A bare date is
+  # pinned to noon UTC, which falls on the same calendar day in every time zone
+  # from UTC-11 to UTC+11.
   def parse_verified_at(value)
     case value
-    when nil then nil
-    when Time, DateTime, ActiveSupport::TimeWithZone then value
-    when Date then noon_utc(value)
+    when nil then [ nil, nil ]
+    when Time, DateTime, ActiveSupport::TimeWithZone then [ value, :exact ]
+    when Date then [ noon_utc(value), :day ]
     else
       text = value.to_s.strip
-      if text.empty? then nil
-      elsif text.match?(DATE_ONLY) then noon_utc(Date.iso8601(text))
-      else Time.iso8601(text)
+      if text.empty? then [ nil, nil ]
+      elsif text.match?(DATE_ONLY) then [ noon_utc(Date.iso8601(text)), :day ]
+      else [ Time.iso8601(text), :exact ]
       end
     end
   end
@@ -135,11 +163,7 @@ class ClayImporter
       company, company_outcome = upsert_company(core, research, company_columns)
       posting = upsert_posting(company, core, research, research_output)
 
-      {
-        company: company_outcome,
-        posting: posting ? :created : :skipped,
-        undated: posting.present? && verdict?(research) && posting.last_checked_at.nil?
-      }
+      { company: company_outcome, posting: posting ? :created : :skipped }
     end
   end
 
@@ -147,7 +171,6 @@ class ClayImporter
   def tally(outcome)
     @result[:"companies_#{outcome[:company]}"] += 1
     @result[:"postings_#{outcome[:posting]}"] += 1
-    @result.verdicts_undated += 1 if outcome[:undated]
   end
 
   def extract(raw, mapping)
@@ -157,8 +180,10 @@ class ClayImporter
     end
   end
 
+  # A recognized verdict — the only thing that counts as a check. An
+  # unrecognized upstream answer is kept raw but earns no check date.
   def verdict?(research)
-    research[:verification_state].present?
+    Posting::VERDICTS.include?(normalize_state(research[:verification_state]))
   end
 
   # Sets everything on the company first and saves once, so each write is one
@@ -215,13 +240,25 @@ class ClayImporter
       }.merge(columns).compact_blank
     )
 
-    AuditEvent.record_write!(
-      posting, actor: ACTOR,
-      reasoning: research[:reasoning].presence ||
-                 "Imported from Clay export #{@path.basename} (slice: #{@slice}). Not yet verified at source."
-    )
+    AuditEvent.record_write!(posting, actor: ACTOR, reasoning: posting_reasoning(research))
 
     posting
+  end
+
+  # The researcher's prose where there is some. A verdict's check date is
+  # written by the importer but was supplied by the operator, so the event says
+  # so, with its precision — the verifier's own dates will be exact.
+  def posting_reasoning(research)
+    unless verdict?(research)
+      return research[:reasoning].presence ||
+             "Imported from Clay export #{@path.basename} (slice: #{@slice}). Not yet verified at source."
+    end
+
+    precision = @verified_at_precision == :day ? "#{@verified_at.to_date.iso8601}, day precision" : "#{@verified_at.utc.iso8601}, as supplied"
+    [
+      research[:reasoning].presence || "Imported from Clay export #{@path.basename} (slice: #{@slice}).",
+      "Check date supplied by the operator via VERIFIED_AT (#{precision}): the export carries no per-row check date."
+    ].join("\n\n")
   end
 
   # Unrecognized upstream values fall back to "pending" rather than failing the
