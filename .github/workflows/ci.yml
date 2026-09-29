@@ -115,8 +115,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # Pinned to a commit, as Astral's README does: setup-uv publishes no floating
+      # major tag after v7, so "@v10" does not resolve. Dependabot updates the SHA
+      # and the version comment together.
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           working-directory: workers/verifier
           enable-cache: true
