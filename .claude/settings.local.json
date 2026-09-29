@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wsl -e bash -lc 'cd /mnt/m/PZLabs/_GitHub/provenance-pipeline/workers/verifier && uv run pytest -q tests/test_extract.py 2>&1 | grep -E \"passed|failed\" | tail -2')",
+      "Bash(wsl -e bash -lc 'cd /mnt/m/PZLabs/_GitHub/provenance-pipeline/workers/verifier && uv run pytest -q tests/test_extract.py 2>&1 | grep -E \"passed|failed|FAILED\" | tail -4')",
+      "Bash(wsl -e bash -lc 'cd /mnt/m/PZLabs/_GitHub/provenance-pipeline/workers/verifier && uv run ruff format . | tail -1 && uv run ruff check . 2>&1 | tail -6 && uv run pytest -q 2>&1 | grep -E \"passed|failed|^FAILED\" | tail -8')",
+      "Bash(wsl -e bash -lc 'eval \"$\\(~/.local/bin/mise activate bash\\)\" >/dev/null 2>&1; cd /mnt/m/PZLabs/_GitHub/provenance-pipeline && CI=true bundle exec rspec spec/services/verifier/test_a_spec.rb 2>&1 | grep -E \"^rspec |examples,\"')",
+      "Bash(wsl -e bash -lc 'eval \"$\\(~/.local/bin/mise activate bash\\)\" >/dev/null 2>&1; cd /mnt/m/PZLabs/_GitHub/provenance-pipeline || exit 1 *)"
+    ]
+  }
+}

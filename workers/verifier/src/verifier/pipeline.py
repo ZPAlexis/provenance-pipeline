@@ -1,0 +1,118 @@
+"""Checking one careers page, end to end: robots.txt, render, known ATS, extraction.
+
+Cheapest path first. A page on (or embedding) a known ATS is read through the
+vendor's public API; everything else is rendered and read by the LLM. Every
+outcome, including refusals and failures, comes back as a PageResult, so a
+page that could not be read is never mistaken for one with no openings.
+"""
+
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from urllib.parse import urlsplit
+
+import httpx2
+from playwright.sync_api import Browser
+
+from verifier import ats
+from verifier.contract import Listing, PageResult, Target
+from verifier.extract import ExtractionFailed, Extractor, input_truncated, link_url
+from verifier.politeness import HostThrottle
+from verifier.render import RenderError, render
+from verifier.robots import RobotsPolicy
+
+
+@dataclass
+class Services:
+    browser: Browser
+    http: httpx2.Client
+    robots: RobotsPolicy
+    throttle: HostThrottle
+    extractor: Extractor
+
+
+def verify_page(target: Target, services: Services) -> PageResult:
+    started = time.monotonic()
+    checked_at = datetime.now(UTC).isoformat(timespec="seconds")
+
+    def finish(**fields) -> PageResult:
+        elapsed = int((time.monotonic() - started) * 1000)
+        return PageResult(target_id=target.id, url=target.url, checked_at=checked_at, duration_ms=elapsed, **fields)
+
+    refusal = services.robots.check(target.url)
+    if refusal:
+        # The page itself is never fetched. Where the company has a board on a
+        # known ATS, its listings are read there instead, and the result says so.
+        found = ats.find_board(
+            ats.board_candidates(target.domain, target.name), services.http, wait=services.throttle.wait
+        )
+        if not found:
+            return finish(outcome="blocked", reason=refusal)
+        board, listings = found
+        return finish(
+            outcome="ok",
+            reason=f"{refusal}_ats_fallback",
+            method=f"ats_api:{board.vendor}",
+            ats=board,
+            listings=listings,
+            listing_count=len(listings),
+        )
+
+    services.throttle.wait(urlsplit(target.url).netloc)
+    try:
+        page = render(services.browser, target.url)
+    except RenderError as error:
+        return finish(outcome="inaccessible", reason=error.reason)
+
+    seen = {"final_url": page.final_url, "http_status": page.status, "content_hash": page.content_hash}
+    if page.looks_like_challenge:
+        return finish(outcome="inaccessible", reason="bot_challenge", **seen)
+    if page.status and page.status >= 400:
+        return finish(outcome="inaccessible", reason=f"http_{page.status}", **seen)
+
+    board = ats.detect(page.urls)
+    fallback = None
+    if board and ats.on_company_host(board) and services.robots.check(ats.api_url(board)):
+        fallback = f"ats_api_blocked:{board.vendor}"
+    elif board:
+
+        def space_out() -> None:
+            services.throttle.wait(ats.api_host(board))
+
+        try:
+            space_out()
+            listings = ats.fetch_listings(board, services.http, pause=space_out)
+            return finish(
+                outcome="ok",
+                method=f"ats_api:{board.vendor}",
+                ats=board,
+                listings=listings,
+                listing_count=len(listings),
+                **seen,
+            )
+        except (httpx2.HTTPError, ValueError, KeyError, TypeError):
+            fallback = f"ats_api_failed:{board.vendor}"
+
+    try:
+        extraction, usage = services.extractor.extract(page)
+    except ExtractionFailed as error:
+        return finish(outcome="error", reason=error.reason, method="render+llm", ats=board, llm=error.usage, **seen)
+
+    listings = [
+        Listing(title=item.title, location=item.location, url=link_url(page, item.link), work_mode=item.work_mode)
+        for item in extraction.listings
+    ]
+    return finish(
+        outcome="ok",
+        reason=fallback or (None if extraction.shows_job_listings else "not_a_listings_page"),
+        method="render+llm",
+        ats=board,
+        listings=listings,
+        listing_count=len(listings),
+        stated_total=extraction.stated_total,
+        explicit_no_openings=extraction.explicit_no_openings,
+        input_truncated=input_truncated(page),
+        notes=extraction.notes,
+        llm=usage,
+        **seen,
+    )

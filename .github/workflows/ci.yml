@@ -102,3 +102,36 @@ jobs:
         run: |
           bin/rails db:test:prepare
           bundle exec rspec
+
+  # The Python verification worker. Tests run against a local synthetic site
+  # with a fake LLM: no network, no API key, no spend. Test A runs locally only.
+  verifier:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: workers/verifier
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          working-directory: workers/verifier
+          enable-cache: true
+          cache-dependency-glob: workers/verifier/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Run tests
+        run: uv run pytest

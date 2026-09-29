@@ -1,0 +1,115 @@
+import io
+import json
+
+from verifier import cli
+from verifier.cli import run
+from verifier.contract import PageResult, Target
+from verifier.extract import CreditExhausted, ExtractionFailed
+
+
+def targets(site, *paths):
+    return [Target(id=f"t{index}", url=site.url(path), label=path) for index, path in enumerate(paths, start=1)]
+
+
+def read_results(path):
+    return [PageResult.model_validate_json(line) for line in path.read_text().splitlines()]
+
+
+def test_writes_one_result_per_target_and_summarizes_the_run(services, site, tmp_path):
+    out = tmp_path / "results.jsonl"
+
+    summary = run(targets(site, "dynamic.html", "private/page.html"), out, services, log=io.StringIO())
+
+    results = read_results(out)
+    assert [result.target_id for result in results] == ["t1", "t2"]
+    assert [result.outcome for result in results] == ["ok", "blocked"]
+    assert (summary.pages, summary.listings, summary.stopped) == (2, 4, None)
+    assert summary.outcomes == {"ok": 1, "blocked": 1}
+    assert summary.cost_usd == 0.0002
+
+
+def test_stops_cleanly_when_credit_runs_out_keeping_finished_results(services, site, tmp_path):
+    class CreditRunsOut:
+        def __init__(self, inner):
+            self.inner, self.calls = inner, 0
+
+        def extract(self, page):
+            self.calls += 1
+            if self.calls > 1:
+                raise CreditExhausted("Your credit balance is too low")
+            return self.inner.extract(page)
+
+    services.extractor = CreditRunsOut(services.extractor)
+    out = tmp_path / "results.jsonl"
+    log = io.StringIO()
+
+    summary = run(targets(site, "static.html", "dynamic.html", "framed.html"), out, services, log=log)
+
+    assert summary.stopped == "credit_exhausted"
+    assert [result.target_id for result in read_results(out)] == ["t1"]
+    assert "API credit is exhausted" in log.getvalue()
+
+
+class LlmDown:
+    def __init__(self, reason):
+        self.reason, self.calls = reason, 0
+
+    def extract(self, page):
+        self.calls += 1
+        raise ExtractionFailed(self.reason)
+
+
+# An outage is not five separate page failures: stop instead of rendering the rest.
+def test_stops_when_the_llm_is_unavailable_three_pages_running(services, site, tmp_path):
+    services.extractor = LlmDown("llm_http_529")
+    out = tmp_path / "results.jsonl"
+    log = io.StringIO()
+
+    summary = run(targets(site, "static.html", "dynamic.html", "framed.html", "empty.html"), out, services, log=log)
+
+    assert summary.stopped == "llm_unavailable"
+    assert services.extractor.calls == 3
+    assert len(read_results(out)) == 3
+    assert "the LLM service is failing" in log.getvalue()
+
+
+def test_keeps_going_through_page_specific_llm_failures(services, site, tmp_path):
+    services.extractor = LlmDown("llm_refusal")
+
+    summary = run(
+        targets(site, "static.html", "dynamic.html", "framed.html", "empty.html"),
+        tmp_path / "r.jsonl",
+        services,
+        log=io.StringIO(),
+    )
+
+    assert summary.stopped is None
+    assert summary.outcomes == {"error": 4}
+
+
+def test_one_unexpected_failure_does_not_lose_the_run(services, site, tmp_path, monkeypatch):
+    real = cli.verify_page
+
+    def flaky(target, services):
+        if target.id == "t1":
+            raise RuntimeError("boom")
+        return real(target, services)
+
+    monkeypatch.setattr(cli, "verify_page", flaky)
+    out = tmp_path / "results.jsonl"
+
+    run(targets(site, "static.html", "empty.html"), out, services, log=io.StringIO())
+
+    results = read_results(out)
+    assert [(result.outcome, result.reason) for result in results] == [
+        ("error", "unexpected:RuntimeError"),
+        ("ok", None),
+    ]
+    assert results[0].checked_at
+
+
+def test_rejects_an_unreadable_targets_file(tmp_path):
+    bad = tmp_path / "targets.json"
+    bad.write_text(json.dumps({"not_targets": []}))
+
+    assert cli.main(["extract", "--targets", str(bad), "--out", str(tmp_path / "out.jsonl")]) == cli.EXIT_BAD_INPUT

@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1.1 complete** (schema and CSV ingest). Stage 1.2, the verification agent, is next. See [Build stages](#build-stages).
+> **Status: Stage 1.2 in progress.** The verification worker renders careers pages and extracts their listings (1.2a); careers-page resolution (1.2b) is next. See [Build stages](#build-stages).
 
 ---
 
@@ -117,10 +117,15 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 **Stage 1 — Job Finder.** A thin vertical slice through the whole stack rather than a horizontal layer, so something useful ships before the CRUD work and the governance model is proven on real data early.
 
 - **1.1 — Schema and ingest** ✅
-- **1.2 — Verification agent** (Playwright + LLM, Python worker) ← *next*: resolve a company's careers page, render it, extract listings, return a verdict
-- 1.3 — Scoped writes and provenance
+- **1.2 — Verification agent** (Playwright + LLM, Python worker) ← *current*, in three slices:
+  - **1.2a — Render and extract** ✅ read a careers page in a real browser and extract its listings; known job boards (Greenhouse, Lever, Ashby, Workday) are read through their APIs instead. See [`workers/verifier`](workers/verifier).
+  - 1.2b — Resolve careers pages from a company's domain
+  - 1.2c — Match postings against listings and record verdicts
+- 1.3 — Scoped writes and provenance: short-lived, per-run agent credentials, checked at the single path every agent write goes through
 - 1.4 — Scheduled monitoring and digest: re-verify every watched company on a cadence — the sourcing mechanism, a scheduled re-run of 1.2 that catches both new roles and closures — then report what changed
-- 1.5 — Manual capture ("add by URL"): paste a posting URL or company domain to resolve, verify, and add it to the watch list. Needs only 1.2, so it can ship before 1.4
+- 1.5 — Manual capture ("add by URL"): paste an employer careers link or a company domain to resolve, verify, and add it to the watch list
+
+**Build order is 1.2 → 1.5 → 1.3 → 1.4.** Manual capture needs only 1.2, so it ships first to make the tool usable early; because every agent write goes through one path, 1.3's credential check covers it without rework.
 
 **Stage 2 — Pipeline system.** Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents.
 

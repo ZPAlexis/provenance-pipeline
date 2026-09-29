@@ -74,3 +74,11 @@ yarn-debug.log*
 /clay-exports/
 *.csv
 !spec/fixtures/**/*.csv
+
+# Python verification worker (workers/verifier). Its run outputs (targets,
+# results, reports) land under tmp/verifier/, already ignored above, because
+# they name real companies from the private target list.
+/workers/verifier/.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/

@@ -17,6 +17,10 @@ CI.run do
   # none: it passes against nothing and reports green.
   step "Tests: RSpec", "bundle exec rspec"
 
+  # The Python verification worker, as the `verifier` CI job runs it.
+  step "Verifier: Lint", "cd workers/verifier && uv run ruff check . && uv run ruff format --check ."
+  step "Verifier: Tests", "cd workers/verifier && uv run pytest -q"
+
   # Optional: set a green GitHub commit status to unblock PR merge.
   # Requires the `gh` CLI and `gh extension install basecamp/gh-signoff`.
   # if success?

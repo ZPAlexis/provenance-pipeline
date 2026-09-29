@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head><title>Careers at Dynamic Co</title></head>
+<body>
+  <!--
+    The case the verifier exists for: the listings are not in the HTML at all.
+    They arrive from an API after the page loads, so a plain HTTP fetch sees an
+    empty shell and a naive reader reports "no openings".
+  -->
+  <h1>Join us</h1>
+  <div id="jobs">Loading open positions…</div>
+  <script>
+    setTimeout(() => {
+      fetch("jobs.json")
+        .then((response) => response.json())
+        .then((jobs) => {
+          document.getElementById("jobs").innerHTML =
+            "<ul>" +
+            jobs.map((job) => `<li><a href="/jobs/${job.slug}">${job.title}</a> (${job.location})</li>`).join("") +
+            "</ul>";
+        });
+    }, 400);
+  </script>
+</body>
+</html>
