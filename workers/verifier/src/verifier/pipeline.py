@@ -18,7 +18,7 @@ from verifier import ats
 from verifier.contract import Listing, PageResult, Target
 from verifier.extract import ExtractionFailed, Extractor, input_truncated, link_url
 from verifier.politeness import HostThrottle
-from verifier.render import RenderError, render
+from verifier.render import RenderedPage, RenderError, render
 from verifier.robots import RobotsPolicy
 
 
@@ -31,15 +31,59 @@ class Services:
     extractor: Extractor
 
 
-def verify_page(target: Target, services: Services) -> PageResult:
+def read_homepage(target_id: str, url: str, services: Services) -> tuple[PageResult, RenderedPage | None]:
+    """Render a homepage for its links, without extracting listings. The same robots and politeness rules apply."""
     started = time.monotonic()
     checked_at = datetime.now(UTC).isoformat(timespec="seconds")
 
-    def finish(**fields) -> PageResult:
+    def finish(page: RenderedPage | None = None, **fields) -> tuple[PageResult, RenderedPage | None]:
         elapsed = int((time.monotonic() - started) * 1000)
-        return PageResult(target_id=target.id, url=target.url, checked_at=checked_at, duration_ms=elapsed, **fields)
+        result = PageResult(
+            target_id=target_id, url=url, checked_at=checked_at, step="homepage", duration_ms=elapsed, **fields
+        )
+        return result, page
+
+    refusal = services.robots.check(url)
+    if refusal:
+        return finish(outcome="blocked", reason=refusal)
+    services.throttle.wait(urlsplit(url).netloc)
+    try:
+        page = render(services.browser, url)
+    except RenderError as error:
+        return finish(outcome="inaccessible", reason=error.reason)
+
+    seen = {"final_url": page.final_url, "http_status": page.status, "content_hash": page.content_hash}
+    if page.looks_like_challenge:
+        return finish(outcome="inaccessible", reason="bot_challenge", **seen)
+    if page.status and page.status >= 400:
+        return finish(outcome="inaccessible", reason=f"http_{page.status}", **seen)
+    return finish(page, outcome="ok", method="render", **seen)
+
+
+def verify_page(target: Target, services: Services) -> PageResult:
+    """Check one page and extract its listings."""
+    return check_page(target, services)[0]
+
+
+def check_page(
+    target: Target, services: Services, *, ats_fallback: bool = True
+) -> tuple[PageResult, RenderedPage | None]:
+    """Check one page, returning the rendered page too when there is one, for its links.
+
+    `ats_fallback=False` during resolution, which guesses boards as its own step.
+    """
+    started = time.monotonic()
+    checked_at = datetime.now(UTC).isoformat(timespec="seconds")
+    page: RenderedPage | None = None
+
+    def finish(**fields) -> tuple[PageResult, RenderedPage | None]:
+        elapsed = int((time.monotonic() - started) * 1000)
+        result = PageResult(target_id=target.id, url=target.url, checked_at=checked_at, duration_ms=elapsed, **fields)
+        return result, page
 
     refusal = services.robots.check(target.url)
+    if refusal and not ats_fallback:
+        return finish(outcome="blocked", reason=refusal)
     if refusal:
         # The page itself is never fetched. Where the company has a board on a
         # known ATS, its listings are read there instead, and the result says so.
@@ -111,6 +155,8 @@ def verify_page(target: Target, services: Services) -> PageResult:
         listing_count=len(listings),
         stated_total=extraction.stated_total,
         explicit_no_openings=extraction.explicit_no_openings,
+        listings_incomplete=extraction.listings_incomplete,
+        many_employers=extraction.many_employers,
         input_truncated=input_truncated(page),
         notes=extraction.notes,
         llm=usage,

@@ -24,6 +24,53 @@ RSpec.describe Company do
     it "rejects an unknown ATS type" do
       expect(build(:company, ats_type: "taleo")).not_to be_valid
     end
+
+    it "knows Workday" do
+      expect(build(:company, ats_type: "workday")).to be_valid
+    end
+  end
+
+  # Each resolution state carries the fields that make it meaningful, enforced
+  # here so no writer can leave a company half-resolved.
+  describe "careers-page resolution" do
+    it "starts unresolved" do
+      expect(build(:company)).to have_attributes(resolution_status: nil)
+    end
+
+    it "is resolved only with a careers page, a method, and a confidence" do
+      expect(build(:company, :resolved)).to be_valid
+      expect(build(:company, :resolved, careers_page_url: nil)).not_to be_valid
+      expect(build(:company, :resolved, resolution_method: nil)).not_to be_valid
+      expect(build(:company, :resolved, resolution_confidence: nil)).not_to be_valid
+    end
+
+    # A low-confidence find waits for a human: it is held as a candidate, never
+    # written as the page the system watches.
+    it "holds a low-confidence find as a candidate, not as the watched page" do
+      expect(build(:company, :resolution_candidate)).to be_valid
+      expect(build(:company, :resolution_candidate, resolution_candidate_url: nil)).not_to be_valid
+    end
+
+    it "records why a resolution failed" do
+      expect(build(:company, resolution_status: "failed", resolution_failure: "no_domain")).to be_valid
+      expect(build(:company, resolution_status: "failed", resolution_failure: nil)).not_to be_valid
+    end
+
+    it "accepts only known statuses, methods, confidences, and failure reasons" do
+      expect(build(:company, :resolved, resolution_method: "hunch")).not_to be_valid
+      expect(build(:company, :resolved, resolution_confidence: "certain")).not_to be_valid
+      expect(build(:company, resolution_status: "failed", resolution_failure: "bad_luck")).not_to be_valid
+      expect(build(:company, resolution_status: "pending")).not_to be_valid
+    end
+
+    it "separates companies still to resolve from candidates awaiting confirmation" do
+      unresolved = create(:company)
+      candidate = create(:company, :resolution_candidate)
+      create(:company, :resolved)
+
+      expect(described_class.unresolved).to contain_exactly(unresolved)
+      expect(described_class.resolution_candidates).to contain_exactly(candidate)
+    end
   end
 
   describe "scopes" do

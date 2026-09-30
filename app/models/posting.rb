@@ -25,8 +25,9 @@ class Posting < ApplicationRecord
   #                     never a sentinel.
   # work_mode           As observed at that check. nil = not observed.
   #
-  # Writers and precision. ClayImporter sets these once, when it creates a
-  # posting from a research export. Clay exports carry no per-row check date,
+  # Writers and precision. ClayImporter sets these once: when it creates a
+  # posting from a research export, or when a research export first reaches a
+  # posting it imported unchecked. Clay exports carry no per-row check date,
   # so the operator supplies it (VERIFIED_AT, required whenever an export has
   # verdicts); a bare date is stored at 12:00 UTC and is day precision, and
   # the posting's create event says where the date came from. From Stage 1.2

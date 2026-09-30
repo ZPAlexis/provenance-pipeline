@@ -9,6 +9,11 @@ require "csv"
 # output stays on the posting its run checked; the company keeps provider
 # enrichment, set once and never overwritten.
 #
+# Sourcing pulls are free and research costs credits, so research usually runs
+# later, on rows already imported. A research row for a posting imported
+# unchecked fills in that posting's research, once. A posting that already has
+# research, or a check, is never overwritten.
+#
 # Every write is recorded in audit_events — creates and updates alike, with
 # before/after values — under the importer's own actor identity. Provenance is
 # not retrofitted later. Each row is atomic: it lands completely, audit events
@@ -51,14 +56,19 @@ class ClayImporter
 
   DATE_ONLY = /\A\d{4}-\d{2}-\d{2}\z/
 
+  # Clay names an export "{table}-{view}-export-{timestamp}.csv"; the default
+  # view's name says nothing about the slice.
+  DEFAULT_VIEW_SUFFIX = "-Default-view".freeze
+
   Result = Struct.new(
     :rows, :companies_created, :companies_matched,
-    :postings_created, :postings_skipped, :errors,
+    :postings_created, :postings_researched, :postings_skipped, :errors,
     keyword_init: true
   ) do
     def to_s
       "rows=#{rows} companies(new=#{companies_created} matched=#{companies_matched}) " \
-        "postings(new=#{postings_created} skipped=#{postings_skipped}) errors=#{errors.size}"
+        "postings(new=#{postings_created} researched=#{postings_researched} skipped=#{postings_skipped}) " \
+        "errors=#{errors.size}"
     end
   end
 
@@ -86,7 +96,7 @@ class ClayImporter
     @verified_at, @verified_at_precision = parse_verified_at(verified_at)
     @result = Result.new(
       rows: 0, companies_created: 0, companies_matched: 0,
-      postings_created: 0, postings_skipped: 0, errors: []
+      postings_created: 0, postings_researched: 0, postings_skipped: 0, errors: []
     )
   end
 
@@ -121,9 +131,12 @@ class ClayImporter
 
   private
 
-  # "GTM-Brazil-export-1790189191374.csv" -> "brazil"; "Testland.csv" -> "testland"
+  # "GTM-Brazil-export-1790189191374.csv" -> "brazil"; "Testland.csv" -> "testland";
+  # "GTM-Canada-Default-view-export-1790769251120.csv" -> "canada". A table
+  # whose name does not end in its slice needs it named outright.
   def derive_slice(path)
-    path.basename(path.extname).to_s.split("-export").first.to_s.split("-").last.to_s.downcase.presence || "unknown"
+    table = path.basename(path.extname).to_s.split("-export").first.to_s.delete_suffix(DEFAULT_VIEW_SUFFIX)
+    table.split("-").last.to_s.downcase.presence || "unknown"
   end
 
   # Returns [time, precision], precision being :day or :exact. ISO 8601 only:
@@ -161,9 +174,9 @@ class ClayImporter
 
     ApplicationRecord.transaction(requires_new: true) do
       company, company_outcome = upsert_company(core, research, company_columns)
-      posting = upsert_posting(company, core, research, research_output)
+      posting_outcome = upsert_posting(company, core, research, research_output)
 
-      { company: company_outcome, posting: posting ? :created : :skipped }
+      { company: company_outcome, posting: posting_outcome }
     end
   end
 
@@ -216,9 +229,11 @@ class ClayImporter
     [ company, created ? :created : :matched ]
   end
 
-  # Returns the new posting, or nil when it was already imported.
+  # Returns :created, :researched (an existing posting took this row's
+  # research), or :skipped.
   def upsert_posting(company, core, research, columns)
-    return if core[:posting_url].present? && Posting.exists?(posting_url: core[:posting_url])
+    existing = Posting.find_by(posting_url: core[:posting_url]) if core[:posting_url].present?
+    return research_existing(existing, research, columns) if existing
 
     posting = Posting.create!(
       company: company,
@@ -227,6 +242,36 @@ class ClayImporter
       posting_url: core[:posting_url],
       posted_on: parse_date(core[:posted_on]),
       source_slice: @slice,
+      **research_attributes(research, columns)
+    )
+
+    AuditEvent.record_write!(posting, actor: ACTOR, reasoning: posting_reasoning(research))
+
+    :created
+  end
+
+  # A posting imported unchecked takes the first research that reaches it, as
+  # one audited update of the same fields a research row sets on create. A
+  # posting that already has research or a check keeps it: a later run is a
+  # second opinion, not a correction, and from Stage 1.2 the verifier owns
+  # checks. The raw verdict marks research, recognized or not.
+  def research_existing(posting, research, columns)
+    return :skipped if research[:verification_state].blank?
+    return :skipped if posting.last_checked_at.present? || posting.enrichment.key?("raw_verification")
+
+    attributes = research_attributes(research, columns)
+    posting.update!(attributes.merge(enrichment: posting.enrichment.reverse_merge(attributes[:enrichment])))
+    AuditEvent.record_write!(
+      posting, actor: ACTOR,
+      reasoning: "Researched in Clay export #{@path.basename}; the posting was imported earlier, unchecked.\n\n" \
+                 "#{posting_reasoning(research)}"
+    )
+
+    :researched
+  end
+
+  def research_attributes(research, columns)
+    {
       verification_state: normalize_state(research[:verification_state]),
       roles_listed_count: normalize_count(research[:roles_listed_count]),
       work_mode: normalize_work_mode(research[:work_mode]),
@@ -238,11 +283,7 @@ class ClayImporter
         "raw_verification"       => research[:verification_state],
         "raw_roles_listed_count" => research[:roles_listed_count]
       }.merge(columns).compact_blank
-    )
-
-    AuditEvent.record_write!(posting, actor: ACTOR, reasoning: posting_reasoning(research))
-
-    posting
+    }
   end
 
   # The researcher's prose where there is some. A verdict's check date is

@@ -345,6 +345,118 @@ RSpec.describe ClayImporter do
     end
   end
 
+  # Sourcing pulls are free and research costs credits, so research usually
+  # runs later, on postings already imported unchecked. It lands on them once.
+  describe "a research run over postings imported earlier" do
+    let(:research_run) { file_fixture("clay/enrichment-runs/GTM-Testland-Default-view-export-1000000000003.csv") }
+
+    before { described_class.call(sourcing_csv) }
+
+    subject(:result) { described_class.call(research_run, verified_at: "2026-09-30") }
+
+    it "reports what it did" do
+      expect(result).to have_attributes(
+        rows: 5, companies_created: 1, companies_matched: 4,
+        postings_created: 1, postings_researched: 3, postings_skipped: 1, errors: []
+      )
+    end
+
+    it "fills in the verdict, count, work mode, and check date on an unchecked posting" do
+      result
+      expect(posting_for("RevOps Engineer")).to have_attributes(
+        verification_state: "verified_live", roles_listed_count: 4, work_mode: "remote",
+        last_checked_at: Time.utc(2026, 9, 30, 12)
+      )
+      expect(posting_for("Solutions Engineer")).to have_attributes(verification_state: "not_found", roles_listed_count: 9)
+    end
+
+    it "keeps the run's research on the posting it checked" do
+      result
+      expect(posting_for("RevOps Engineer").enrichment).to include(
+        "hiring_evidence" => "Listed on the careers page.",
+        "careers_page_url" => "https://acme.example/careers",
+        "Career Search Prospecting Researcher Industry" => "Robotics"
+      )
+    end
+
+    it "keeps an unrecognized verdict raw, leaving the posting pending and unchecked" do
+      result
+      posting = posting_for("GTM Systems Analyst")
+
+      expect(posting).to have_attributes(verification_state: "pending", last_checked_at: nil)
+      expect(posting.enrichment["raw_verification"]).to eq("probably_live")
+    end
+
+    it "changes nothing it imported from the sourcing pull" do
+      result
+      expect(posting_for("RevOps Engineer")).to have_attributes(
+        source_slice: "testland", location: "Remote, Testland", posted_on: Date.new(2026, 9, 1)
+      )
+    end
+
+    it "records each as an update with before/after values, saying where the research and date came from" do
+      result
+      event = AuditEvent.find_by!(target: posting_for("RevOps Engineer"), action: "update")
+
+      expect(event.actor).to eq(described_class::ACTOR)
+      expect(event.changes_made).to include(
+        "verification_state" => [ "pending", "verified_live" ],
+        "roles_listed_count" => [ nil, 4 ]
+      )
+      expect(event.reasoning).to include(
+        "GTM-Testland-Default-view-export-1000000000003.csv", "imported earlier",
+        "Role is listed among 4 open roles.", "VERIFIED_AT"
+      )
+    end
+
+    it "fills in the careers page on a company first seen without one" do
+      result
+      expect(company_at("acme.example").careers_page_url).to eq("https://acme.example/careers")
+    end
+
+    it "creates a posting it has not seen, with the slice named before Clay's default view name" do
+      result
+      expect(posting_for("RevOps Lead")).to have_attributes(verification_state: "verified_live", source_slice: "testland")
+    end
+
+    it "skips a row with no research for a posting it already has" do
+      expect { result }.not_to change { posting_for("Data Engineer").attributes }
+    end
+
+    it "writes nothing when imported a second time" do
+      result
+
+      second = described_class.call(research_run, verified_at: "2026-09-30")
+      expect(second).to have_attributes(postings_researched: 0, postings_skipped: 5)
+      expect { described_class.call(research_run, verified_at: "2026-09-30") }.not_to change(AuditEvent, :count)
+    end
+
+    # A posting takes research once. A later run is a second opinion, not a
+    # correction, and from Stage 1.2 the verifier owns checks.
+    it "never replaces research a posting already has, even an unrecognized verdict" do
+      result
+
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "GTM-Testland-Default-view-export-2.csv")
+        File.write(path, File.read(research_run).sub("probably_live", "verified_live"))
+
+        expect(described_class.call(path, verified_at: "2026-10-01").postings_researched).to eq(0)
+      end
+      expect(posting_for("GTM Systems Analyst")).to have_attributes(verification_state: "pending", last_checked_at: nil)
+    end
+  end
+
+  it "never overwrites a posting that already has a check" do
+    checked = create(:posting, :credible_negative, posting_url: "https://jobs.example/postings/103")
+
+    described_class.call(
+      file_fixture("clay/enrichment-runs/GTM-Testland-Default-view-export-1000000000003.csv"), verified_at: "2026-09-30"
+    )
+
+    expect(checked.reload).to have_attributes(roles_listed_count: 23, enrichment: {})
+    expect(AuditEvent.where(target: checked)).to be_empty
+  end
+
   describe "a row that fails" do
     before do
       allow(Posting).to receive(:create!).and_wrap_original do |original, *args, **kwargs|
@@ -382,6 +494,11 @@ RSpec.describe ClayImporter do
       end
 
       expect(Posting.distinct.pluck(:source_slice)).to eq([ "testland" ])
+    end
+
+    it "can be named outright, for a table whose filename does not end in it" do
+      described_class.call(sourcing_csv, slice: "elsewhere")
+      expect(Posting.distinct.pluck(:source_slice)).to eq([ "elsewhere" ])
     end
   end
 

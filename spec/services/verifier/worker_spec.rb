@@ -32,7 +32,7 @@ RSpec.describe Verifier::Worker do
   let(:targets) { [ { id: "c1", url: "https://acme.example/careers", label: "Acme" } ] }
 
   def result(**overrides)
-    { "schema_version" => 1, "target_id" => "c1", "outcome" => "ok", "listing_count" => 3 }.merge(overrides)
+    { "schema_version" => 2, "target_id" => "c1", "outcome" => "ok", "listing_count" => 3 }.merge(overrides)
   end
 
   def worker(process, **options)
@@ -93,8 +93,21 @@ RSpec.describe Verifier::Worker do
   end
 
   it "refuses results in a schema it does not know" do
-    process = fake_process(results: [ result("schema_version" => 2) ])
+    process = fake_process(results: [ result("schema_version" => 1) ])
 
-    expect { worker(process).run(targets) }.to raise_error(described_class::Error, /schema version 2/)
+    expect { worker(process).run(targets) }.to raise_error(described_class::Error, /schema version 1/)
+  end
+
+  it "runs resolution when asked, naming the run after its directory" do
+    process = fake_process
+
+    run = worker(process).run([ { id: "c1", label: "Acme", domain: "acme.example" } ], command: "resolve")
+
+    expect(process.spawned[:command]).to start_with("uv", "run", "--quiet", "verifier", "resolve")
+    expect(run.id).to eq("run")
+  end
+
+  it "refuses a command the worker does not have" do
+    expect { worker(fake_process).run(targets, command: "delete") }.to raise_error(ArgumentError, /delete/)
   end
 end

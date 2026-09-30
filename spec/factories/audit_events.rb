@@ -5,7 +5,7 @@ FactoryBot.define do
     association :target, factory: :company
 
     trait :by_human do
-      actor { "human:alexis" }
+      actor { "human:operator" }
     end
 
     trait :without_target do

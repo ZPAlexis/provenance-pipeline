@@ -7,17 +7,24 @@ import pytest
 
 from verifier.config import MAX_LINKS, MAX_TEXT_CHARS
 from verifier.extract import (
+    EXTRACT_PROMPT_VERSION,
+    LINK_PROMPT_VERSION,
+    LINK_SCHEMA,
+    LINK_SYSTEM_PROMPT,
     OUTPUT_SCHEMA,
     SYSTEM_PROMPT,
     CreditExhausted,
     ExtractedListing,
     ExtractionFailed,
+    LinkChoice,
     LlmConfigError,
     LlmExtractor,
+    LlmLinkPicker,
     PageExtraction,
     build_prompt,
     input_truncated,
     link_url,
+    prompt_version,
 )
 from verifier.render import RenderedPage
 
@@ -32,6 +39,8 @@ PAGE = RenderedPage(
 EXTRACTION = PageExtraction(
     shows_job_listings=True,
     explicit_no_openings=False,
+    listings_incomplete=False,
+    many_employers=False,
     stated_total=None,
     listings=[ExtractedListing(title="Revenue Operations Engineer", location=None, link=2, work_mode="unknown")],
     notes="One role listed.",
@@ -200,3 +209,35 @@ def test_marks_what_the_model_could_not_see():
     assert "[link list truncated]" in build_prompt(many_links)
     assert input_truncated(long_text) and input_truncated(many_links)
     assert not input_truncated(PAGE)
+
+
+# "Behavior changed last Tuesday" must be answerable from stored data.
+def test_tags_each_call_with_its_purpose_and_prompt_version():
+    _, usage = extractor(FakeClient(response())).extract(PAGE)
+
+    assert (usage.purpose, usage.prompt_version) == ("extract", EXTRACT_PROMPT_VERSION)
+    assert len(EXTRACT_PROMPT_VERSION) == 12
+
+
+def test_prompt_version_changes_with_the_prompt_the_schema_or_the_limits():
+    base = prompt_version("prompt", {"type": "object"}, {"max": 1})
+
+    assert prompt_version("prompt", {"type": "object"}, {"max": 1}) == base
+    assert prompt_version("prompt!", {"type": "object"}, {"max": 1}) != base
+    assert prompt_version("prompt", {"type": "array"}, {"max": 1}) != base  # a schema-only change
+    assert prompt_version("prompt", {"type": "object"}, {"max": 2}) != base
+
+
+def test_link_picker_asks_for_one_link_number_as_structured_output():
+    choice = LinkChoice(link=2, reason="The link says Careers.")
+    client = FakeClient(response(text=choice.model_dump_json()))
+
+    picked, usage = LlmLinkPicker(client_factory=lambda: client).pick(PAGE)
+
+    request = client.requests[0]
+    assert request["system"] == LINK_SYSTEM_PROMPT
+    assert request["output_config"]["format"]["schema"] == LINK_SCHEMA
+    assert "[2] Revenue Operations Engineer -> https://acme.example/jobs/1" in request["messages"][0]["content"]
+    assert picked.link == 2
+    assert (usage.purpose, usage.prompt_version) == ("resolve", LINK_PROMPT_VERSION)
+    assert LINK_PROMPT_VERSION != EXTRACT_PROMPT_VERSION

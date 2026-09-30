@@ -2,9 +2,10 @@ import io
 import json
 
 from verifier import cli
-from verifier.cli import run
-from verifier.contract import PageResult, Target
+from verifier.cli import run, run_resolve
+from verifier.contract import PageResult, ResolutionResult, ResolveTarget, Target
 from verifier.extract import CreditExhausted, ExtractionFailed
+from verifier.resolve import Resolver, ServicesReader
 
 
 def targets(site, *paths):
@@ -113,3 +114,30 @@ def test_rejects_an_unreadable_targets_file(tmp_path):
     bad.write_text(json.dumps({"not_targets": []}))
 
     assert cli.main(["extract", "--targets", str(bad), "--out", str(tmp_path / "out.jsonl")]) == cli.EXIT_BAD_INPUT
+
+
+def test_resolve_writes_one_result_per_company_counting_every_page_it_checked(services, site, tmp_path):
+    host = site.base.removeprefix("http://")
+    companies = [
+        ResolveTarget(id="c1", label="Example", domain=host, name="Example Co"),
+        ResolveTarget(id="c2", label="Nameless", name="Nameless Co"),
+    ]
+    out = tmp_path / "resolutions.jsonl"
+
+    summary = run_resolve(companies, out, Resolver(ServicesReader(services), scheme="http"), log=io.StringIO())
+
+    results = [ResolutionResult.model_validate_json(line) for line in out.read_text().splitlines()]
+    assert [(result.target_id, result.outcome) for result in results] == [("c1", "resolved"), ("c2", "failed")]
+    assert summary.outcomes == {"resolved": 1, "failed": 1}
+    assert (summary.targets, summary.pages, summary.listings) == (2, 1, 3)
+
+
+def test_resolve_stops_cleanly_when_credit_runs_out(tmp_path):
+    class NoCredit:
+        def resolve(self, target):
+            raise CreditExhausted("Your credit balance is too low")
+
+    summary = run_resolve([ResolveTarget(id="c1")], tmp_path / "r.jsonl", NoCredit(), log=io.StringIO())
+
+    assert summary.stopped == "credit_exhausted"
+    assert (tmp_path / "r.jsonl").read_text() == ""

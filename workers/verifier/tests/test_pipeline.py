@@ -202,3 +202,17 @@ class TestRobotsBlockedPages:
 
         assert (result.outcome, result.reason) == ("blocked", "robots_disallowed")
         assert "/private/page.html" not in site.requested
+
+
+def test_hands_back_the_rendered_page_for_its_links(services, site):
+    result, page = pipeline.check_page(target(site, "static.html"), services, ats_fallback=False)
+
+    assert result.outcome == "ok"
+    assert page is not None and page.links
+    assert (result.listings_incomplete, result.many_employers) == (False, False)
+
+
+def test_hands_back_no_page_when_robots_keeps_it_out(services, site):
+    result, page = pipeline.check_page(target(site, "private/page.html"), services, ats_fallback=False)
+
+    assert (result.outcome, page) == ("blocked", None)
