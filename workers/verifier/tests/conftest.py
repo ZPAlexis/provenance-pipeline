@@ -78,6 +78,8 @@ class FakeExtractor:
         extraction = PageExtraction(
             shows_job_listings=True,
             explicit_no_openings="no open positions" in page.text.lower(),
+            listings_incomplete="load more" in page.text.lower(),
+            many_employers=False,
             stated_total=None,
             listings=listings,
             notes=f"fake extraction of {len(listings)} listings",

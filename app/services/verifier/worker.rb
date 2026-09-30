@@ -13,7 +13,9 @@ module Verifier
     # would silently switch Claude Code from the subscription to API billing.
     CREDENTIAL_FILE = Pathname.new(Dir.home).join(".config/provenance-pipeline/anthropic.env")
 
-    RESULT_SCHEMA_VERSION = 1
+    RESULT_SCHEMA_VERSION = 2
+
+    COMMANDS = %w[extract resolve].freeze
 
     # Exit codes from workers/verifier/src/verifier/cli.py for a run that
     # stopped early on purpose, keeping every result it finished.
@@ -25,7 +27,10 @@ module Verifier
 
     class Error < StandardError; end
 
-    Run = Struct.new(:dir, :results, :stopped, keyword_init: true)
+    Run = Struct.new(:dir, :results, :stopped, keyword_init: true) do
+      # What its page checks and LLM calls are filed under: the directory holding its targets and results.
+      def id = dir.basename.to_s
+    end
 
     def initialize(run_dir:, model: nil, credential_file: CREDENTIAL_FILE, process: Process)
       @run_dir = Pathname.new(run_dir)
@@ -38,14 +43,17 @@ module Verifier
       api_key.present?
     end
 
-    # targets: [{ id:, url:, label: }]
-    def run(targets)
+    # extract: targets are [{ id:, url:, label:, domain:, name: }], one PageResult each.
+    # resolve: targets are [{ id:, label:, domain:, name:, known_url: }], one ResolutionResult each.
+    def run(targets, command: "extract")
+      raise ArgumentError, "unknown worker command #{command.inspect}" unless COMMANDS.include?(command)
+
       FileUtils.mkdir_p(@run_dir)
       targets_path = @run_dir.join("targets.json")
       results_path = @run_dir.join("results.jsonl")
       targets_path.write(JSON.pretty_generate(targets: targets))
 
-      pid = @process.spawn(worker_env, *command(targets_path, results_path), chdir: ROOT.to_s)
+      pid = @process.spawn(worker_env, *command_line(command, targets_path, results_path), chdir: ROOT.to_s)
       _, status = @process.wait2(pid)
       unless status.exitstatus.zero? || STOPPED.key?(status.exitstatus)
         raise Error, "the verification worker exited with status #{status.exitstatus}"
@@ -56,8 +64,8 @@ module Verifier
 
     private
 
-    def command(targets_path, results_path)
-      [ "uv", "run", "--quiet", "verifier", "extract",
+    def command_line(command, targets_path, results_path)
+      [ "uv", "run", "--quiet", "verifier", command,
         "--targets", targets_path.to_s, "--out", results_path.to_s,
         *([ "--model", @model ] if @model) ]
     end

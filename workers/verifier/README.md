@@ -1,9 +1,10 @@
 # verifier
 
-The Python worker behind Stage 1.2. Given a list of careers pages, it renders each one in a real browser, extracts the job listings it shows, and writes one JSON result per page. It never touches the database: Rails writes the targets file, runs the worker, and reads the results back.
+The Python worker behind Stage 1.2. It has two commands. `extract` renders careers pages in a real browser and writes the job listings each one shows. `resolve` finds a company's careers page from its domain and name. Either way it writes one JSON result per target and never touches the database: Rails writes the targets file, runs the worker, validates every result against a fixed contract, and records it through one audited write path.
 
 ```bash
 uv run verifier extract --targets targets.json --out results.jsonl [--model claude-haiku-4-5]
+uv run verifier resolve --targets companies.json --out resolutions.jsonl [--model claude-haiku-4-5]
 ```
 
 In practice it is run from Rails, which supplies the API credential:
@@ -11,6 +12,9 @@ In practice it is run from Rails, which supplies the API credential:
 ```bash
 bin/rails "verifier:extract[https://example.com/careers]"   # one page
 bin/rails verifier:test_a                                    # Test A over every page with ground truth
+bin/rails verifier:resolve                                   # find and record careers pages (backs up first)
+bin/rails verifier:candidates                                # low-confidence finds waiting for a human
+bin/rails verifier:test_resolution                           # hide known pages, find them again
 ```
 
 ## How a page is checked
@@ -32,3 +36,15 @@ uv run pytest
 ```
 
 Tests run against a local synthetic site with a fake LLM: no network, no API key, no cost.
+
+## How a careers page is found
+
+Cheapest, most certain step first. A page counts as found only when a check reads listings off it, or reads that it has none.
+
+1. **The page already on record**, if there is one and it still lists jobs.
+2. **Common paths** on the company's domain (`/careers`, `/jobs`, `/about/careers`, `/company/careers`). A plain request goes first, and only a path that answers is rendered.
+3. **Homepage links** that say careers or jobs (in English, Portuguese, or Spanish) on the company's own site, or that lead to a known ATS board.
+4. **A guessed ATS board** on Greenhouse, Lever, or Ashby, from the domain and name.
+5. **Claude picks a link** from the homepage's numbered links, as a last resort.
+
+Every result carries a confidence, so a human looks only where it matters. **High**: a page on the company's own site, or a board its own homepage links to. **Medium**: a guessed Greenhouse board whose recorded company name matches. **Low**: an unconfirmed guess or a link Claude picked. A low-confidence find comes back as a *candidate*: Rails holds it apart from the watched page until a person confirms or rejects it, and that decision is audited as theirs. Every page checked along the way, and what each LLM call cost, is kept as evidence, whatever the outcome.

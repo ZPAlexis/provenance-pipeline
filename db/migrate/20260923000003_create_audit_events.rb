@@ -1,7 +1,7 @@
 class CreateAuditEvents < ActiveRecord::Migration[8.1]
   def change
     create_table :audit_events, id: :uuid do |t|
-      # Namespaced actor identity, e.g. "human:alexis", "agent:clay_importer",
+      # Namespaced actor identity, e.g. "human:operator", "agent:clay_importer",
       # "agent:verifier". Every write to the system names who made it.
       t.string :actor, null: false
       t.string :action, null: false

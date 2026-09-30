@@ -218,3 +218,35 @@ def test_finds_no_board_when_none_lists_jobs():
     client = httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(404)))
 
     assert ats.find_board(["acme"], client, wait=lambda host: None) is None
+
+
+def test_gives_each_board_the_public_url_a_person_would_visit():
+    assert ats.board_url(AtsBoard(vendor="greenhouse", board="acme")) == "https://job-boards.greenhouse.io/acme"
+    assert ats.board_url(AtsBoard(vendor="lever", board="acme")) == "https://jobs.lever.co/acme"
+    assert ats.board_url(AtsBoard(vendor="ashby", board="acme")) == "https://jobs.ashbyhq.com/acme"
+    assert ats.board_url(AtsBoard(vendor="workday", board="acme.wd1/Careers")) == (
+        "https://acme.wd1.myworkdayjobs.com/Careers"
+    )
+
+
+# Greenhouse's board record carries the company's name, which confirms a guess.
+def test_reads_the_company_name_greenhouse_records_for_a_board():
+    client = client_returning({"name": "Acme Robotics", "content": "<p>Hi</p>"})
+
+    assert ats.board_name(AtsBoard(vendor="greenhouse", board="acme"), client) == "Acme Robotics"
+    assert ats.board_name(AtsBoard(vendor="lever", board="acme"), client) is None  # Lever has no such record
+
+
+def test_board_name_is_none_when_the_record_cannot_be_read():
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(404)))
+
+    assert ats.board_name(AtsBoard(vendor="greenhouse", board="acme"), client) is None
+
+
+def test_matches_company_names_ignoring_case_punctuation_and_legal_suffixes_only():
+    assert ats.names_match("Acme Robotics", "Acme Robotics, Inc.")
+    assert ats.names_match("ACME ROBOTICS LLC", "acme robotics")
+    # Found in the resolution test: a board recording "Goodwin" was another company than "Goodwin Recruiting".
+    assert not ats.names_match("Goodwin", "Goodwin Recruiting")
+    assert not ats.names_match("Acme Robotics", "Apex Robotics")
+    assert not ats.names_match(None, "Acme")

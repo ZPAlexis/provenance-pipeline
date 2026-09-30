@@ -68,6 +68,47 @@ def api_url(board: AtsBoard) -> str:
     return f"https://{tenant_instance}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
 
 
+def board_url(board: AtsBoard) -> str:
+    """The board's public page: what a person would visit, and what the system watches."""
+    if board.vendor == "greenhouse":
+        return f"https://job-boards.greenhouse.io/{board.board}"
+    if board.vendor == "lever":
+        return f"https://jobs.lever.co/{board.board}"
+    if board.vendor == "ashby":
+        return f"https://jobs.ashbyhq.com/{board.board}"
+    tenant_instance, site = board.board.split("/", 1)
+    return f"https://{tenant_instance}.myworkdayjobs.com/{site}"
+
+
+def board_name(board: AtsBoard, client: httpx2.Client) -> str | None:
+    """The company name the vendor records for a board, where it records one.
+
+    Only Greenhouse does (`/v1/boards/{token}` returns a `name`); Lever and Ashby
+    have no such record. Used to confirm a board that was guessed by name.
+    """
+    if board.vendor != "greenhouse":
+        return None
+    try:
+        return _get_json(client, f"https://boards-api.greenhouse.io/v1/boards/{board.board}").get("name")
+    except (httpx2.HTTPError, ValueError, AttributeError):
+        return None
+
+
+def names_match(recorded: str | None, company: str | None) -> bool:
+    """Whether two company names are the same, ignoring case, punctuation, and legal suffixes.
+
+    Exact on purpose: this is what lets a guessed board be written without a
+    human. "Goodwin" and "Goodwin Recruiting" are different companies as often
+    as not; a board whose name only starts the same is left for a person.
+    """
+    a, b = _name_words(recorded), _name_words(company)
+    return bool(a) and a == b
+
+
+def _name_words(name: str | None) -> list[str]:
+    return [word for word in re.findall(r"[a-z0-9]+", (name or "").lower()) if word not in _CORPORATE_SUFFIXES]
+
+
 def api_host(board: AtsBoard) -> str:
     """The host the board's API lives on: the key for spacing requests politely."""
     return urlsplit(api_url(board)).netloc

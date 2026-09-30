@@ -1,8 +1,8 @@
 namespace :clay do
-  desc "Import Clay CSV exports. Usage: [VERIFIED_AT=YYYY-MM-DD] rails clay:import[path/to/dir_or_file] " \
-       "(VERIFIED_AT is required when an export carries verdicts)"
+  desc "Import Clay CSV exports. Usage: [VERIFIED_AT=YYYY-MM-DD] [SLICE=name] rails clay:import[path/to/dir_or_file] " \
+       "(VERIFIED_AT is required when an export carries verdicts; SLICE names a single file's slice outright)"
   task :import, [ :path ] => :environment do |_t, args|
-    path = args[:path] or abort "Usage: [VERIFIED_AT=YYYY-MM-DD] rails clay:import[path/to/dir_or_file]"
+    path = args[:path] or abort "Usage: [VERIFIED_AT=YYYY-MM-DD] [SLICE=name] rails clay:import[path/to/dir_or_file]"
     pathname = Pathname.new(path)
     abort "Not found: #{path}" unless pathname.exist?
 
@@ -11,12 +11,17 @@ namespace :clay do
     # write anything without it.
     verified_at = ENV["VERIFIED_AT"].presence
 
+    # For a table whose filename does not end in its slice. One file at a time,
+    # so a directory's files are never all tagged with one slice by mistake.
+    slice = ENV["SLICE"].presence&.downcase
+    abort "SLICE names one file's slice; import that file on its own." if slice && pathname.directory?
+
     results =
       begin
         if pathname.directory?
           ClayImporter.import_dir(pathname, verified_at: verified_at)
         else
-          [ [ pathname.basename.to_s, ClayImporter.call(pathname, verified_at: verified_at) ] ]
+          [ [ pathname.basename.to_s, ClayImporter.call(pathname, slice: slice, verified_at: verified_at) ] ]
         end
       rescue ClayImporter::MissingVerifiedAt => e
         abort e.message

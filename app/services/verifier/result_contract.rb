@@ -1,0 +1,83 @@
+module Verifier
+  # The fixed format every worker result is checked against before anything is
+  # written. The worker is a separate process on the far side of a file; its
+  # output is data to validate, never trusted as-is. Mirrors
+  # workers/verifier/src/verifier/contract.py.
+  module ResultContract
+    RESOLUTION_OUTCOMES = %w[resolved candidate failed error].freeze
+    # What the worker can report. "anonymised" and "rejected" are decided in Rails.
+    WORKER_FAILURES = %w[no_domain not_found blocked inaccessible].freeze
+    WORKER_CONFIDENCES = %w[high medium low].freeze
+
+    module_function
+
+    # Returns a list of problems; empty when the result may be ingested.
+    def resolution_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be resolution" unless result["kind"] == "resolution"
+      errors << "target_id is missing" if result["target_id"].blank?
+      outcome = result["outcome"]
+      errors << "unknown outcome #{outcome.inspect}" unless RESOLUTION_OUTCOMES.include?(outcome)
+
+      if %w[resolved candidate].include?(outcome)
+        errors << "careers_page_url must be an http(s) URL" unless web_url?(result["careers_page_url"])
+        errors << "unknown method #{result['method'].inspect}" unless (Company::RESOLUTION_METHODS - %w[manual]).include?(result["method"])
+        errors << "unknown confidence #{result['confidence'].inspect}" unless WORKER_CONFIDENCES.include?(result["confidence"])
+        # Low confidence is exactly what a human confirms; it is never resolved automatically.
+        errors << "a #{outcome} result cannot be #{result['confidence']} confidence" if (outcome == "resolved") == (result["confidence"] == "low")
+      end
+      errors << "unknown failure #{result['failure'].inspect}" if outcome == "failed" && !WORKER_FAILURES.include?(result["failure"])
+
+      checks = result["checks"]
+      return errors << "checks must be a list" unless checks.is_a?(Array)
+
+      checks.each_with_index { |check, index| errors.concat(page_errors(check).map { |error| "check #{index + 1}: #{error}" }) }
+      errors
+    end
+
+    def page_errors(check)
+      return [ "not an object" ] unless check.is_a?(Hash)
+
+      errors = []
+      errors << "url must be an http(s) URL" unless web_url?(check["url"])
+      errors << "unknown outcome #{check['outcome'].inspect}" unless PageCheck::OUTCOMES.include?(check["outcome"])
+      errors << "unknown step #{check['step'].inspect}" unless check["step"].nil? || PageCheck::STEPS.include?(check["step"])
+      errors << "checked_at must be an ISO 8601 time" unless iso8601?(check["checked_at"])
+      errors << "listing_count must be a count" unless check["listing_count"].nil? || count?(check["listing_count"])
+      listings = check["listings"]
+      unless listings.nil? || (listings.is_a?(Array) && listings.all? { |listing| listing.is_a?(Hash) && listing["title"].is_a?(String) })
+        errors << "listings must each have a title"
+      end
+      errors.concat(llm_errors(check["llm"]).map { |error| "llm #{error}" }) if check["llm"]
+      errors
+    end
+
+    def llm_errors(llm)
+      return [ "is not an object" ] unless llm.is_a?(Hash)
+
+      errors = []
+      errors << "model is missing" if llm["model"].blank?
+      errors << "prompt_version is missing" if llm["prompt_version"].blank?
+      errors << "unknown purpose #{llm['purpose'].inspect}" unless LlmCall::PURPOSES.include?(llm["purpose"])
+      errors << "tokens must be counts" unless count?(llm["input_tokens"]) && count?(llm["output_tokens"])
+      errors << "cost_usd must be a non-negative number" unless llm["cost_usd"].is_a?(Numeric) && llm["cost_usd"] >= 0
+      errors
+    end
+
+    def web_url?(value)
+      value.is_a?(String) && URI.parse(value).then { |uri| uri.is_a?(URI::HTTP) && uri.host.present? }
+    rescue URI::InvalidURIError
+      false
+    end
+
+    def iso8601?(value)
+      value.is_a?(String) && Time.iso8601(value).present?
+    rescue ArgumentError
+      false
+    end
+
+    def count?(value) = value.is_a?(Integer) && value >= 0
+  end
+end

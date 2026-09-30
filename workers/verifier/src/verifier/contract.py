@@ -18,6 +18,12 @@ WorkMode = Literal["remote", "hybrid", "onsite", "unknown"]
 # error        our own failure (extraction or an unexpected exception)
 Outcome = Literal["ok", "blocked", "inaccessible", "error"]
 
+# Resolution: how a careers page was found, and the step a page was checked at.
+# page_link: a link followed one level from a careers page that was found but did
+# not list its jobs itself, or listed only some of them.
+ResolutionMethod = Literal["imported", "path_probe", "homepage_link", "page_link", "ats_guess", "llm_link"]
+ResolutionStep = Literal["imported", "path_probe", "homepage", "homepage_link", "page_link", "ats_guess", "llm_link"]
+
 
 class Target(BaseModel):
     id: str
@@ -39,6 +45,9 @@ class Listing(BaseModel):
 class LlmUsage(BaseModel):
     model: str  # the model the API reports having served
     settings: dict = Field(default_factory=dict)  # request settings, e.g. effort
+    purpose: Literal["extract", "resolve", "match"] = "extract"
+    # A hash over the system prompt, output schema, and limits that produced this call.
+    prompt_version: str = ""
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0  # an estimate, from the published per-token prices
@@ -51,8 +60,10 @@ class AtsBoard(BaseModel):
 
 class PageResult(BaseModel):
     schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["page"] = "page"
     target_id: str
     url: str
+    step: ResolutionStep | None = None  # set when the page was checked during resolution
     final_url: str | None = None
     checked_at: str  # ISO 8601, UTC
     outcome: Outcome
@@ -63,9 +74,47 @@ class PageResult(BaseModel):
     listing_count: int | None = None  # None when nothing was extracted
     stated_total: int | None = None  # the total the page itself states, e.g. "208 jobs" on a paginated board
     explicit_no_openings: bool = False  # the page itself says there are no open roles
+    listings_incomplete: bool = (
+        False  # the page shows only some of its openings (pagination, "load more", a fuller board)
+    )
+    many_employers: bool = False  # the listings are many employers' (a job board or aggregator), not one company's
     input_truncated: bool = False  # the model saw less than the whole page
     notes: str | None = None  # the extractor's short account of what the page showed
     content_hash: str | None = None  # sha256 of the normalized page text
     http_status: int | None = None
     llm: LlmUsage | None = None
+    duration_ms: int = 0
+
+
+class ResolveTarget(BaseModel):
+    """A company whose careers page is to be found."""
+
+    id: str
+    label: str | None = None
+    domain: str | None = None
+    name: str | None = None
+    known_url: str | None = None  # a page already on record, tried first
+
+
+class ResolutionResult(BaseModel):
+    """How a company's careers page was found, or why it was not, with every check behind it.
+
+    resolved   careers_page_url is the watch target, found at high or medium confidence.
+    candidate  a low-confidence find, held for a human to confirm; never written as the watch target.
+    failed     nothing usable; failure says why.
+    error      an unexpected failure of our own; the company's resolution state is left alone.
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["resolution"] = "resolution"
+    target_id: str
+    outcome: Literal["resolved", "candidate", "failed", "error"]
+    careers_page_url: str | None = None
+    ats: AtsBoard | None = None
+    method: ResolutionMethod | None = None
+    confidence: Literal["high", "medium", "low"] | None = None
+    failure: Literal["no_domain", "not_found", "blocked", "inaccessible"] | None = None
+    evidence: str | None = None  # a sentence for the human reviewing a candidate
+    reason: str | None = None  # for outcome "error"
+    checks: list[PageResult] = Field(default_factory=list)
     duration_ms: int = 0
