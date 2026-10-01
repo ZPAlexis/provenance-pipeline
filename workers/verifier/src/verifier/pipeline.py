@@ -15,6 +15,7 @@ import httpx2
 from playwright.sync_api import Browser
 
 from verifier import ats
+from verifier.config import MAX_PAGES
 from verifier.contract import Listing, PageResult, Target
 from verifier.extract import ExtractionFailed, Extractor, input_truncated, link_url
 from verifier.politeness import HostThrottle
@@ -81,6 +82,22 @@ def check_page(
         result = PageResult(target_id=target.id, url=target.url, checked_at=checked_at, duration_ms=elapsed, **fields)
         return result, page
 
+    # An address on a known ATS board (the board, or one job on it) is read
+    # through the vendor's public API: exact, free, and not a crawled page.
+    board = ats.detect([target.url])
+    if board and not (ats.on_company_host(board) and services.robots.check(ats.api_url(board))):
+        try:
+            listings = _fetch_board(board, services)
+            return finish(
+                outcome="ok",
+                method=f"ats_api:{board.vendor}",
+                ats=board,
+                listings=listings,
+                listing_count=len(listings),
+            )
+        except (httpx2.HTTPError, ValueError, KeyError, TypeError):
+            pass  # read the page itself instead
+
     refusal = services.robots.check(target.url)
     if refusal and not ats_fallback:
         return finish(outcome="blocked", reason=refusal)
@@ -119,13 +136,8 @@ def check_page(
     if board and ats.on_company_host(board) and services.robots.check(ats.api_url(board)):
         fallback = f"ats_api_blocked:{board.vendor}"
     elif board:
-
-        def space_out() -> None:
-            services.throttle.wait(ats.api_host(board))
-
         try:
-            space_out()
-            listings = ats.fetch_listings(board, services.http, pause=space_out)
+            listings = _fetch_board(board, services)
             return finish(
                 outcome="ok",
                 method=f"ats_api:{board.vendor}",
@@ -143,7 +155,14 @@ def check_page(
         return finish(outcome="error", reason=error.reason, method="render+llm", ats=board, llm=error.usage, **seen)
 
     listings = [
-        Listing(title=item.title, location=item.location, url=link_url(page, item.link), work_mode=item.work_mode)
+        Listing(
+            title=item.title,
+            location=item.location,
+            url=link_url(page, item.link),
+            work_mode=item.work_mode,
+            department=item.department,
+            employment_type=item.employment_type,
+        )
         for item in extraction.listings
     ]
     return finish(
@@ -157,8 +176,74 @@ def check_page(
         explicit_no_openings=extraction.explicit_no_openings,
         listings_incomplete=extraction.listings_incomplete,
         many_employers=extraction.many_employers,
+        single_job_posting=extraction.single_job_posting,
+        next_page_url=link_url(page, extraction.next_page),
         input_truncated=input_truncated(page),
         notes=extraction.notes,
         llm=usage,
         **seen,
     )
+
+
+def _fetch_board(board, services: Services) -> list[Listing]:
+    """Every listing on a known board, through its API, with requests spaced like any other."""
+
+    def space_out() -> None:
+        services.throttle.wait(ats.api_host(board))
+
+    space_out()
+    return ats.fetch_listings(board, services.http, pause=space_out)
+
+
+def read_all(
+    target: Target, services: Services, *, ats_fallback: bool = True, max_pages: int | None = None
+) -> tuple[list[PageResult], list[Listing], bool]:
+    """Read a page and every next page of its list, up to `max_pages`.
+
+    Returns a check per page read, the listings across them, and whether the
+    whole list was read: through an ATS API; up to the total the page states;
+    or to a last page that neither links further nor says it shows only part.
+    One job's own posting is never a whole list.
+    """
+    max_pages = max_pages or MAX_PAGES
+    result, _ = check_page(target, services, ats_fallback=ats_fallback)
+    checks = [result]
+    if result.outcome != "ok":
+        return checks, [], False
+
+    listings = list(result.listings)
+    seen = {_listing_key(listing) for listing in listings}
+    visited = {_url_key(result.final_url or result.url)}
+    while (next_url := checks[-1].next_page_url) and len(checks) < max_pages:
+        if _url_key(next_url) in visited:
+            break
+        visited.add(_url_key(next_url))
+        page_result, _ = check_page(target.model_copy(update={"url": next_url}), services, ats_fallback=False)
+        checks.append(page_result)
+        if page_result.outcome != "ok":
+            break
+        fresh = [listing for listing in page_result.listings if _listing_key(listing) not in seen]
+        if not fresh:
+            break  # a "next" page with nothing new: stop rather than go round
+        listings += fresh
+        seen |= {_listing_key(listing) for listing in fresh}
+    return checks, listings, _whole_list(checks, listings)
+
+
+def _whole_list(checks: list[PageResult], listings: list[Listing]) -> bool:
+    first, last = checks[0], checks[-1]
+    if last.outcome != "ok" or any(check.single_job_posting for check in checks):
+        return False
+    if (first.method or "").startswith("ats_api"):
+        return True
+    if first.stated_total is not None:
+        return len(listings) >= first.stated_total
+    return not last.listings_incomplete and not last.next_page_url
+
+
+def _listing_key(listing: Listing) -> tuple:
+    return (listing.url,) if listing.url else (listing.title.strip().lower(), (listing.location or "").strip().lower())
+
+
+def _url_key(url: str) -> str:
+    return url.split("#", 1)[0].rstrip("/").lower()

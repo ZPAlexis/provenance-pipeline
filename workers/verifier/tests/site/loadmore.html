@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head><title>Open roles</title></head>
+<body>
+  <!-- The rest of the list appears only when the button is clicked, as on many boards. -->
+  <ul id="jobs">
+    <li><a href="/jobs/revops-engineer">RevOps Engineer</a></li>
+    <li><a href="/jobs/gtm-analyst">GTM Analyst</a></li>
+  </ul>
+  <button id="more">Load more</button>
+  <script>
+    document.getElementById("more").addEventListener("click", () => {
+      document.getElementById("jobs").insertAdjacentHTML(
+        "beforeend",
+        '<li><a href="/jobs/solutions-engineer">Solutions Engineer</a></li>' +
+          '<li><a href="/jobs/data-engineer">Data Engineer</a></li>'
+      );
+      document.getElementById("more").remove();
+    });
+  </script>
+</body>
+</html>

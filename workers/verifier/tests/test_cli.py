@@ -173,3 +173,20 @@ def test_match_replays_stored_listings_without_a_browser_and_counts_verdicts(tmp
 
     results = [MatchResult.model_validate_json(line) for line in out.read_text().splitlines()]
     assert [[v.verdict for v in r.verdicts] for r in results] == [["verified_live", "not_found"], [None]]
+
+
+def test_verify_writes_one_result_per_company_with_its_verdicts(services, site, tmp_path):
+    from verifier.cli import run_verify
+    from verifier.contract import TrackedPosting, VerificationResult, VerifyTarget
+    from verifier.match import Matcher
+
+    companies = [
+        VerifyTarget(id="c1", url=site.url("paged/1.html"), postings=[TrackedPosting(id="p1", title="Data Engineer")])
+    ]
+    out = tmp_path / "verifications.jsonl"
+
+    summary = run_verify(companies, out, services, Matcher(), log=io.StringIO())
+
+    (result,) = [VerificationResult.model_validate_json(line) for line in out.read_text().splitlines()]
+    assert [v.verdict for v in result.verdicts] == ["verified_live"]
+    assert (summary.pages, summary.verdicts) == (2, {"verified_live": 1})

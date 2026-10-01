@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from verifier import RESULT_SCHEMA_VERSION
 
 WorkMode = Literal["remote", "hybrid", "onsite", "unknown"]
+EmploymentType = Literal["full_time", "part_time", "contract", "internship", "temporary", "unknown"]
 
 # ok           the page was read and its listings extracted (possibly zero)
 # blocked      we chose not to fetch it (robots.txt)
@@ -40,6 +41,9 @@ class Listing(BaseModel):
     location: str | None = None
     url: str | None = None
     work_mode: WorkMode = "unknown"
+    # Only as the page states them, for search profiles to filter on later.
+    department: str | None = None
+    employment_type: EmploymentType = "unknown"
 
 
 class LlmUsage(BaseModel):
@@ -78,6 +82,8 @@ class PageResult(BaseModel):
         False  # the page shows only some of its openings (pagination, "load more", a fuller board)
     )
     many_employers: bool = False  # the listings are many employers' (a job board or aggregator), not one company's
+    single_job_posting: bool = False  # the page is one job's own posting, not a list of openings
+    next_page_url: str | None = None  # where the list continues, when the page links to its next page
     input_truncated: bool = False  # the model saw less than the whole page
     notes: str | None = None  # the extractor's short account of what the page showed
     content_hash: str | None = None  # sha256 of the normalized page text
@@ -173,4 +179,39 @@ class MatchResult(BaseModel):
     llm: LlmUsage | None = None  # the near-miss call, when one was needed
     outcome: Literal["ok", "error"] = "ok"
     reason: str | None = None
+    duration_ms: int = 0
+
+
+class VerifyTarget(BaseModel):
+    """A company's watched page and the postings to verify against it."""
+
+    id: str  # the company
+    url: str
+    label: str | None = None
+    domain: str | None = None
+    name: str | None = None
+    postings: list[TrackedPosting]
+
+
+class VerificationResult(BaseModel):
+    """A company's page read in full (every page of it that could be), and a verdict per posting.
+
+    ok           the page was read; verdicts follow the matching rules
+    inaccessible the site refused or failed us, or robots.txt keeps us off: each
+                 posting's verdict is inaccessible, with the reason
+    error        our own failure (an extraction or an unexpected exception): no
+                 verdicts, the postings keep their last ones
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["verification"] = "verification"
+    target_id: str
+    url: str
+    outcome: Literal["ok", "inaccessible", "error"]
+    reason: str | None = None
+    complete: bool = False  # the whole list was read
+    listing_count: int | None = None  # across every page read
+    checks: list[PageResult] = Field(default_factory=list)  # one per page read
+    verdicts: list[PostingVerdict] = Field(default_factory=list)
+    match_llm: LlmUsage | None = None  # the near-miss call, when one was needed
     duration_ms: int = 0

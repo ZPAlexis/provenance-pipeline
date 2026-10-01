@@ -472,3 +472,28 @@ def test_a_jobs_address_read_through_a_known_ats_is_watched_as_the_board():
 
     assert (result.outcome, result.method) == ("resolved", "imported")
     assert result.careers_page_url == "https://job-boards.greenhouse.io/acme"
+
+
+# Found re-resolving Equinix: its job ad linked to "Corporate Function Jobs" before the whole list.
+def test_from_a_careers_page_the_whole_list_is_tried_before_a_part_of_it():
+    job = "https://acme.example/jobs/gtm-engineer"
+    reader = FakeReader(
+        pages={job: 1, "https://acme.example/jobs/search": 40, "https://acme.example/corporate": 20},
+        links={
+            job: [
+                ("Corporate Function Jobs", "https://acme.example/corporate"),
+                ("Search all jobs", "https://acme.example/jobs/search"),
+            ]
+        },
+    )
+    reader_check = reader.check
+
+    def one_job_check(target, url, step):
+        result, page = reader_check(target, url, step)
+        return result.model_copy(update={"single_job_posting": url == job}), page
+
+    reader.check = one_job_check
+
+    result = resolve(reader, ACME.model_copy(update={"known_url": job}))
+
+    assert result.careers_page_url == "https://acme.example/jobs/search"

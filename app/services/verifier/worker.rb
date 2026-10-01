@@ -15,7 +15,7 @@ module Verifier
 
     RESULT_SCHEMA_VERSION = 2
 
-    COMMANDS = %w[extract resolve match].freeze
+    COMMANDS = %w[extract resolve match verify].freeze
 
     # Exit codes from workers/verifier/src/verifier/cli.py for a run that
     # stopped early on purpose, keeping every result it finished.

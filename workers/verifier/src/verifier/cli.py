@@ -1,11 +1,13 @@
-"""`verifier extract|resolve|match --targets targets.json --out results.jsonl`
+"""`verifier extract|resolve|match|verify --targets targets.json --out results.jsonl`
 
 extract  checks each careers page and extracts its listings: one PageResult per target.
 resolve  finds each company's careers page: one ResolutionResult per target,
          carrying every page it checked on the way.
 match    matches a company's tracked postings against listings already read (a
          stored page check): one MatchResult per target, nothing rendered.
-         `--no-llm` leaves near-misses undecided, so a replay costs nothing.
+verify   reads each company's watched page in full and matches its postings
+         against it: one VerificationResult per company.
+         For match and verify, `--no-llm` leaves near-misses undecided.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -28,13 +30,23 @@ import httpx2
 from playwright.sync_api import sync_playwright
 
 from verifier.config import DEFAULT_MODEL, DOMAIN_DELAY_SECONDS, MODEL_SETTINGS
-from verifier.contract import MatchResult, MatchTarget, PageResult, ResolutionResult, ResolveTarget, Target
+from verifier.contract import (
+    MatchResult,
+    MatchTarget,
+    PageResult,
+    ResolutionResult,
+    ResolveTarget,
+    Target,
+    VerificationResult,
+    VerifyTarget,
+)
 from verifier.extract import CreditExhausted, LlmConfigError, LlmExtractor, LlmLinkPicker, LlmMatcher
 from verifier.match import Matcher
 from verifier.pipeline import Services, verify_page
 from verifier.politeness import HostThrottle
 from verifier.resolve import Resolver, ServicesReader
 from verifier.robots import RobotsPolicy
+from verifier.verify import verify_company
 
 EXIT_OK, EXIT_BAD_INPUT, EXIT_CREDIT, EXIT_CREDENTIAL, EXIT_LLM_UNAVAILABLE = 0, 2, 3, 4, 5
 
@@ -43,7 +55,7 @@ EXIT_OK, EXIT_BAD_INPUT, EXIT_CREDIT, EXIT_CREDENTIAL, EXIT_LLM_UNAVAILABLE = 0,
 _OUTAGE = re.compile(r"^llm_(http_5\d\d|connection_error|rate_limited)$")
 OUTAGE_LIMIT = 3
 
-Result = PageResult | ResolutionResult | MatchResult
+Result = PageResult | ResolutionResult | MatchResult | VerificationResult
 
 
 @dataclass
@@ -64,7 +76,7 @@ class RunSummary:
         for page in _pages(result):
             self.pages += 1
             self.listings += page.listing_count or 0
-        if isinstance(result, MatchResult):
+        if isinstance(result, MatchResult | VerificationResult):
             for verdict in result.verdicts:
                 key = verdict.verdict or "inconclusive"
                 self.verdicts[key] = self.verdicts.get(key, 0) + 1
@@ -87,6 +99,13 @@ def run_resolve(targets: list[ResolveTarget], out_path: Path, resolver: Resolver
         return ResolutionResult(target_id=target.id, outcome="error", reason=reason)
 
     return _run(targets, out_path, resolver.resolve, failed, log)
+
+
+def run_verify(targets: list[VerifyTarget], out_path: Path, services: Services, matcher: Matcher, log=sys.stderr):
+    def failed(target: VerifyTarget, reason: str) -> VerificationResult:
+        return VerificationResult(target_id=target.id, url=target.url, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: verify_company(target, services, matcher), failed, log)
 
 
 def run_match(targets: list[MatchTarget], out_path: Path, matcher: Matcher, log=sys.stderr) -> RunSummary:
@@ -137,22 +156,24 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 def _pages(result: Result) -> list[PageResult]:
     if isinstance(result, MatchResult):
         return []
-    return result.checks if isinstance(result, ResolutionResult) else [result]
+    return result.checks if isinstance(result, ResolutionResult | VerificationResult) else [result]
 
 
 def _usages(result: Result) -> list:
     usages = [page.llm for page in _pages(result) if page.llm]
-    return usages + [result.llm] if isinstance(result, MatchResult) and result.llm else usages
+    extra = result.llm if isinstance(result, MatchResult) else getattr(result, "match_llm", None)
+    return usages + [extra] if extra else usages
 
 
 def _reasons(result: Result) -> list[str | None]:
-    return [page.reason for page in _pages(result)] + ([result.reason] if isinstance(result, MatchResult) else [])
+    own = [result.reason] if isinstance(result, MatchResult | VerificationResult) else []
+    return [page.reason for page in _pages(result)] + own
 
 
 def _describe(target: Target | ResolveTarget, result: Result) -> str:
     cost = sum(usage.cost_usd for usage in _usages(result))
     timing = f"({result.duration_ms / 1000:.1f}s{f', ${cost:.4f}' if cost else ''})"
-    if isinstance(result, MatchResult):
+    if isinstance(result, MatchResult | VerificationResult):
         tally: dict[str, int] = {}
         for verdict in result.verdicts:
             tally[verdict.verdict or "inconclusive"] = tally.get(verdict.verdict or "inconclusive", 0) + 1
@@ -182,10 +203,12 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("extract", parents=[common], help="check careers pages and extract their listings")
     commands.add_parser("resolve", parents=[common], help="find companies' careers pages")
     match = commands.add_parser("match", parents=[common], help="match postings against listings already read")
-    match.add_argument("--no-llm", action="store_true", help="leave near-misses undecided: no API calls at all")
+    verify = commands.add_parser("verify", parents=[common], help="read watched pages in full and verify postings")
+    for command in (match, verify):
+        command.add_argument("--no-llm", action="store_true", help="leave near-misses undecided")
     args = parser.parse_args(argv)
 
-    model = {"resolve": ResolveTarget, "match": MatchTarget}.get(args.command, Target)
+    model = {"resolve": ResolveTarget, "match": MatchTarget, "verify": VerifyTarget}.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
         targets = [model.model_validate(item) for item in payload["targets"]]
@@ -217,6 +240,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "resolve":
                 resolver = Resolver(ServicesReader(services), link_picker=LlmLinkPicker(model=args.model))
                 summary = run_resolve(targets, args.out, resolver)
+            elif args.command == "verify":
+                matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=args.model))
+                summary = run_verify(targets, args.out, services, matcher)
             else:
                 summary = run(targets, args.out, services)
         finally:

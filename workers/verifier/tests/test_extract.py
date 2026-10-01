@@ -41,8 +41,19 @@ EXTRACTION = PageExtraction(
     explicit_no_openings=False,
     listings_incomplete=False,
     many_employers=False,
+    single_job_posting=False,
     stated_total=None,
-    listings=[ExtractedListing(title="Revenue Operations Engineer", location=None, link=2, work_mode="unknown")],
+    next_page=None,
+    listings=[
+        ExtractedListing(
+            title="Revenue Operations Engineer",
+            location=None,
+            link=2,
+            work_mode="unknown",
+            department=None,
+            employment_type="unknown",
+        )
+    ],
     notes="One role listed.",
 )
 

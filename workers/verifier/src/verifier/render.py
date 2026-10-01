@@ -3,8 +3,8 @@
 Most job boards load their listings client-side, so an HTTP fetch sees an empty
 shell and a parse failure looks like a confident "not found". Chromium runs the
 page's JavaScript, waits for it to go quiet, scrolls to trigger lazy loading,
-and then reads every frame, because many company pages embed their job board
-in an iframe.
+clicks "load more" buttons the way a person would, and then reads every frame,
+because many company pages embed their job board in an iframe.
 """
 
 import contextlib
@@ -16,11 +16,29 @@ from playwright.sync_api import Browser, Page
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from verifier.config import NAVIGATION_TIMEOUT_MS, SCROLL_PASSES, SETTLE_TIMEOUT_MS, USER_AGENT
+from verifier.config import (
+    LOAD_MORE_CLICKS,
+    LOAD_MORE_PAUSE_MS,
+    NAVIGATION_TIMEOUT_MS,
+    SCROLL_PASSES,
+    SETTLE_TIMEOUT_MS,
+    USER_AGENT,
+)
 
 _LINKS_JS = """() => Array.from(document.querySelectorAll('a[href]'))
   .map(a => [(a.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 200), a.href])"""
 _EMBED_SRCS_JS = """() => Array.from(document.querySelectorAll('iframe[src], script[src]')).map(e => e.src)"""
+
+# A button that loads more of the same list, in English, Portuguese, Spanish, or German.
+# Buttons only: a link could take the page somewhere else mid-read.
+_LOAD_MORE = re.compile(
+    r"^\s*(?:(?:load|show|see|view)\s+more(?:\s+(?:jobs|roles|positions|openings|results|opportunities))?"
+    r"|more\s+(?:jobs|roles|positions|openings)"
+    r"|(?:carregar|ver|mostrar)\s+mais(?:\s+vagas)?"
+    r"|(?:cargar|ver|mostrar)\s+m[a\u00e1]s(?:\s+(?:empleos|vacantes|ofertas))?"
+    r"|mehr\s+(?:laden|anzeigen))\s*$",
+    re.IGNORECASE,
+)
 
 # Text a bot challenge interstitial shows instead of the page.
 _CHALLENGE_MARKERS = (
@@ -47,6 +65,7 @@ class RenderedPage:
     text: str
     links: list[tuple[str, str]] = field(default_factory=list)  # (link text, absolute URL)
     urls: list[str] = field(default_factory=list)  # final, frame, and embed URLs: where a known ATS shows up
+    load_more_clicks: int = 0  # how many times a "load more" button was clicked before reading
 
     @property
     def content_hash(self) -> str:
@@ -73,7 +92,10 @@ def render(browser: Browser, url: str) -> RenderedPage:
             raise RenderError("navigation_error") from error
 
         _settle(page)
-        return _read(page, response.status if response else None)
+        clicks = _load_more(page)
+        rendered = _read(page, response.status if response else None)
+        rendered.load_more_clicks = clicks
+        return rendered
     finally:
         context.close()
 
@@ -85,6 +107,30 @@ def _settle(page: Page) -> None:
         page.evaluate("() => window.scrollTo(0, document.body ? document.body.scrollHeight : 0)")
         page.wait_for_timeout(400)
     _wait_for_quiet(page, 3_000)
+
+
+def _load_more(page: Page) -> int:
+    """Click "load more" until the list stops growing, the button goes away, or the cap is reached."""
+    clicks = 0
+    for _ in range(LOAD_MORE_CLICKS):
+        button = page.get_by_role("button", name=_LOAD_MORE).first
+        try:
+            if not button.is_visible(timeout=1_000):
+                break
+            before = len(page.locator("body").inner_text(timeout=5_000))
+            button.click(timeout=5_000)
+        except PlaywrightError:
+            break
+        clicks += 1
+        page.wait_for_timeout(LOAD_MORE_PAUSE_MS)
+        _wait_for_quiet(page, 3_000)
+        page.evaluate("() => window.scrollTo(0, document.body ? document.body.scrollHeight : 0)")
+        try:
+            if len(page.locator("body").inner_text(timeout=5_000)) <= before:
+                break  # nothing more came
+        except PlaywrightError:
+            break
+    return clicks
 
 
 def _wait_for_quiet(page: Page, timeout_ms: int) -> None:

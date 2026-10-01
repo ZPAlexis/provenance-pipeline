@@ -71,6 +71,30 @@ RSpec.describe Verifier::TestB do
     end
   end
 
+  describe "fresh targets" do
+    it "sends each company's watched page and its scored postings, stored check or not" do
+      posting = labeled("verified_live")
+
+      expect(described_class.new.verify_targets).to eq([
+        { id: company.id, url: company.careers_page_url, label: "Acme", domain: "acme.example", name: "Acme",
+          postings: [ { id: posting.id, title: "RevOps Engineer", location: posting.location } ] }
+      ])
+    end
+
+    it "says why a posting at a company with no watched page is not measured" do
+      labeled("verified_live", at: create(:company, :resolution_candidate))
+
+      expect(described_class.new.evaluate([]).cases.sole.why_unmeasured).to eq("the company has no watched page")
+    end
+
+    it "counts extraction on every page read and the near-miss call" do
+      result = { "verdicts" => [], "checks" => [ { "llm" => { "cost_usd" => 0.01 } }, { "llm" => { "cost_usd" => 0.02 } } ],
+                 "match_llm" => { "cost_usd" => 0.001 } }
+
+      expect(described_class.new.evaluate([ result ]).cost_usd).to eq(0.031)
+    end
+  end
+
   describe "scoring" do
     before { snapshot(company) }
 

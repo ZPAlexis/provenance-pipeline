@@ -250,3 +250,18 @@ def test_matches_company_names_ignoring_case_punctuation_and_legal_suffixes_only
     assert not ats.names_match("Goodwin", "Goodwin Recruiting")
     assert not ats.names_match("Acme Robotics", "Apex Robotics")
     assert not ats.names_match(None, "Acme")
+
+
+def test_keeps_department_and_employment_type_where_the_vendor_records_them():
+    lever = [{"text": "RevOps Engineer", "categories": {"team": "Revenue", "commitment": "Full-time"}}]
+    ashby = {"jobs": [{"title": "GTM Analyst", "department": "Sales", "employmentType": "Contract"}]}
+
+    def handler(request):
+        return httpx2.Response(200, json=lever if "lever" in request.url.host else ashby)
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    (from_lever,) = ats.fetch_listings(AtsBoard(vendor="lever", board="acme"), client)
+    (from_ashby,) = ats.fetch_listings(AtsBoard(vendor="ashby", board="acme"), client)
+
+    assert (from_lever.department, from_lever.employment_type) == ("Revenue", "full_time")
+    assert (from_ashby.department, from_ashby.employment_type) == ("Sales", "contract")

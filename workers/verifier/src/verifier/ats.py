@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx2
 
 from verifier.config import USER_AGENT
-from verifier.contract import AtsBoard, Listing, WorkMode
+from verifier.contract import AtsBoard, EmploymentType, Listing, WorkMode
 
 # Each pattern captures the board name from a page, frame, or embed URL.
 _PATTERNS: list[tuple[str, re.Pattern]] = [
@@ -193,6 +193,9 @@ def _lever(board: AtsBoard, client: httpx2.Client) -> list[Listing]:
             location=(posting.get("categories") or {}).get("location"),
             url=posting.get("hostedUrl"),
             work_mode=_normalize_mode(posting.get("workplaceType")),
+            department=(posting.get("categories") or {}).get("team")
+            or (posting.get("categories") or {}).get("department"),
+            employment_type=_employment_type((posting.get("categories") or {}).get("commitment")),
         )
         for posting in data
     ]
@@ -208,7 +211,14 @@ def _ashby(board: AtsBoard, client: httpx2.Client) -> list[Listing]:
         if mode == "unknown" and job.get("isRemote"):
             mode = "remote"
         listings.append(
-            Listing(title=job["title"], location=job.get("location"), url=job.get("jobUrl"), work_mode=mode)
+            Listing(
+                title=job["title"],
+                location=job.get("location"),
+                url=job.get("jobUrl"),
+                work_mode=mode,
+                department=job.get("department") or job.get("team"),
+                employment_type=_employment_type(job.get("employmentType")),
+            )
         )
     return listings
 
@@ -253,3 +263,18 @@ def _normalize_mode(value: str | None) -> WorkMode:
 
 def _mode_from_location(location: str | None) -> WorkMode:
     return "remote" if location and "remote" in location.lower() else "unknown"
+
+
+def _employment_type(value: str | None) -> EmploymentType:
+    """Vendors' own words ("Full-time", "FullTime", "Contract") as the contract's, or unknown."""
+    key = re.sub(r"[^a-z]", "", (value or "").lower())
+    return {
+        "fulltime": "full_time",
+        "parttime": "part_time",
+        "contract": "contract",
+        "contractor": "contract",
+        "intern": "internship",
+        "internship": "internship",
+        "temporary": "temporary",
+        "temp": "temporary",
+    }.get(key, "unknown")

@@ -63,7 +63,11 @@ def browser():
 
 
 class FakeExtractor:
-    """Stands in for the LLM: every link under /jobs/ is a listing, named by its link number."""
+    """Stands in for the LLM: every link under /jobs/ is a listing, named by its link text.
+
+    A link reading "Next" is the list's next page; "Apply for this job" makes the
+    page one job's posting; a visible "load more" makes the list incomplete.
+    """
 
     def __init__(self):
         self.calls: list[RenderedPage] = []
@@ -71,16 +75,21 @@ class FakeExtractor:
     def extract(self, page: RenderedPage) -> tuple[PageExtraction, LlmUsage]:
         self.calls.append(page)
         listings = [
-            ExtractedListing(title=text, location=None, link=number, work_mode="unknown")
+            ExtractedListing(
+                title=text, location=None, link=number, work_mode="unknown", department=None, employment_type="unknown"
+            )
             for number, (text, href) in enumerate(page.links, start=1)
             if "/jobs/" in href
         ]
+        next_page = next((n for n, (text, _) in enumerate(page.links, start=1) if text.strip().lower() == "next"), None)
         extraction = PageExtraction(
             shows_job_listings=True,
             explicit_no_openings="no open positions" in page.text.lower(),
-            listings_incomplete="load more" in page.text.lower(),
+            listings_incomplete="load more" in page.text.lower() or next_page is not None,
             many_employers=False,
+            single_job_posting="apply for this job" in page.text.lower(),
             stated_total=None,
+            next_page=next_page,
             listings=listings,
             notes=f"fake extraction of {len(listings)} listings",
         )

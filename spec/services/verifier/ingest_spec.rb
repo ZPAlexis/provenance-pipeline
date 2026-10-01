@@ -50,7 +50,7 @@ RSpec.describe Verifier::Ingest do
       expect(page_check).to have_attributes(
         run_id: "20260930T120000Z-resolve", purpose: "resolution", step: "path_probe", outcome: "ok",
         read_via: "render+llm", listing_count: 2, checked_at: Time.utc(2026, 9, 30, 12), duration_ms: 4_200,
-        listings_incomplete: true, many_employers: false
+        listings_incomplete: true, many_employers: false, single_job_posting: false, next_page_url: nil
       )
       expect(page_check.listings.pluck("title")).to eq([ "RevOps Engineer", "GTM Analyst" ])
       expect(page_check.llm_calls.sole).to have_attributes(
