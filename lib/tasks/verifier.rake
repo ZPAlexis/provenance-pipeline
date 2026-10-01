@@ -169,6 +169,14 @@ namespace :verifier do
     abort e.message
   end
 
+  desc "Show one company: its resolution, watched page, recent page checks, postings, and latest writes. " \
+       "Usage: bin/rails \"verifier:status[name or id]\""
+  task :status, [ :company ] => :environment do |_task, args|
+    company = Verifier::Status.find(args[:company]) or
+      abort "No single company matches #{args[:company].inspect}. Try its exact name or its id."
+    puts Verifier::Status.lines(company)
+  end
+
   desc "Set a company's careers page by hand, whatever its state. Audited as the operator. " \
        "Usage: URL=\"https://...\" REASON=\"...\" bin/rails \"verifier:set_page[company_id]\""
   task :set_page, [ :id ] => :environment do |_task, args|
@@ -250,22 +258,25 @@ namespace :verifier do
     report_stop.call(run)
   end
 
-  desc "Test B: match labeled postings against their company's watched page and compare with the label. Read-only. " \
-       "REPLAY=1 matches the listings stored by earlier checks (no page fetched); NO_LLM=1 leaves near-misses " \
-       "undecided (no API calls at all). [COMPANY=name] [MODEL=...]"
+  desc "Test B: verify labeled postings against their company's watched page and compare with the label. Read-only. " \
+       "REPLAY=1 matches the listings stored by earlier checks (no page fetched); FRESH=1 reads every watched page " \
+       "now (costs API credit). NO_LLM=1 leaves near-misses undecided. [COMPANY=name] [MODEL=...]"
   task test_b: :environment do
-    abort "Only REPLAY=1 exists so far: fresh reads arrive with 1.2c's verify command." unless ENV["REPLAY"].present?
+    # Reading every watched page costs API credit, so it is asked for by name, never a default.
+    replay = ENV["REPLAY"].present?
+    abort "Say REPLAY=1 (stored listings, no API cost) or FRESH=1 (reads every watched page now)." unless replay || ENV["FRESH"].present?
 
     postings = Posting.includes(:company)
     postings = postings.joins(:company).where("lower(companies.name) = ?", ENV["COMPANY"].strip.downcase) if ENV["COMPANY"].present?
     test = Verifier::TestB.new(postings)
-    targets = test.replay_targets
-    abort "No labeled postings with a stored check of their company's watched page." if targets.empty?
+    targets = replay ? test.replay_targets : test.verify_targets
+    abort "No labeled postings at a company with a watched page#{' and a stored check of it' if replay}." if targets.empty?
 
     flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
-    puts "Test B (replay): #{targets.sum { |t| t[:postings].size }} labeled postings at #{targets.size} companies, " \
+    mode = replay ? "replay" : "fresh"
+    puts "Test B (#{mode}): #{targets.sum { |t| t[:postings].size }} labeled postings at #{targets.size} companies, " \
          "#{flags.any? ? 'no LLM' : "near-misses judged by #{ENV['MODEL'].presence || 'the default model'}"}\n\n"
-    run = build_worker.call("test_b_replay").run(targets, command: "match", flags: flags)
+    run = build_worker.call("test_b_#{mode}").run(targets, command: replay ? "match" : "verify", flags: flags)
     report = test.evaluate(run.results)
 
     puts format("\n%-24s %-34s %-14s %-14s %-8s %s", "company", "posting", "label", "verdict", "method", "result")
@@ -290,7 +301,7 @@ namespace :verifier do
          "not measured: #{report.unmeasured.size}"
     puts "Labeled negatives reported live: #{report.false_lives.size} (none allowed unless a hand-check confirms the role)"
     puts "Cost: #{report.tokens} tokens, est. $#{format('%.4f', report.cost_usd)}"
-    puts "\nTEST B (replay): #{report.passed? ? 'PASS' : 'FAIL'}   (details: #{run.dir})"
+    puts "\nTEST B (#{mode}): #{report.passed? ? 'PASS' : 'FAIL'}   (details: #{run.dir})"
 
     run.dir.join("report.json").write(JSON.pretty_generate(
       passed: report.passed?, agreeing: report.agreeing, measured: report.measured.size, cases: report.cases.size,

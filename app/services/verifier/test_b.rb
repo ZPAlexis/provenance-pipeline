@@ -18,13 +18,14 @@ module Verifier
   # checked by hand; one confirmed stale counts as agreement (decided 2026-10-01).
   #
   # REPLAY reads the listings stored by an earlier page check, at no API cost.
-  # Read-only either way: the test writes nothing.
+  # FRESH reads each watched page in full now (every page of its list), which is
+  # what the pass is decided on. Read-only either way: the test writes nothing.
   class TestB
     REQUIRED_AGREEMENT = 0.8
     SCORED_LABELS = %w[verified_live not_found].freeze
 
     Case = Struct.new(:posting_id, :company_id, :company, :title, :location, :label, :result, :snapshot,
-                      keyword_init: true) do
+                      :watched_url, :domain, keyword_init: true) do
       def verdict = result&.dig("verdict")
 
       def scored_label? = SCORED_LABELS.include?(label)
@@ -38,8 +39,8 @@ module Verifier
 
       def why_unmeasured
         return "label #{label}: says nothing about the role" unless scored_label?
-        return "no stored check of the watched page" unless snapshot
-        return "not matched" unless result
+        return "the company has no watched page" unless watched_url
+        return "not checked (no stored check of the watched page, in a replay)" unless result
 
         "inconclusive: #{result['reasoning']}" if verdict.nil?
       end
@@ -62,7 +63,12 @@ module Verifier
 
       def by_method = measured.map { |c| [ c.result["method"], c.agrees? ] }.tally
 
-      def llm_usages = results.filter_map { |result| result["llm"] }
+      # Extraction on every page read, plus the near-miss call.
+      def llm_usages
+        results.flat_map do |result|
+          Array(result["checks"]).filter_map { |check| check["llm"] } + [ result["llm"], result["match_llm"] ].compact
+        end
+      end
 
       def cost_usd = llm_usages.sum { |llm| llm["cost_usd"].to_f }.round(4)
 
@@ -98,11 +104,21 @@ module Verifier
         company = posting.company
         Case.new(posting_id: posting.id, company_id: company.id, company: company.name, title: posting.role_title,
                  location: posting.location, label: label,
+                 domain: company.domain,
+                 watched_url: (company.careers_page_url if company.resolution_status == "resolved"),
                  snapshot: (self.class.snapshot_for(company) if company.resolution_status == "resolved"))
       end
     end
 
     # One target per company: its scored postings, and the listings its watched page showed.
+    # One target per company with a watched page: the page, and its scored postings.
+    def verify_targets
+      @cases.select { |c| c.scored_label? && c.watched_url }.group_by(&:company_id).map do |company_id, cases|
+        { id: company_id, url: cases.first.watched_url, label: cases.first.company, domain: cases.first.domain,
+          name: cases.first.company, postings: cases.map { |c| { id: c.posting_id, title: c.title, location: c.location } } }
+      end
+    end
+
     def replay_targets
       @cases.select { |c| c.scored_label? && c.snapshot }.group_by(&:company_id).map do |company_id, cases|
         check = cases.first.snapshot

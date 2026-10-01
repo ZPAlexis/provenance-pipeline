@@ -28,7 +28,7 @@ from verifier.config import (
     MODEL_SETTINGS,
     estimate_cost,
 )
-from verifier.contract import LlmUsage, WorkMode
+from verifier.contract import EmploymentType, LlmUsage, WorkMode
 from verifier.render import RenderedPage
 
 SYSTEM_PROMPT = """You read the rendered text of a company's careers page and list the job openings it shows.
@@ -42,11 +42,15 @@ Rules:
 - link is the number, in brackets, of the role's own link in the link list; null when the role has no link there.
 - Text from embedded job boards (iframes) is part of the page.
 - work_mode is remote, hybrid, or onsite only when the listing states it; otherwise unknown.
+- department is the team or department the page lists the role under; null when it shows none.
+- employment_type is full_time, part_time, contract, internship, or temporary only when the listing states it; otherwise unknown.
 - stated_total is the total number of openings the page itself states, such as "208 jobs"; null when it states none. Never fill it by counting the listings yourself.
 - explicit_no_openings is true only when the page itself says there are currently no open positions.
 - shows_job_listings is false when this is not a page that lists jobs at all, such as a marketing page or a careers page that only links to where the jobs are.
-- listings_incomplete is true only when the page itself shows it lists some of its openings but not all: pagination, a "load more" or "see all" control, a stated total larger than what is listed, cut-off text, or a link to a fuller job board. A role without a link does not make the list incomplete.
+- listings_incomplete is true only when the page itself shows it lists some of its openings but not all: pagination, a "load more" or "see all" control, a stated total larger than what is listed, cut-off text, a link to a fuller job board, or a list narrowed to one department, team, location, or other filter of a larger list. A page that links to an "All jobs" list, or to other departments' or locations' job pages, is showing a narrowed list. A role without a link does not make the list incomplete.
 - many_employers is true when the listings are for many different employers, as on a job board, aggregator, or marketplace, rather than for the one company whose page this is.
+- single_job_posting is true when the page is one job's own posting (its description and how to apply), even if it also shows other or similar roles. A careers page that lists only one opening is not a single job posting.
+- next_page is the number, in brackets, of the link to the next page of these same listings (pagination such as "Next", "›", or "2"); null when the list does not continue on another page. Never a link to one role.
 - Never invent a role.
 - notes: one or two plain sentences on what the page showed."""
 
@@ -56,6 +60,8 @@ class ExtractedListing(BaseModel):
     location: str | None
     link: int | None  # 1-based number of the role's link in the prompt's link list
     work_mode: WorkMode
+    department: str | None
+    employment_type: EmploymentType
 
 
 class PageExtraction(BaseModel):
@@ -63,7 +69,9 @@ class PageExtraction(BaseModel):
     explicit_no_openings: bool
     listings_incomplete: bool
     many_employers: bool
+    single_job_posting: bool
     stated_total: int | None
+    next_page: int | None  # 1-based number of the link to the list's next page
     listings: list[ExtractedListing]
     notes: str
 

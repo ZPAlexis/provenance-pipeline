@@ -51,6 +51,8 @@ module Verifier
         explicit_no_openings: check["explicit_no_openings"] || false,
         listings_incomplete: check["listings_incomplete"] || false,
         many_employers: check["many_employers"] || false,
+        single_job_posting: check["single_job_posting"] || false,
+        next_page_url: check["next_page_url"],
         input_truncated: check["input_truncated"] || false,
         listings: check["listings"] || [],
         notes: check["notes"],

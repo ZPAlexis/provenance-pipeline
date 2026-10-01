@@ -61,6 +61,12 @@ LISTING_WORDS = re.compile(
     re.IGNORECASE,
 )
 MAX_DEEPER_LINKS = 2
+# Link text that leads to the whole list, not one department or place of it.
+WHOLE_LIST_WORDS = re.compile(
+    r"\ball\b|search|browse|(?:view|see) (?:jobs|roles|openings|positions)|open (?:roles|positions)|current openings"
+    r"|todas|buscar|pesquisar|ver vagas",
+    re.IGNORECASE,
+)
 # Links on a careers page that say "jobs" but never lead to the list of them.
 NOT_LISTINGS = re.compile(
     r"saved|alert|log ?in|sign ?(?:in|up)|talent (?:community|network|pool)|subscribe", re.IGNORECASE
@@ -313,9 +319,12 @@ def careers_links(page: RenderedPage, domain: str, *, from_homepage: bool) -> li
         ):
             continue
         chosen.setdefault(_key(url), (text, url))
-        if len(chosen) == MAX_HOMEPAGE_LINKS:
-            break
-    return list(chosen.values())
+    links = list(chosen.values())
+    if not from_homepage:
+        # From a careers page, the way to the whole list beats a link to one part
+        # of it: "All jobs" before "Corporate Function Jobs".
+        links.sort(key=lambda link: not WHOLE_LIST_WORDS.search(link[0] or ""))
+    return links[:MAX_HOMEPAGE_LINKS]
 
 
 def _yields(result: PageResult) -> bool:
@@ -338,7 +347,8 @@ def _job_url(url: str | None) -> bool:
 
 
 def _one_job_page(result: PageResult) -> bool:
-    return (result.listing_count or 0) <= 1 and _job_url(result.final_url or result.url)
+    """The extractor says so, or the address is a job's and the page shows one role."""
+    return result.single_job_posting or ((result.listing_count or 0) <= 1 and _job_url(result.final_url or result.url))
 
 
 def _watch_url(result: PageResult) -> str:

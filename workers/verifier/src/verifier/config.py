@@ -14,6 +14,9 @@ DOMAIN_DELAY_SECONDS = 5.0
 NAVIGATION_TIMEOUT_MS = 30_000
 SETTLE_TIMEOUT_MS = 10_000  # waiting for client-side rendering to go quiet
 SCROLL_PASSES = 4  # to trigger lazy-loaded listings
+LOAD_MORE_CLICKS = 10  # "load more" / "show more" buttons clicked per page, as a person would
+LOAD_MORE_PAUSE_MS = 1_000  # between clicks: each one asks the site for more
+MAX_PAGES = 10  # pages of one list followed through its "next" links, per company
 
 # What the LLM is shown of a page.
 MAX_TEXT_CHARS = 150_000  # ~40k tokens; the largest board seen so far renders ~63k chars
