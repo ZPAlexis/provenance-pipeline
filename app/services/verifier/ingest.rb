@@ -111,7 +111,7 @@ module Verifier
       text =
         case result["outcome"]
         when "resolved"
-          found = checks.reverse.find { |check| [ check["final_url"], check["url"] ].include?(result["careers_page_url"]) }
+          found = Resolution.found_check(result)
           listings = found && found["listing_count"] ? "; #{found['listing_count']} listings read there" : ""
           "Careers page found by #{result['method']} at #{result['confidence']} confidence#{listings}." \
             "#{replacement_note(result, previous_page)}"
@@ -129,7 +129,7 @@ module Verifier
       return "" if previous_page.blank? || previous_page == result["careers_page_url"]
       return " The page on record, #{previous_page}, leads here." if result["method"] == "imported"
 
-      " It replaces #{previous_page}, which did not yield listings when checked."
+      " It replaces #{previous_page}, which was not a page listing the company's jobs when checked."
     end
 
     # The model that served this result's LLM calls, with its request settings.

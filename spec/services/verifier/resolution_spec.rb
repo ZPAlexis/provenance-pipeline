@@ -28,6 +28,27 @@ RSpec.describe Verifier::Resolution do
     end
   end
 
+  describe ".found_check" do
+    it "finds the check behind the answer by its address, or by the ATS board a job's address was read through" do
+      board = { "vendor" => "greenhouse", "board" => "acme" }
+      job = { "url" => "https://job-boards.greenhouse.io/acme/jobs/8054669", "ats" => board }
+      other = { "url" => "https://acme.example/careers" }
+
+      expect(described_class.found_check("careers_page_url" => "https://acme.example/careers", "checks" => [ other, job ])).to eq(other)
+      expect(described_class.found_check("careers_page_url" => "https://job-boards.greenhouse.io/acme", "ats" => board,
+                                         "checks" => [ other, job ])).to eq(job)
+    end
+  end
+
+  describe ".vendor_for" do
+    it "names a known ATS from a board's address, and nothing otherwise" do
+      expect(described_class.vendor_for("https://job-boards.greenhouse.io/acme")).to eq("greenhouse")
+      expect(described_class.vendor_for("https://acme.wd3.myworkdayjobs.com/External")).to eq("workday")
+      expect(described_class.vendor_for("https://apply.workable.com/acme/")).to eq("workable")
+      expect(described_class.vendor_for("https://notgreenhouse.io.example/acme")).to be_nil
+    end
+  end
+
   describe ".ats_type" do
     let(:company) { build(:company, domain: "www.acme.example") }
 

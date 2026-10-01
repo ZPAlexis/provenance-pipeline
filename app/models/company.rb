@@ -14,7 +14,8 @@ class Company < ApplicationRecord
   # resolved   careers_page_url is set, with its method and confidence.
   #            high: found on the company's own domain, or a board its own
   #            page links to or embeds. medium: a guessed board the vendor's
-  #            own record confirms. confirmed: a human confirmed a candidate.
+  #            own record confirms. confirmed: a human confirmed a candidate, or
+  #            set the page by hand (method "manual").
   # candidate  a low-confidence find (an unconfirmed guess, or a link the LLM
   #            picked), held in resolution_candidate_url until a human
   #            confirms or rejects it. Never written as the watched page.

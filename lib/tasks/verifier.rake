@@ -91,10 +91,23 @@ namespace :verifier do
 
   money = ->(results) { results.sum { |r| Array(r["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } } }
 
-  desc "Find careers pages for companies not yet attempted, and record them. Backs up first. " \
+  desc "Find careers pages for companies not yet attempted, and record them. Backs up first. [PAGE=on_record|none] " \
+       "[IDS=id,id redoes those companies] " \
        "[SLICE=brazil] [LIMIT=n] [MODEL=...]"
   task resolve: :environment do
-    companies = select_companies.call(Company.unresolved).to_a
+    # PAGE splits the work: companies with a careers page on record (mostly confirmed at the first step,
+    # cheap) from those without one (the whole ladder).
+    # IDS redoes named companies whatever their state, e.g. after a fix; each change is audited as usual.
+    scope =
+      if ENV["IDS"].present?
+        Company.where(id: ENV["IDS"].split(",").map(&:strip))
+      else
+        { nil => Company.unresolved, "on_record" => Company.unresolved.with_careers_page,
+          "none" => Company.unresolved.needing_careers_page }.fetch(ENV["PAGE"].presence) do
+          abort "PAGE is on_record or none."
+        end
+      end
+    companies = select_companies.call(scope).to_a
     abort "No companies to resolve." if companies.empty?
 
     # From here on the database holds writes that cannot be regenerated from source.
@@ -134,7 +147,8 @@ namespace :verifier do
       puts "  #{company.resolution_candidate_url}  [#{company.resolution_method}]"
       puts "  #{evidence}" if evidence
     end
-    puts "\nbin/rails \"verifier:confirm[ID]\" makes it the watched page; bin/rails \"verifier:reject[ID]\" turns it down."
+    puts "\nbin/rails \"verifier:confirm[ID]\" makes it the watched page; bin/rails \"verifier:reject[ID]\" turns it down;"
+    puts "URL=\"https://...\" REASON=\"...\" bin/rails \"verifier:set_page[ID]\" sets the right page when you know it."
   end
 
   desc "Confirm a candidate careers page by hand. Usage: bin/rails \"verifier:confirm[company_id]\""
@@ -152,6 +166,22 @@ namespace :verifier do
     Verifier::Candidates.reject!(company)
     puts "#{company.name}: candidate rejected"
   rescue Verifier::Candidates::NotACandidate => e
+    abort e.message
+  end
+
+  desc "Set a company's careers page by hand, whatever its state. Audited as the operator. " \
+       "Usage: URL=\"https://...\" REASON=\"...\" bin/rails \"verifier:set_page[company_id]\""
+  task :set_page, [ :id ] => :environment do |_task, args|
+    company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}."
+    url = ENV["URL"].presence or abort "Give the page in URL=\"https://...\" (an address can hold commas)."
+    reason = ENV["REASON"].presence or abort "Say how you know it is the page in REASON=\"...\": it becomes the audit reasoning."
+
+    # A human correction cannot be regenerated from source, so it is backed up like any batch that writes.
+    puts "Backed up to #{DatabaseBackup.call}"
+    before = company.careers_page_url || company.resolution_candidate_url
+    Verifier::Candidates.set_page!(company, url, reasoning: reason)
+    puts "#{company.name}: watching #{company.careers_page_url} (#{company.ats_type})#{" instead of #{before}" if before && before != url}"
+  rescue ArgumentError => e
     abort e.message
   end
 

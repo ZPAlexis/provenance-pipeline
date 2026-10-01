@@ -208,7 +208,7 @@ class _Attempt:
             outcome, confidence, evidence = "candidate", "low", " ".join(filter(None, [evidence, partial]))
         return self.finish(
             outcome=outcome,
-            careers_page_url=result.final_url or result.url,
+            careers_page_url=_watch_url(result),
             ats=result.ats,
             method=step,
             confidence=confidence,
@@ -319,12 +319,32 @@ def careers_links(page: RenderedPage, domain: str, *, from_homepage: bool) -> li
 
 
 def _yields(result: PageResult) -> bool:
-    """A careers page: its own listings were read off it, or it says it has none."""
+    """A careers page: its own listings were read off it, or it says it has none.
+
+    One job's own page is not one: it is what a posting links to, and watching it
+    would see that job and never the next.
+    """
     return (
         result.outcome == "ok"
         and not result.many_employers
+        and not _one_job_page(result)
         and (bool(result.listing_count) or result.explicit_no_openings)
     )
+
+
+def _job_url(url: str | None) -> bool:
+    """A job's own address: a path segment carrying a long id, as most ATSs and careers sites use."""
+    return any(sum(ch.isdigit() for ch in segment) >= 6 for segment in urlsplit(url or "").path.split("/"))
+
+
+def _one_job_page(result: PageResult) -> bool:
+    return (result.listing_count or 0) <= 1 and _job_url(result.final_url or result.url)
+
+
+def _watch_url(result: PageResult) -> str:
+    """The page to watch. A job's address read through a known ATS is watched as the board itself."""
+    url = result.final_url or result.url
+    return ats.board_url(result.ats) if result.ats and _job_url(url) else url
 
 
 def _partial(result: PageResult) -> bool:
@@ -337,7 +357,14 @@ def _partial(result: PageResult) -> bool:
 def _found_count(found: ResolutionResult) -> int:
     """How many listings the page a result settled on showed."""
     urls = (found.careers_page_url,)
-    page = next((check for check in reversed(found.checks) if check.final_url in urls or check.url in urls), None)
+    page = next(
+        (
+            check
+            for check in reversed(found.checks)
+            if check.final_url in urls or check.url in urls or (found.ats and check.ats == found.ats)
+        ),
+        None,
+    )
     return (page.listing_count or 0) if page else 0
 
 
