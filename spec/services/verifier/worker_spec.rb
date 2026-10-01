@@ -107,6 +107,15 @@ RSpec.describe Verifier::Worker do
     expect(run.id).to eq("run")
   end
 
+  it "passes flags through to the worker" do
+    process = fake_process
+
+    worker(process).run([ { id: "c1", complete: true, listings: [], postings: [] } ], command: "match", flags: [ "--no-llm" ])
+
+    expect(process.spawned[:command]).to start_with("uv", "run", "--quiet", "verifier", "match")
+    expect(process.spawned[:command].last).to eq("--no-llm")
+  end
+
   it "refuses a command the worker does not have" do
     expect { worker(fake_process).run(targets, command: "delete") }.to raise_error(ArgumentError, /delete/)
   end

@@ -42,10 +42,12 @@ That separates two jobs that browsing job sites does at once, badly:
 
 **Two inputs feed the watch list:**
 
-1. **An imported base of companies.** The seed data came from job-listing exports, and many of those listings turned out to be stale. That matters less than it sounds: postings are perishable, but the companies behind them are durable, and every posting is re-verified at the source, so a stale listing corrects itself on its first check. The listings were just how the companies were found.
+1. **An imported base of companies.** The seed data came from job-board exports, and many of those postings turned out to be stale. That matters less than it sounds: postings are perishable, but the companies behind them are durable, and every posting is re-verified at the source, so a stale listing corrects itself on its first check. The listings were just how the companies were found.
 2. **Manual capture.** Paste a posting URL or a company domain; the system resolves the company's careers page and ATS, verifies, and adds the company to the watch list for good. Job boards and ordinary browsing keep feeding the system — a find gets captured instead of living in a notes file.
 
 **The tradeoff, stated plainly: roles at companies outside the list are missed.** There is no crawl, so the list only grows by judgment. That is deliberate. Search-then-filter optimizes for recall; watching a curated list optimizes for precision and fit, which is what this system is for.
+
+**Nothing in the code is specific to one kind of role.** Verification reads every role a careers page shows (a *listing*) and checks whether a tracked *posting* is among them, without knowing what anyone is looking for. The only place a target field enters is a search profile stored as data — titles and keywords, seniority, locations and work mode, exclusions — which decides which new roles are worth reporting. Another field, or another person, is another profile.
 
 Two consequences shape the build. A company's careers page becomes a **watch target**, re-checked on a schedule for months — a higher bar than resolving a page once for a single check. And re-verification makes postings **stateful**: `verified_live` → `not_found` is a lifecycle transition, not a correction, and the audit log is what makes "when did this role close?" answerable.
 

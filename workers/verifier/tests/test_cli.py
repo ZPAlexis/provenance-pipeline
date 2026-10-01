@@ -3,7 +3,7 @@ import json
 
 from verifier import cli
 from verifier.cli import run, run_resolve
-from verifier.contract import PageResult, ResolutionResult, ResolveTarget, Target
+from verifier.contract import MatchResult, PageResult, ResolutionResult, ResolveTarget, Target
 from verifier.extract import CreditExhausted, ExtractionFailed
 from verifier.resolve import Resolver, ServicesReader
 
@@ -141,3 +141,35 @@ def test_resolve_stops_cleanly_when_credit_runs_out(tmp_path):
 
     assert summary.stopped == "credit_exhausted"
     assert (tmp_path / "r.jsonl").read_text() == ""
+
+
+def test_match_replays_stored_listings_without_a_browser_and_counts_verdicts(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "sync_playwright", lambda: (_ for _ in ()).throw(AssertionError("no browser")))
+    targets = tmp_path / "targets.json"
+    targets.write_text(
+        json.dumps(
+            {
+                "targets": [
+                    {
+                        "id": "c1",
+                        "label": "Acme",
+                        "complete": True,
+                        "listings": [{"title": "RevOps Engineer"}],
+                        "postings": [{"id": "p1", "title": "RevOps Engineer"}, {"id": "p2", "title": "Designer"}],
+                    },
+                    {
+                        "id": "c2",
+                        "complete": False,
+                        "listings": [{"title": "Recruiter"}],
+                        "postings": [{"id": "p3", "title": "Sales Engineer LATAM"}],
+                    },
+                ]
+            }
+        )
+    )
+    out = tmp_path / "matches.jsonl"
+
+    assert cli.main(["match", "--no-llm", "--targets", str(targets), "--out", str(out)]) == cli.EXIT_OK
+
+    results = [MatchResult.model_validate_json(line) for line in out.read_text().splitlines()]
+    assert [[v.verdict for v in r.verdicts] for r in results] == [["verified_live", "not_found"], [None]]

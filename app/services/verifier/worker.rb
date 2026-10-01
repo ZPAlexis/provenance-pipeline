@@ -15,7 +15,7 @@ module Verifier
 
     RESULT_SCHEMA_VERSION = 2
 
-    COMMANDS = %w[extract resolve].freeze
+    COMMANDS = %w[extract resolve match].freeze
 
     # Exit codes from workers/verifier/src/verifier/cli.py for a run that
     # stopped early on purpose, keeping every result it finished.
@@ -45,7 +45,9 @@ module Verifier
 
     # extract: targets are [{ id:, url:, label:, domain:, name: }], one PageResult each.
     # resolve: targets are [{ id:, label:, domain:, name:, known_url: }], one ResolutionResult each.
-    def run(targets, command: "extract")
+    # match: targets are [{ id:, label:, page_check_id:, complete:, listings:, postings: }], one MatchResult
+    # each; nothing is fetched. `flags` are passed through, e.g. ["--no-llm"].
+    def run(targets, command: "extract", flags: [])
       raise ArgumentError, "unknown worker command #{command.inspect}" unless COMMANDS.include?(command)
 
       FileUtils.mkdir_p(@run_dir)
@@ -53,7 +55,7 @@ module Verifier
       results_path = @run_dir.join("results.jsonl")
       targets_path.write(JSON.pretty_generate(targets: targets))
 
-      pid = @process.spawn(worker_env, *command_line(command, targets_path, results_path), chdir: ROOT.to_s)
+      pid = @process.spawn(worker_env, *command_line(command, targets_path, results_path, flags), chdir: ROOT.to_s)
       _, status = @process.wait2(pid)
       unless status.exitstatus.zero? || STOPPED.key?(status.exitstatus)
         raise Error, "the verification worker exited with status #{status.exitstatus}"
@@ -64,10 +66,10 @@ module Verifier
 
     private
 
-    def command_line(command, targets_path, results_path)
+    def command_line(command, targets_path, results_path, flags)
       [ "uv", "run", "--quiet", "verifier", command,
         "--targets", targets_path.to_s, "--out", results_path.to_s,
-        *([ "--model", @model ] if @model) ]
+        *([ "--model", @model ] if @model), *flags ]
     end
 
     def worker_env

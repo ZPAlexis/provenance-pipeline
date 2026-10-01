@@ -1,8 +1,11 @@
-"""`verifier extract|resolve --targets targets.json --out results.jsonl`
+"""`verifier extract|resolve|match --targets targets.json --out results.jsonl`
 
 extract  checks each careers page and extracts its listings: one PageResult per target.
 resolve  finds each company's careers page: one ResolutionResult per target,
          carrying every page it checked on the way.
+match    matches a company's tracked postings against listings already read (a
+         stored page check): one MatchResult per target, nothing rendered.
+         `--no-llm` leaves near-misses undecided, so a replay costs nothing.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -25,8 +28,9 @@ import httpx2
 from playwright.sync_api import sync_playwright
 
 from verifier.config import DEFAULT_MODEL, DOMAIN_DELAY_SECONDS, MODEL_SETTINGS
-from verifier.contract import PageResult, ResolutionResult, ResolveTarget, Target
-from verifier.extract import CreditExhausted, LlmConfigError, LlmExtractor, LlmLinkPicker
+from verifier.contract import MatchResult, MatchTarget, PageResult, ResolutionResult, ResolveTarget, Target
+from verifier.extract import CreditExhausted, LlmConfigError, LlmExtractor, LlmLinkPicker, LlmMatcher
+from verifier.match import Matcher
 from verifier.pipeline import Services, verify_page
 from verifier.politeness import HostThrottle
 from verifier.resolve import Resolver, ServicesReader
@@ -39,7 +43,7 @@ EXIT_OK, EXIT_BAD_INPUT, EXIT_CREDIT, EXIT_CREDENTIAL, EXIT_LLM_UNAVAILABLE = 0,
 _OUTAGE = re.compile(r"^llm_(http_5\d\d|connection_error|rate_limited)$")
 OUTAGE_LIMIT = 3
 
-Result = PageResult | ResolutionResult
+Result = PageResult | ResolutionResult | MatchResult
 
 
 @dataclass
@@ -48,6 +52,7 @@ class RunSummary:
     pages: int = 0  # pages checked: one per target when extracting, any number when resolving
     outcomes: dict[str, int] = field(default_factory=dict)
     listings: int = 0
+    verdicts: dict[str, int] = field(default_factory=dict)  # when matching; "inconclusive" for no verdict
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
@@ -59,10 +64,14 @@ class RunSummary:
         for page in _pages(result):
             self.pages += 1
             self.listings += page.listing_count or 0
-            if page.llm:
-                self.input_tokens += page.llm.input_tokens
-                self.output_tokens += page.llm.output_tokens
-                self.cost_usd = round(self.cost_usd + page.llm.cost_usd, 6)
+        if isinstance(result, MatchResult):
+            for verdict in result.verdicts:
+                key = verdict.verdict or "inconclusive"
+                self.verdicts[key] = self.verdicts.get(key, 0) + 1
+        for usage in _usages(result):
+            self.input_tokens += usage.input_tokens
+            self.output_tokens += usage.output_tokens
+            self.cost_usd = round(self.cost_usd + usage.cost_usd, 6)
 
 
 def run(targets: list[Target], out_path: Path, services: Services, log=sys.stderr) -> RunSummary:
@@ -78,6 +87,19 @@ def run_resolve(targets: list[ResolveTarget], out_path: Path, resolver: Resolver
         return ResolutionResult(target_id=target.id, outcome="error", reason=reason)
 
     return _run(targets, out_path, resolver.resolve, failed, log)
+
+
+def run_match(targets: list[MatchTarget], out_path: Path, matcher: Matcher, log=sys.stderr) -> RunSummary:
+    def failed(target: MatchTarget, reason: str) -> MatchResult:
+        return MatchResult(
+            target_id=target.id,
+            page_check_id=target.page_check_id,
+            complete=target.complete,
+            outcome="error",
+            reason=reason,
+        )
+
+    return _run(targets, out_path, matcher.match, failed, log)
 
 
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
@@ -103,7 +125,7 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
             summary.add(result)
             print(f"[{index}/{len(targets)}] {_describe(target, result)}", file=log)
 
-            outage = next((page.reason for page in _pages(result) if _OUTAGE.match(page.reason or "")), None)
+            outage = next((reason for reason in _reasons(result) if _OUTAGE.match(reason or "")), None)
             outage_streak = outage_streak + 1 if outage else 0
             if outage_streak >= OUTAGE_LIMIT:
                 summary.stopped = "llm_unavailable"
@@ -113,12 +135,29 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 
 
 def _pages(result: Result) -> list[PageResult]:
+    if isinstance(result, MatchResult):
+        return []
     return result.checks if isinstance(result, ResolutionResult) else [result]
 
 
+def _usages(result: Result) -> list:
+    usages = [page.llm for page in _pages(result) if page.llm]
+    return usages + [result.llm] if isinstance(result, MatchResult) and result.llm else usages
+
+
+def _reasons(result: Result) -> list[str | None]:
+    return [page.reason for page in _pages(result)] + ([result.reason] if isinstance(result, MatchResult) else [])
+
+
 def _describe(target: Target | ResolveTarget, result: Result) -> str:
-    cost = sum(page.llm.cost_usd for page in _pages(result) if page.llm)
+    cost = sum(usage.cost_usd for usage in _usages(result))
     timing = f"({result.duration_ms / 1000:.1f}s{f', ${cost:.4f}' if cost else ''})"
+    if isinstance(result, MatchResult):
+        tally: dict[str, int] = {}
+        for verdict in result.verdicts:
+            tally[verdict.verdict or "inconclusive"] = tally.get(verdict.verdict or "inconclusive", 0) + 1
+        list_kind = "whole list" if result.complete else "partial list"
+        return f"{target.label or target.id}: {tally or result.reason} ({list_kind}) {timing}"
     if isinstance(result, ResolutionResult):
         label = target.label or target.domain or target.id
         if result.outcome in ("resolved", "candidate"):
@@ -142,15 +181,28 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("extract", parents=[common], help="check careers pages and extract their listings")
     commands.add_parser("resolve", parents=[common], help="find companies' careers pages")
+    match = commands.add_parser("match", parents=[common], help="match postings against listings already read")
+    match.add_argument("--no-llm", action="store_true", help="leave near-misses undecided: no API calls at all")
     args = parser.parse_args(argv)
 
-    model = ResolveTarget if args.command == "resolve" else Target
+    model = {"resolve": ResolveTarget, "match": MatchTarget}.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
         targets = [model.model_validate(item) for item in payload["targets"]]
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"could not read targets from {args.targets}: {error}", file=sys.stderr)
         return EXIT_BAD_INPUT
+
+    if args.command == "match":
+        # Nothing is fetched: the listings were read before, and stored.
+        matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=args.model))
+        summary = run_match(targets, args.out, matcher)
+        print(
+            f"\n{summary.targets}/{len(targets)} companies, verdicts {summary.verdicts}, "
+            f"{summary.input_tokens} in / {summary.output_tokens} out tokens, est. ${summary.cost_usd:.4f}",
+            file=sys.stderr,
+        )
+        return _exit_code(summary)
 
     with sync_playwright() as playwright, httpx2.Client(timeout=20.0) as http:
         browser = playwright.chromium.launch()
@@ -176,6 +228,10 @@ def main(argv: list[str] | None = None) -> int:
         f"est. ${summary.cost_usd:.4f}",
         file=sys.stderr,
     )
+    return _exit_code(summary)
+
+
+def _exit_code(summary: RunSummary) -> int:
     return {
         "credit_exhausted": EXIT_CREDIT,
         "credential": EXIT_CREDENTIAL,
