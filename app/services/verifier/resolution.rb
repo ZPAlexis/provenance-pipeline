@@ -30,6 +30,32 @@ module Verifier
       end
     end
 
+    # The check that read the page a result settled on: by its address, or by its
+    # ATS board, since a job's address read through a board is watched as the board.
+    def found_check(result)
+      url, board = result["careers_page_url"], result["ats"]
+      Array(result["checks"]).reverse.find do |check|
+        [ check["final_url"], check["url"] ].include?(url) || (board.present? && check["ats"] == board)
+      end
+    end
+
+    # Hosts that are a known ATS's boards, for a page a human sets: the worker
+    # names the vendor for pages it reads, but a page set by hand has no check yet.
+    VENDOR_HOSTS = {
+      "greenhouse" => /(?:\A|\.)greenhouse\.io\z/,
+      "lever" => /(?:\A|\.)lever\.co\z/,
+      "ashby" => /(?:\A|\.)ashbyhq\.com\z/,
+      "workday" => /\.myworkdayjobs\.com\z/,
+      "workable" => /(?:\A|\.)workable\.com\z/
+    }.freeze
+
+    def vendor_for(url)
+      host = URI.parse(url.to_s).host.to_s.downcase
+      VENDOR_HOSTS.find { |_vendor, pattern| host.match?(pattern) }&.first
+    rescue URI::InvalidURIError
+      nil
+    end
+
     # A known ATS by name; otherwise the company's own site, or another host.
     def ats_type(company, url, vendor)
       return vendor if vendor.present?

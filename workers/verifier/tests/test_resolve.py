@@ -26,6 +26,7 @@ class FakeReader:
         partial=(),
         stated=None,
         aggregator=(),
+        boards=None,
         home=None,
         home_outcome=None,
         board=None,
@@ -36,6 +37,7 @@ class FakeReader:
         self.links = links or {}
         self.partial, self.aggregator = set(partial), set(aggregator)
         self.stated = stated or {}
+        self.boards = boards or {}
         self.home = home
         self.home_outcome = home_outcome or ("ok" if home is not None else "inaccessible")
         self.board = board
@@ -61,6 +63,7 @@ class FakeReader:
             listings_incomplete=url in self.partial,
             many_employers=url in self.aggregator,
             stated_total=self.stated.get(url),
+            ats=self.boards.get(url),
         )
         rendered = RenderedPage(final_url=url, status=200, title="", text="", links=self.links.get(url, []))
         return result, (rendered if count is not None else None)
@@ -444,3 +447,28 @@ def test_never_follows_links_that_say_jobs_but_lead_elsewhere():
     resolve(reader)
 
     assert reader.checked == [(landing, "path_probe")]
+
+
+# Found in the first real run: labels that were one job's address.
+def test_one_jobs_page_is_not_a_careers_page_so_its_all_jobs_link_is_followed():
+    job = "https://acme.example/careers/jobs/7413976-gtm-engineer"
+    listing = "https://acme.example/careers/jobs"
+    reader = FakeReader(
+        pages={job: 1, listing: 12},
+        links={job: [("Back to all jobs", listing)]},
+    )
+
+    result = resolve(reader, ACME.model_copy(update={"known_url": job}))
+
+    assert (result.outcome, result.method, result.confidence) == ("resolved", "page_link", "high")
+    assert result.careers_page_url == listing
+
+
+def test_a_jobs_address_read_through_a_known_ats_is_watched_as_the_board():
+    job = "https://job-boards.greenhouse.io/acme/jobs/8054669"
+    reader = FakeReader(pages={job: 393}, boards={job: AtsBoard(vendor="greenhouse", board="acme")})
+
+    result = resolve(reader, ACME.model_copy(update={"known_url": job}))
+
+    assert (result.outcome, result.method) == ("resolved", "imported")
+    assert result.careers_page_url == "https://job-boards.greenhouse.io/acme"

@@ -73,9 +73,7 @@ module Verifier
         partial_answer? ? [ share.call(known, found), share.call(found, known) ].max : share.call(known, found)
       end
 
-      def found_check
-        Array(result&.dig("checks")).reverse.find { |check| [ check["final_url"], check["url"] ].include?(found_url) }
-      end
+      def found_check = result && Resolution.found_check(result)
 
       def correct? = same_page? || same_board? || same_site? || title_overlap.to_f >= TITLE_OVERLAP
 
