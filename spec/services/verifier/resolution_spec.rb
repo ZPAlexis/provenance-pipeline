@@ -40,6 +40,14 @@ RSpec.describe Verifier::Resolution do
     end
   end
 
+  describe ".board_url" do
+    it "writes a board's public address as the worker does" do
+      expect(described_class.board_url("greenhouse", "acme")).to eq("https://job-boards.greenhouse.io/acme")
+      expect(described_class.board_url("workday", "acme.wd3/External")).to eq("https://acme.wd3.myworkdayjobs.com/External")
+      expect(described_class.board_url("workable", "acme")).to be_nil
+    end
+  end
+
   describe ".vendor_for" do
     it "names a known ATS from a board's address, and nothing otherwise" do
       expect(described_class.vendor_for("https://job-boards.greenhouse.io/acme")).to eq("greenhouse")

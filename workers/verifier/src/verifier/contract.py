@@ -118,3 +118,59 @@ class ResolutionResult(BaseModel):
     reason: str | None = None  # for outcome "error"
     checks: list[PageResult] = Field(default_factory=list)
     duration_ms: int = 0
+
+
+# --- Verification: matching tracked postings against a page's listings -------
+#
+# A verdict is written only from evidence that supports it: verified_live when a
+# posting matches a listing; not_found only when the whole list was read; and
+# None (inconclusive) when the list was partial and nothing matched, so the
+# posting keeps its last verdict.
+Verdict = Literal["verified_live", "not_found", "inaccessible"]
+MatchMethod = Literal["exact", "variant", "llm", "none"]
+
+
+class TrackedPosting(BaseModel):
+    """A posting being verified: only what matching needs."""
+
+    id: str
+    title: str
+    location: str | None = None
+
+
+class MatchTarget(BaseModel):
+    """A company's postings and a page's listings already read: matching without rendering.
+
+    Used to replay stored page checks, so matching can be built and tuned at no
+    API cost. `complete` says whether the whole list was read.
+    """
+
+    id: str  # the company
+    label: str | None = None
+    page_check_id: str | None = None  # the stored check the listings came from
+    complete: bool
+    listings: list[Listing]
+    postings: list[TrackedPosting]
+
+
+class PostingVerdict(BaseModel):
+    posting_id: str
+    verdict: Verdict | None  # None: inconclusive, no verdict written
+    method: MatchMethod
+    listing_index: int | None = None  # 0-based, into the page's listings
+    listing: Listing | None = None
+    location_note: str | None = None  # the matched listing is for a different location
+    reasoning: str
+
+
+class MatchResult(BaseModel):
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["match"] = "match"
+    target_id: str
+    page_check_id: str | None = None
+    complete: bool
+    verdicts: list[PostingVerdict] = Field(default_factory=list)
+    llm: LlmUsage | None = None  # the near-miss call, when one was needed
+    outcome: Literal["ok", "error"] = "ok"
+    reason: str | None = None
+    duration_ms: int = 0

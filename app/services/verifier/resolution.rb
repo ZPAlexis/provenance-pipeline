@@ -49,6 +49,19 @@ module Verifier
       "workable" => /(?:\A|\.)workable\.com\z/
     }.freeze
 
+    # A board's public page, as the worker's ats.board_url writes it: how a
+    # watched board's address is recognized among a company's page checks.
+    def board_url(vendor, board)
+      case vendor
+      when "greenhouse" then "https://job-boards.greenhouse.io/#{board}"
+      when "lever" then "https://jobs.lever.co/#{board}"
+      when "ashby" then "https://jobs.ashbyhq.com/#{board}"
+      when "workday"
+        tenant_instance, site = board.to_s.split("/", 2)
+        "https://#{tenant_instance}.myworkdayjobs.com/#{site}"
+      end
+    end
+
     def vendor_for(url)
       host = URI.parse(url.to_s).host.to_s.downcase
       VENDOR_HOSTS.find { |_vendor, pattern| host.match?(pattern) }&.first

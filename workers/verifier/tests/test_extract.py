@@ -241,3 +241,23 @@ def test_link_picker_asks_for_one_link_number_as_structured_output():
     assert picked.link == 2
     assert (usage.purpose, usage.prompt_version) == ("resolve", LINK_PROMPT_VERSION)
     assert LINK_PROMPT_VERSION != EXTRACT_PROMPT_VERSION
+
+
+def test_the_match_request_numbers_listings_as_the_page_does():
+    from verifier.contract import Listing, TrackedPosting
+    from verifier.extract import MATCH_SCHEMA, MATCH_SYSTEM_PROMPT, LlmMatcher, MatchDecisions
+    from verifier.match import Case
+
+    client = FakeClient(response(MatchDecisions(decisions=[]).model_dump_json()))
+    listings = [Listing(title="Designer"), Listing(title="Sales Engineer, Latin America", location="Remote")]
+    cases = [Case(1, TrackedPosting(id="p1", title="Sales Engineer LATAM", location="Brazil"), [1])]
+
+    _, usage = LlmMatcher(client_factory=lambda: client).decide(cases, listings)
+
+    request = client.requests[0]
+    assert (request["system"], request["output_config"]["format"]["schema"]) == (MATCH_SYSTEM_PROMPT, MATCH_SCHEMA)
+    content = request["messages"][0]["content"]
+    assert "[P1] Sales Engineer LATAM — Brazil" in content
+    assert "[2] Sales Engineer, Latin America — Remote" in content
+    assert "Designer" not in content
+    assert usage.purpose == "match"

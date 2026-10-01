@@ -249,4 +249,54 @@ namespace :verifier do
     print_resolution_report.call(test.evaluate(run.results, known), run.dir)
     report_stop.call(run)
   end
+
+  desc "Test B: match labeled postings against their company's watched page and compare with the label. Read-only. " \
+       "REPLAY=1 matches the listings stored by earlier checks (no page fetched); NO_LLM=1 leaves near-misses " \
+       "undecided (no API calls at all). [COMPANY=name] [MODEL=...]"
+  task test_b: :environment do
+    abort "Only REPLAY=1 exists so far: fresh reads arrive with 1.2c's verify command." unless ENV["REPLAY"].present?
+
+    postings = Posting.includes(:company)
+    postings = postings.joins(:company).where("lower(companies.name) = ?", ENV["COMPANY"].strip.downcase) if ENV["COMPANY"].present?
+    test = Verifier::TestB.new(postings)
+    targets = test.replay_targets
+    abort "No labeled postings with a stored check of their company's watched page." if targets.empty?
+
+    flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
+    puts "Test B (replay): #{targets.sum { |t| t[:postings].size }} labeled postings at #{targets.size} companies, " \
+         "#{flags.any? ? 'no LLM' : "near-misses judged by #{ENV['MODEL'].presence || 'the default model'}"}\n\n"
+    run = build_worker.call("test_b_replay").run(targets, command: "match", flags: flags)
+    report = test.evaluate(run.results)
+
+    puts format("\n%-24s %-34s %-14s %-14s %-8s %s", "company", "posting", "label", "verdict", "method", "result")
+    report.cases.sort_by { |c| [ c.measured? ? 0 : 1, c.company ] }.each do |c|
+      result =
+        if c.false_live? then "FALSE LIVE: hand-check whether the role is really there"
+        elsif c.agrees? then "agrees"
+        elsif c.measured? then "disagrees: hand-check whether the label went stale"
+        else "not measured: #{c.why_unmeasured}"
+        end
+      puts format("%-24s %-34s %-14s %-14s %-8s %s", c.company.truncate(24), c.title.truncate(34), c.label,
+                  c.verdict || "-", c.result&.dig("method") || "-", result)
+    end
+
+    if report.disagreements.any?
+      puts "\nDisagreements, with the verifier's reasoning:"
+      report.disagreements.each { |c| puts "  #{c.company} / #{c.title} (#{c.label} -> #{c.verdict}): #{c.result['reasoning']}" }
+    end
+    puts "\nBy method (method, agrees): #{report.by_method.sort_by { |key, _| key.map(&:to_s) }.to_h}"
+    puts "Agreement: #{report.agreeing}/#{report.measured.size} measured " \
+         "(#{(report.share * 100).round}%, #{(Verifier::TestB::REQUIRED_AGREEMENT * 100).round}% required); " \
+         "not measured: #{report.unmeasured.size}"
+    puts "Labeled negatives reported live: #{report.false_lives.size} (none allowed unless a hand-check confirms the role)"
+    puts "Cost: #{report.tokens} tokens, est. $#{format('%.4f', report.cost_usd)}"
+    puts "\nTEST B (replay): #{report.passed? ? 'PASS' : 'FAIL'}   (details: #{run.dir})"
+
+    run.dir.join("report.json").write(JSON.pretty_generate(
+      passed: report.passed?, agreeing: report.agreeing, measured: report.measured.size, cases: report.cases.size,
+      false_lives: report.false_lives.size, by_method: report.by_method.transform_keys { |key| key.join("/") },
+      cost_usd: report.cost_usd, stopped: run.stopped
+    ))
+    report_stop.call(run)
+  end
 end
