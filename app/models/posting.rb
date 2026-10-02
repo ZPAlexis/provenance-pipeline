@@ -32,7 +32,12 @@ class Posting < ApplicationRecord
   # verdicts); a bare date is stored at 12:00 UTC and is day precision, and
   # the posting's create event says where the date came from. From Stage 1.2
   # the verifier is the main writer and records the exact time it observed the
-  # page. How it records checks that change nothing is defined in Stage 1.2.
+  # page (Verifier::Ingest). A verdict that changes is an audited update. A
+  # check that confirms the verdict refreshes last_checked_at, the count, and
+  # the work mode with no audit event: its page check is the provenance. A check
+  # that could not decide (part of a list read, nothing matched) writes nothing
+  # here. The operator's own checks (verifier:hand_check) are verdicts too,
+  # audited as theirs.
   VERIFICATION_STATES = %w[pending verified_live not_found inaccessible].freeze
   VERDICTS = (VERIFICATION_STATES - %w[pending]).freeze
   WORK_MODES = %w[remote hybrid onsite unknown].freeze

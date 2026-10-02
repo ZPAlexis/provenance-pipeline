@@ -16,6 +16,8 @@ module Verifier
   # no labeled negative comes back verified_live: that would be a closed role
   # reported open. Labels go stale (roles close), so every disagreement is
   # checked by hand; one confirmed stale counts as agreement (decided 2026-10-01).
+  # A hand check is recorded with verifier:hand_check, and read back from the
+  # posting's history, so it counts in every later run.
   #
   # REPLAY reads the listings stored by an earlier page check, at no API cost.
   # FRESH reads each watched page in full now (every page of its list), which is
@@ -25,17 +27,21 @@ module Verifier
     SCORED_LABELS = %w[verified_live not_found].freeze
 
     Case = Struct.new(:posting_id, :company_id, :company, :title, :location, :label, :result, :snapshot,
-                      :watched_url, :domain, keyword_init: true) do
+                      :watched_url, :domain, :hand_verdict, keyword_init: true) do
       def verdict = result&.dig("verdict")
 
       def scored_label? = SCORED_LABELS.include?(label)
 
       def measured? = scored_label? && verdict.present?
 
-      def agrees? = measured? && verdict == label
+      def agrees? = measured? && (verdict == label || verdict == hand_verdict)
 
-      # A role the research found closed, reported open: the costly mistake.
-      def false_live? = label == "not_found" && verdict == "verified_live"
+      # The label was wrong or went stale, and the operator's own check says so.
+      def agrees_by_hand? = agrees? && verdict != label
+
+      # A role the research found closed, reported open: the costly mistake,
+      # unless the operator's own check found it open.
+      def false_live? = label == "not_found" && verdict == "verified_live" && hand_verdict != "verified_live"
 
       def why_unmeasured
         return "label #{label}: says nothing about the role" unless scored_label?
@@ -104,7 +110,7 @@ module Verifier
         company = posting.company
         Case.new(posting_id: posting.id, company_id: company.id, company: company.name, title: posting.role_title,
                  location: posting.location, label: label,
-                 domain: company.domain,
+                 domain: company.domain, hand_verdict: HandCheck.latest_verdict(posting),
                  watched_url: (company.careers_page_url if company.resolution_status == "resolved"),
                  snapshot: (self.class.snapshot_for(company) if company.resolution_status == "resolved"))
       end

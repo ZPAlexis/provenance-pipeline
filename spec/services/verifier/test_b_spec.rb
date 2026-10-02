@@ -71,6 +71,29 @@ RSpec.describe Verifier::TestB do
     end
   end
 
+  describe "hand checks" do
+    before { snapshot(company) }
+
+    it "counts a disagreement as agreement when the operator's own check found the label wrong" do
+      posting = labeled("verified_live")
+      Verifier::HandCheck.record!(posting, verdict: "not_found", note: "Not on the page.")
+
+      kase = described_class.new.evaluate([ { "verdicts" => [ verdict(posting, "not_found", method: "none") ] } ]).cases.sole
+
+      expect(kase).to be_agrees_by_hand
+    end
+
+    it "does not fail on a labeled negative the operator found open" do
+      gone = labeled("not_found", title: "Designer")
+      Verifier::HandCheck.record!(gone, verdict: "verified_live", note: "It is listed again.")
+
+      report = described_class.new.evaluate([ { "verdicts" => [ verdict(gone, "verified_live") ] } ])
+
+      expect(report.false_lives).to be_empty
+      expect(report).to be_passed
+    end
+  end
+
   describe "fresh targets" do
     it "sends each company's watched page and its scored postings, stored check or not" do
       posting = labeled("verified_live")

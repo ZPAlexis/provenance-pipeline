@@ -52,4 +52,35 @@ RSpec.describe Verifier::ResultContract do
       "check 2: llm prompt_version is missing"
     )
   end
+
+  describe ".verification_errors" do
+    def verification(**overrides)
+      { "kind" => "verification", "target_id" => "c1", "url" => "https://acme.example/careers", "outcome" => "ok",
+        "complete" => true, "checks" => [ check ],
+        "verdicts" => [ { "posting_id" => "p1", "verdict" => "not_found", "method" => "none", "reasoning" => "Not there." } ] }
+        .merge(overrides.stringify_keys)
+    end
+
+    it "accepts a well-formed verification" do
+      expect(described_class.verification_errors(verification)).to be_empty
+    end
+
+    # The rule that keeps a role on page two from being marked closed, enforced at the write path too.
+    it "refuses a negative from part of a list" do
+      expect(described_class.verification_errors(verification(complete: false))).to include("verdict 1: not_found from part of a list")
+    end
+
+    it "accepts no verdict (inconclusive) from part of a list" do
+      inconclusive = [ { "posting_id" => "p1", "verdict" => nil, "method" => "none", "reasoning" => "Partial." } ]
+
+      expect(described_class.verification_errors(verification(complete: false, verdicts: inconclusive))).to be_empty
+    end
+
+    it "refuses unknown verdicts and methods" do
+      odd = [ { "posting_id" => "p1", "verdict" => "closed", "method" => "guess", "reasoning" => "Hm." } ]
+
+      expect(described_class.verification_errors(verification(verdicts: odd)))
+        .to include(/unknown verdict "closed"/, /unknown method "guess"/)
+    end
+  end
 end

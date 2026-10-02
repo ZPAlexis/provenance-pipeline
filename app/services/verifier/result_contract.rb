@@ -37,6 +37,43 @@ module Verifier
       errors
     end
 
+    VERIFICATION_OUTCOMES = %w[ok inaccessible error].freeze
+    MATCH_METHODS = %w[exact variant llm none].freeze
+
+    def verification_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be verification" unless result["kind"] == "verification"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "url must be an http(s) URL" unless web_url?(result["url"])
+      errors << "unknown outcome #{result['outcome'].inspect}" unless VERIFICATION_OUTCOMES.include?(result["outcome"])
+      errors << "complete must be true or false" unless [ true, false ].include?(result["complete"])
+      errors.concat(llm_errors(result["match_llm"]).map { |error| "match_llm #{error}" }) if result["match_llm"]
+
+      checks, verdicts = result["checks"], result["verdicts"]
+      return errors << "checks and verdicts must be lists" unless checks.is_a?(Array) && verdicts.is_a?(Array)
+
+      checks.each_with_index { |check, index| errors.concat(page_errors(check).map { |error| "check #{index + 1}: #{error}" }) }
+      verdicts.each_with_index do |verdict, index|
+        errors.concat(verdict_errors(verdict, complete: result["complete"]).map { |error| "verdict #{index + 1}: #{error}" })
+      end
+      errors
+    end
+
+    # A negative is written only from the whole list: checked here too, not left to the worker alone.
+    def verdict_errors(verdict, complete:)
+      return [ "not an object" ] unless verdict.is_a?(Hash)
+
+      errors = []
+      errors << "posting_id is missing" if verdict["posting_id"].blank?
+      errors << "unknown verdict #{verdict['verdict'].inspect}" unless verdict["verdict"].nil? || Posting::VERDICTS.include?(verdict["verdict"])
+      errors << "unknown method #{verdict['method'].inspect}" unless MATCH_METHODS.include?(verdict["method"])
+      errors << "reasoning is missing" if verdict["reasoning"].blank?
+      errors << "not_found from part of a list" if verdict["verdict"] == "not_found" && !complete
+      errors
+    end
+
     def page_errors(check)
       return [ "not an object" ] unless check.is_a?(Hash)
 

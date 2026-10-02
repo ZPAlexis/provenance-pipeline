@@ -283,6 +283,7 @@ namespace :verifier do
     report.cases.sort_by { |c| [ c.measured? ? 0 : 1, c.company ] }.each do |c|
       result =
         if c.false_live? then "FALSE LIVE: hand-check whether the role is really there"
+        elsif c.agrees_by_hand? then "agrees (your hand check: the label was wrong or stale)"
         elsif c.agrees? then "agrees"
         elsif c.measured? then "disagrees: hand-check whether the label went stale"
         else "not measured: #{c.why_unmeasured}"
@@ -292,8 +293,11 @@ namespace :verifier do
     end
 
     if report.disagreements.any?
-      puts "\nDisagreements, with the verifier's reasoning:"
-      report.disagreements.each { |c| puts "  #{c.company} / #{c.title} (#{c.label} -> #{c.verdict}): #{c.result['reasoning']}" }
+      puts "\nDisagreements, with the verifier's reasoning (record what you find with verifier:hand_check):"
+      report.disagreements.each do |c|
+        puts "  #{c.company} / #{c.title} (#{c.label} -> #{c.verdict}): #{c.result['reasoning']}"
+        puts "      posting #{c.posting_id}"
+      end
     end
     puts "\nBy method (method, agrees): #{report.by_method.sort_by { |key, _| key.map(&:to_s) }.to_h}"
     puts "Agreement: #{report.agreeing}/#{report.measured.size} measured " \
@@ -309,5 +313,67 @@ namespace :verifier do
       cost_usd: report.cost_usd, stopped: run.stopped
     ))
     report_stop.call(run)
+  end
+
+  desc "Verify postings against their company's watched page and record the verdicts. Shows the plan and its " \
+       "estimated cost; runs only with GO=1, backing up first. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
+  task verify: :environment do
+    companies = select_companies.call(Company.where(resolution_status: "resolved").where(id: Posting.select(:company_id))).to_a
+    abort "No resolved company has postings to verify." if companies.empty?
+
+    targets = companies.map do |company|
+      { id: company.id, url: company.careers_page_url, label: company.name, domain: company.domain, name: company.name,
+        postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location } } }
+    end
+
+    # What one page read has cost so far, from the record: a guide, not a quote.
+    per_page = LlmCall.where(purpose: "extract").average(:cost_usd).to_f
+    low, high = targets.size * per_page, targets.size * per_page * 3
+    puts "Plan: verify #{targets.sum { |t| t[:postings].size }} postings at #{targets.size} companies' watched pages."
+    puts format("Estimated cost: $%.2f–$%.2f (about $%.3f a page read so far; boards read through an ATS API cost " \
+                "nothing, and a list split across pages costs a read per page, up to %d).",
+                low, high, per_page, 10)
+    next puts("\nNothing run. Run it with GO=1.") unless ENV["GO"].present?
+
+    # From here on, verdicts are written: back up first.
+    puts "Backed up to #{DatabaseBackup.call}\n\n"
+    flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
+    run = build_worker.call("verify").run(targets, command: "verify", flags: flags)
+
+    ingest = Verifier::Ingest.new(run_id: run.id)
+    tally = Hash.new(0)
+    invalid = []
+    run.results.each do |result|
+      ingest.verification(result).each { |what, count| tally[what] += count }
+    rescue Verifier::Ingest::InvalidResult => e
+      invalid << e.message
+    end
+
+    puts "\nRecorded #{run.results.size - invalid.size}/#{targets.size} companies: " \
+         "#{tally[:written]} verdicts written, #{tally[:unchanged]} confirmed unchanged, " \
+         "#{tally[:inconclusive]} inconclusive (no verdict)"
+    invalid.each { |message| puts "  NOT RECORDED, breaks the result contract: #{message}" }
+    cost = run.results.sum do |r|
+      Array(r["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } + r.dig("match_llm", "cost_usd").to_f
+    end
+    puts "Cost: est. $#{format('%.4f', cost)}   (details: #{run.dir})"
+    report_stop.call(run)
+  end
+
+  desc "Record a check you made yourself at the employer's page as a posting's verdict, audited as you. " \
+       "Usage: VERDICT=not_found NOTE=\"what you saw\" [ROLES=n] [WORK_MODE=remote] " \
+       "bin/rails \"verifier:hand_check[posting_id]\""
+  task :hand_check, [ :id ] => :environment do |_task, args|
+    posting = Posting.find_by(id: args[:id]) or abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
+    roles = ENV["ROLES"].presence && Integer(ENV["ROLES"], exception: false)
+    abort "ROLES must be a whole number." if ENV["ROLES"].present? && roles.nil?
+
+    # A human check cannot be regenerated from source, so it is backed up like any batch that writes.
+    puts "Backed up to #{DatabaseBackup.call}"
+    Verifier::HandCheck.record!(posting, verdict: ENV["VERDICT"].to_s.strip, note: ENV["NOTE"], roles: roles,
+                                         work_mode: ENV["WORK_MODE"].presence)
+    puts "#{posting.company.name} / #{posting.role_title}: #{posting.verification_state}, checked by hand"
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message
   end
 end
