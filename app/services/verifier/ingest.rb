@@ -3,9 +3,17 @@ module Verifier
   # against ResultContract first; each is written whole or not at all.
   #
   # Every check becomes a PageCheck, and every LLM call an LlmCall under it:
-  # the evidence, kept whatever the outcome. What a result changes on the
-  # company goes through AuditEvent.record_write! as agent:verifier, with the
-  # model that served the result's LLM calls as model_version.
+  # the evidence, kept whatever the outcome. What a result changes on a company
+  # or a posting goes through AuditEvent.record_write! as agent:verifier, with
+  # the model that served the result's LLM calls as model_version.
+  #
+  # Verdicts, per Posting's verification contract: a verdict that changes is an
+  # audited update; a check that confirms the verdict refreshes last_checked_at
+  # and what it observed (counts drift) with no audit event, because the page
+  # check is its provenance; an inconclusive check (no verdict) leaves the
+  # posting alone, and the page check keeps why. The verifier's verdict replaces
+  # an imported one; the imported label stays in the posting's enrichment and
+  # history.
   class Ingest
     ACTOR = "agent:verifier".freeze
 
@@ -31,7 +39,73 @@ module Verifier
       result["outcome"]
     end
 
+    # Returns counts of what happened to the postings: written, unchanged, inconclusive.
+    def verification(result)
+      errors = ResultContract.verification_errors(result)
+      raise InvalidResult, "#{result.try(:[], 'target_id') || '(no target)'}: #{errors.join('; ')}" if errors.any?
+
+      company = Company.find_by(id: result["target_id"]) or
+        raise InvalidResult, "#{result['target_id']}: no such company"
+      postings = company.postings.where(id: result["verdicts"].pluck("posting_id")).index_by(&:id)
+      strays = result["verdicts"].pluck("posting_id") - postings.keys
+      raise InvalidResult, "#{result['target_id']}: postings #{strays.join(', ')} are not this company's" if strays.any?
+
+      ApplicationRecord.transaction do
+        checks = result["checks"].map { |check| record_check(company, check, purpose: "verification") }
+        record_matches(checks.first, result) if checks.any?
+        result["verdicts"].each_with_object(Hash.new(0)) do |verdict, tally|
+          tally[apply_verdict(postings.fetch(verdict["posting_id"]), verdict, result)] += 1
+        end
+      end
+    end
+
     private
+
+    # Each posting's outcome, on the check that read the page, and the near-miss call under it.
+    def record_matches(page_check, result)
+      page_check.update!(matches: result["verdicts"].map do |verdict|
+        verdict.slice("posting_id", "verdict", "method", "listing_index", "location_note", "reasoning")
+      end)
+      record_llm(page_check, result["match_llm"], called_at: page_check.checked_at) if result["match_llm"]
+    end
+
+    # Returns :written, :unchanged, or :inconclusive.
+    def apply_verdict(posting, verdict, result)
+      return :inconclusive if verdict["verdict"].nil?
+
+      checked_at = Time.iso8601(result["checks"].first["checked_at"])
+      posting.assign_attributes(
+        verification_state: verdict["verdict"],
+        roles_listed_count: (result["listing_count"] if result["outcome"] == "ok"),
+        work_mode: observed_work_mode(verdict),
+        last_checked_at: checked_at
+      )
+      # Only a verdict that changes is a change worth an audit event. The rest of
+      # what a check observed (counts drift from check to check) is refreshed with
+      # it, and the page check is the provenance.
+      unless posting.verification_state_changed?
+        posting.save!
+        return :unchanged
+      end
+
+      posting.save!
+      AuditEvent.record_write!(posting, actor: ACTOR, model_version: model_version(result),
+                                        reasoning: verdict_reasoning(verdict, result))
+      :written
+    end
+
+    # As the matched listing states it; nil when it was not observed (Posting's contract).
+    def observed_work_mode(verdict)
+      mode = verdict.dig("listing", "work_mode")
+      mode unless mode.nil? || mode == "unknown"
+    end
+
+    def verdict_reasoning(verdict, result)
+      read = if result["outcome"] == "ok"
+        "#{result['listing_count']} roles read on #{result['url']}#{', the whole list' if result['complete']}."
+      end
+      [ verdict["reasoning"], verdict["location_note"], read, "Run #{@run_id}." ].compact_blank.join(" ")
+    end
 
     def record_check(company, check, purpose:)
       page_check = company.page_checks.create!(
@@ -60,8 +134,11 @@ module Verifier
         checked_at: check["checked_at"],
         duration_ms: check["duration_ms"]
       )
-      return unless (llm = check["llm"])
+      record_llm(page_check, check["llm"], called_at: check["checked_at"]) if check["llm"]
+      page_check
+    end
 
+    def record_llm(page_check, llm, called_at:)
       page_check.llm_calls.create!(
         run_id: @run_id,
         purpose: llm["purpose"],
@@ -71,7 +148,7 @@ module Verifier
         input_tokens: llm["input_tokens"],
         output_tokens: llm["output_tokens"],
         cost_usd: llm["cost_usd"],
-        called_at: check["checked_at"]
+        called_at: called_at
       )
     end
 
@@ -136,7 +213,7 @@ module Verifier
 
     # The model that served this result's LLM calls, with its request settings.
     def model_version(result)
-      llm = result["checks"].filter_map { |check| check["llm"] }.first or return
+      llm = (result["checks"].filter_map { |check| check["llm"] } + [ result["match_llm"] ].compact).first or return
       [ llm["model"], (llm["settings"].to_json if llm["settings"].present?) ].compact.join(" ")
     end
   end

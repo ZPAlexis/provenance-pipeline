@@ -60,7 +60,8 @@ module Verifier
         checked = posting.last_checked_at ? " on #{posting.last_checked_at.utc.to_date}" : ""
         label = TestB.label_for(posting)
         "  #{posting.role_title}: #{posting.verification_state}#{checked}" \
-          "#{" (Clay said #{label})" if label && label != posting.verification_state}\n      #{posting.posting_url}"
+          "#{" (Clay said #{label})" if label && label != posting.verification_state}\n" \
+          "      #{posting.posting_url}  (posting #{posting.id})"
       end
     end
 
