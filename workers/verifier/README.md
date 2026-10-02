@@ -7,9 +7,10 @@ uv run verifier extract --targets targets.json --out results.jsonl   # read care
 uv run verifier resolve --targets companies.json --out results.jsonl # find each company's careers page
 uv run verifier verify  --targets companies.json --out results.jsonl # read each watched page in full, match its postings
 uv run verifier match   --targets snapshots.json --out results.jsonl # match against listings read before (nothing fetched)
+uv run verifier boards  --targets companies.json --out results.jsonl # find free boards listing the same roles (no LLM)
 ```
 
-Every command takes `--model` (default `claude-haiku-4-5`) and `--delay` (seconds between requests to one host, default 5). `verify` and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
+Every command takes `--model` (default `claude-haiku-4-5`) and `--delay` (seconds between requests to one host, default 5). `verify` and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards` never calls the LLM. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
 
 Exit codes: 0 finished; 2 bad input; 3 stopped, API credit exhausted; 4 stopped, credential missing or rejected; 5 stopped, the LLM service kept failing.
 
@@ -55,6 +56,13 @@ The location picks which listing is the posting's and is noted when it differs; 
 | Nothing: the site refused us, or robots.txt keeps us off | `inaccessible` | `inaccessible` |
 
 A watched page is never swapped for a guessed board during verification: resolution decides the page, verification only reads it.
+
+## Paying for a read only when something may have changed
+
+Claude's reading of rendered pages is nearly all of a run's cost, so verification avoids it in two ways, both decided by free signals:
+
+- **Unchanged role links reuse the last read.** Each page is still rendered (free). When it links to exactly the role pages it did at the last run (role links under the same folders as before, none gone, none new), the listings read then are reused and the check says so, naming the read it reused. Roles without distinct links fall back to the page's whole text being identical. Every page of a list is judged on its own, so only the pages that changed are read. Whatever the links say, a page's listings are read again in full once they are 14 days old.
+- **A free board read in place of the page.** `boards` looks for a Greenhouse, Lever, or Ashby board for each company whose page Claude had to read, and compares its roles with the roles the page showed. A board is adopted only on the roles themselves: it must list at least 90% of the page's distinct titles. Who owns it (the vendor's name record, or the site its page links to) is recorded as evidence, not required: a board with a company's exact name can belong to another company and share none of its roles, while a company's own board can link to a sister domain. Verification then reads the board's API; the page stays the one on record and is read instead if the board fails or lists nothing. A board's finding is trusted for 30 days, then the page is read again and the board checked against it.
 
 ## Development
 

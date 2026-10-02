@@ -4,9 +4,13 @@
 # AuditEvent.record_write! as usual.
 class PageCheck < ApplicationRecord
   belongs_to :company
+  # The earlier read whose listings this check reused, its page's role links unchanged.
+  belongs_to :reused_from, class_name: "PageCheck", optional: true
   has_many :llm_calls, dependent: :destroy
 
   PURPOSES = %w[resolution verification].freeze
+  # How a page's listings were read by the LLM, or carried over from such a read: what a reuse can start from.
+  PAGE_READS = %w[render+llm reused].freeze
   OUTCOMES = %w[ok blocked inaccessible error].freeze
   STEPS = %w[imported path_probe homepage homepage_link page_link ats_guess llm_link].freeze
 

@@ -59,7 +59,52 @@ module Verifier
       end
     end
 
+    # Returns the result's outcome. An adopted board is recorded on the company,
+    # audited when it is new or a different board; one found again refreshes its
+    # evidence and time quietly, as a confirmed verdict does. A board in use that
+    # no longer lists the page's roles, or is gone, is dropped (audited), so
+    # verification reads the page again. Nothing here came from the LLM.
+    def board(result)
+      errors = ResultContract.board_errors(result)
+      raise InvalidResult, "#{result.try(:[], 'target_id') || '(no target)'}: #{errors.join('; ')}" if errors.any?
+
+      company = Company.find_by(id: result["target_id"]) or
+        raise InvalidResult, "#{result['target_id']}: no such company"
+      previous = ([ company.board_vendor, company.board_token ].join("/") if company.board_vendor)
+
+      case result["outcome"]
+      when "adopted"
+        company.assign_attributes(
+          board_vendor: result.dig("board", "vendor"), board_token: result.dig("board", "board"),
+          board_overlap: result["overlap"], board_evidence: result["evidence"], board_confirmed_at: Time.current
+        )
+      when "rejected", "none"
+        company.assign_attributes(board_vendor: nil, board_token: nil, board_overlap: nil, board_evidence: nil,
+                                  board_confirmed_at: nil)
+      end
+      return result["outcome"] unless company.changed?
+
+      different = company.board_vendor_changed? || company.board_token_changed?
+      ApplicationRecord.transaction do
+        company.save!
+        AuditEvent.record_write!(company, actor: ACTOR, reasoning: board_reasoning(result, previous)) if different
+      end
+      result["outcome"]
+    end
+
     private
+
+    def board_reasoning(result, previous)
+      text =
+        if result["outcome"] == "adopted"
+          "A free board lists the same roles as the watched page: verification reads it in place of the page" \
+            "#{", replacing #{previous}" if previous}. #{result['evidence']}"
+        else
+          "The #{previous} board no longer lists the watched page's roles: verification reads the page again. " \
+            "#{result['evidence'] || 'No board was found.'}"
+        end
+      [ text, "Run #{@run_id}." ].join(" ")
+    end
 
     # Each posting's outcome, on the check that read the page, and the near-miss call under it.
     def record_matches(page_check, result)
@@ -102,7 +147,7 @@ module Verifier
 
     def verdict_reasoning(verdict, result)
       read = if result["outcome"] == "ok"
-        "#{result['listing_count']} roles read on #{result['url']}#{', the whole list' if result['complete']}."
+        "#{result['listing_count']} roles read on #{result['checks'].first['url']}#{', the whole list' if result['complete']}."
       end
       [ verdict["reasoning"], verdict["location_note"], read, "Run #{@run_id}." ].compact_blank.join(" ")
     end
@@ -129,6 +174,8 @@ module Verifier
         next_page_url: check["next_page_url"],
         input_truncated: check["input_truncated"] || false,
         listings: check["listings"] || [],
+        listings_read_at: check["listings_read_at"],
+        reused_from: reused_read(company, check["reused_from"]),
         notes: check["notes"],
         content_hash: check["content_hash"],
         checked_at: check["checked_at"],
@@ -136,6 +183,13 @@ module Verifier
       )
       record_llm(page_check, check["llm"], called_at: check["checked_at"]) if check["llm"]
       page_check
+    end
+
+    # The earlier read a check reused its listings from: only ever one of this company's own.
+    def reused_read(company, id)
+      return if id.nil?
+
+      company.page_checks.find_by(id: id) or raise InvalidResult, "#{company.id}: the reused read #{id} is not this company's"
     end
 
     def record_llm(page_check, llm, called_at:)

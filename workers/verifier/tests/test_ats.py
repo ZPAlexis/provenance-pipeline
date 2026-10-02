@@ -265,3 +265,22 @@ def test_keeps_department_and_employment_type_where_the_vendor_records_them():
 
     assert (from_lever.department, from_lever.employment_type) == ("Revenue", "full_time")
     assert (from_ashby.department, from_ashby.employment_type) == ("Sales", "contract")
+
+
+def test_finds_every_guessed_board_that_lists_jobs():
+    def handler(request):
+        url = str(request.url)
+        if url == "https://boards-api.greenhouse.io/v1/boards/acme/jobs":
+            return httpx2.Response(200, json={"jobs": [{"title": "Line Cook", "absolute_url": "https://x/1"}]})
+        if url == "https://api.ashbyhq.com/posting-api/job-board/acme":
+            return httpx2.Response(200, json={"jobs": [{"title": "Sales Engineer", "jobUrl": "https://x/2"}]})
+        return httpx2.Response(404)
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+
+    found = list(ats.guessed_boards(["acme"], client, wait=lambda host: None))
+
+    assert [board for board, _ in found] == [
+        AtsBoard(vendor="greenhouse", board="acme"),
+        AtsBoard(vendor="ashby", board="acme"),
+    ]

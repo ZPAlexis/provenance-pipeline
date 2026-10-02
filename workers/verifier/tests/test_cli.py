@@ -2,8 +2,18 @@ import io
 import json
 
 from verifier import cli
-from verifier.cli import run, run_resolve
-from verifier.contract import MatchResult, PageResult, ResolutionResult, ResolveTarget, Target
+from verifier.cli import run, run_boards, run_resolve
+from verifier.contract import (
+    AtsBoard,
+    BoardResult,
+    BoardTarget,
+    Listing,
+    MatchResult,
+    PageResult,
+    ResolutionResult,
+    ResolveTarget,
+    Target,
+)
 from verifier.extract import CreditExhausted, ExtractionFailed
 from verifier.resolve import Resolver, ServicesReader
 
@@ -190,3 +200,28 @@ def test_verify_writes_one_result_per_company_with_its_verdicts(services, site, 
     (result,) = [VerificationResult.model_validate_json(line) for line in out.read_text().splitlines()]
     assert [v.verdict for v in result.verdicts] == ["verified_live"]
     assert (summary.pages, summary.verdicts) == (2, {"verified_live": 1})
+
+
+def test_boards_writes_one_result_per_company_and_tallies_what_was_adopted(tmp_path):
+    roles = ["Account Executive", "Solutions Engineer", "Data Engineer", "Product Designer", "Recruiter"]
+
+    class Reader:
+        def guess_boards(self, target):
+            if target.name == "Acme":
+                return iter([(AtsBoard(vendor="ashby", board="acme"), [Listing(title=title) for title in roles])])
+            return iter([])
+
+        def board_confirms(self, board, target):
+            return True
+
+        def board_links(self, board):
+            return None
+
+    out = tmp_path / "results.jsonl"
+    companies = [BoardTarget(id="c1", name="Acme", titles=roles), BoardTarget(id="c2", name="Other", titles=roles)]
+
+    summary = run_boards(companies, out, Reader(), log=io.StringIO())
+
+    results = [BoardResult.model_validate_json(line) for line in out.read_text().splitlines()]
+    assert [(result.target_id, result.outcome) for result in results] == [("c1", "adopted"), ("c2", "none")]
+    assert (summary.outcomes, summary.pages, summary.cost_usd) == ({"adopted": 1, "none": 1}, 0, 0.0)

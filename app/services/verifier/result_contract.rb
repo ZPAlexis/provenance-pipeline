@@ -88,6 +88,35 @@ module Verifier
       errors
     end
 
+    BOARD_OUTCOMES = %w[adopted rejected none error].freeze
+    # Mirrors workers/verifier/src/verifier/boards.py: a board is adopted only when
+    # it lists at least this share of the page's distinct roles.
+    ADOPT_OVERLAP = 0.9
+
+    def board_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be board" unless result["kind"] == "board"
+      errors << "target_id is missing" if result["target_id"].blank?
+      outcome = result["outcome"]
+      errors << "unknown outcome #{outcome.inspect}" unless BOARD_OUTCOMES.include?(outcome)
+      return errors unless %w[adopted rejected].include?(outcome)
+
+      board, overlap = result["board"], result["overlap"]
+      unless board.is_a?(Hash) && Company::BOARD_VENDORS.include?(board["vendor"]) && board["board"].is_a?(String) && board["board"].present?
+        errors << "board must name a known vendor and its board"
+      end
+      return errors << "overlap must be a share from 0 to 1" unless overlap.is_a?(Numeric) && overlap.between?(0, 1)
+
+      # Adopted on the roles alone: checked here too, not left to the worker.
+      if outcome == "adopted"
+        errors << "adopted with only #{(overlap * 100).round}% of the page's roles on the board" if overlap < ADOPT_OVERLAP
+        errors << "evidence is missing" if result["evidence"].blank?
+      end
+      errors
+    end
+
     def page_errors(check)
       return [ "not an object" ] unless check.is_a?(Hash)
 
@@ -96,6 +125,10 @@ module Verifier
       errors << "unknown outcome #{check['outcome'].inspect}" unless PageCheck::OUTCOMES.include?(check["outcome"])
       errors << "unknown step #{check['step'].inspect}" unless check["step"].nil? || PageCheck::STEPS.include?(check["step"])
       errors << "checked_at must be an ISO 8601 time" unless iso8601?(check["checked_at"])
+      unless check["listings_read_at"].nil? || iso8601?(check["listings_read_at"])
+        errors << "listings_read_at must be an ISO 8601 time"
+      end
+      errors << "a reused read must name the read it reused" if check["method"] == "reused" && check["reused_from"].blank?
       errors << "listing_count must be a count" unless check["listing_count"].nil? || count?(check["listing_count"])
       listings = check["listings"]
       unless listings.nil? || (listings.is_a?(Array) && listings.all? { |listing| listing.is_a?(Hash) && listing["title"].is_a?(String) })

@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1.2 complete.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path. Next: a pass to cut what repeat runs cost, then manual capture (1.5). See [Build stages](#build-stages).
+> **Status: Stage 1.2 complete.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path. A repeat run pays the LLM only for pages whose roles may have changed. Next: manual capture (1.5). See [Build stages](#build-stages).
 
 ---
 
@@ -96,7 +96,9 @@ The last row is the point: the most consequential write is withheld from every a
 companies     name, domain (dedup key), careers_page_url, ats_type,
               resolution_status, resolution_method, resolution_confidence,
               resolution_candidate_url, resolution_failure, resolved_at,
-              kind, kind_suggestion, kind_evidence, enrichment (jsonb), notes
+              kind, kind_suggestion, kind_evidence, board_vendor, board_token,
+              board_overlap, board_evidence, board_confirmed_at,
+              enrichment (jsonb), notes
 
 postings      company_id, role_title, location, posting_url, posted_on,
               source_slice, verification_state, roles_listed_count,
@@ -107,7 +109,8 @@ page_checks   company_id, run_id, purpose (resolution | verification), step,
               listing_count, stated_total, listings (jsonb snapshot),
               matches (jsonb: each posting's outcome and reasoning),
               listings_incomplete, single_job_posting, many_employers,
-              next_page_url, content_hash, checked_at
+              next_page_url, content_hash, reused_from_id, listings_read_at,
+              checked_at
 
 llm_calls     page_check_id, run_id, purpose (extract | resolve | match), model,
               settings, prompt_version, input_tokens, output_tokens, cost_usd
@@ -124,6 +127,7 @@ Notes on a few choices:
 - **`changes_made`, not `changes`** — the latter collides with `ActiveModel::Dirty#changes`.
 - **Page checks are evidence, not changes.** Every page read, whatever its outcome, is a `page_checks` row with a snapshot of every listing it saw, unfiltered, so a later search profile can be applied to past checks. Changes to companies and postings go through `audit_events`.
 - **`llm_calls` answers "what did this cost, and what produced it"** without the run directory: one row per model call, with the model the API reports having served, its settings, and a `prompt_version` hash over the prompt, output schema, and limits.
+- **A repeat read is paid for only when the roles may have changed.** A page that links to exactly the role pages it did last time reuses that read's listings, and its check names the read it reused (`reused_from_id`); listings are read in full again once 14 days old (`listings_read_at`). A company whose free ATS board lists at least 90% of its page's roles has that board recorded beside the page (`board_*`, with the evidence) and read in its place for 30 days; the page stays the one on record.
 - **Careers-page resolution is recorded beside the page:** how it was found, how sure we are (`high`, `medium`, `low`, or `confirmed` by a person), a held candidate, or why it failed. A low-confidence find waits in `resolution_candidate_url` and is never watched until a person confirms it.
 
 ### Verification fields
@@ -146,7 +150,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
   - **1.2a — Render and extract** ✅ read a careers page in a real browser and extract its listings; known job boards (Greenhouse, Lever, Ashby, Workday) are read through their APIs instead.
   - **1.2b — Resolve careers pages** ✅ find each company's careers page from its domain, cheapest step first, with a confidence; low-confidence finds wait for a person. Measured by hiding the known pages of 71 labeled companies and finding them again: 87% found, none wrong at high or medium confidence.
   - **1.2c — Match and verdict** ✅ read each watched page in full (pagination, "load more", ATS APIs), match every tracked posting against it, and record verdicts that follow the evidence. Measured against the research labels on fresh reads: 98% agreement, and no closed role reported open.
-- *Next:* a cost pass (reuse a page's listings when its text hasn't changed; prefer a company's free ATS board over an expensive page), then 1.5.
+  - **Cost pass** ✅ the LLM reads a page only when its role links changed (or every 14 days), and a company's own free ATS board is read in place of its page when it lists the same roles.
 - 1.3 — Scoped writes and provenance: short-lived, per-run agent credentials, checked at the single path every agent write goes through
 - 1.4 — Scheduled monitoring and digest: re-verify every watched company on a cadence — the sourcing mechanism, a scheduled re-run of 1.2 that catches both new roles and closures — then report what changed
 - 1.5 — Manual capture ("add by URL"): paste an employer careers link or a company domain to resolve, verify, and add it to the watch list
@@ -200,6 +204,7 @@ bin/rails verifier:candidates                    # low-confidence finds waiting 
 bin/rails "verifier:confirm[company_id]"         # or verifier:reject, verifier:set_page, verifier:kind
 bin/rails "verifier:status[company name or id]"  # one company: its page, checks, postings, history
 bin/rails verifier:verify                        # shows the plan and its cost; GO=1 runs it
+bin/rails verifier:find_boards                   # free boards listing the same roles as LLM-read pages (no API cost)
 bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
 ```
 

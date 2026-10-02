@@ -28,10 +28,22 @@ RSpec.describe Verifier::Status do
 
       expect(text).to include("Acme Robotics (acme.example)", "resolution: resolved, path_probe, high",
                               "watched page: #{company.careers_page_url}", "kind: not set")
-      expect(text).to include("ok, 25 listed of 393 [partial]")
+      expect(text).to include("ok via render+llm, 25 listed of 393 [partial]")
       expect(text).to include("RevOps Engineer: verified_live", "(Clay said not_found)")
       expect(text).to include("agent:verifier update resolution_status", "Found by path_probe.")
       expect(text).to include("verifier:set_page[#{company.id}]")
+    end
+
+    it "shows the board read in place of the page, and when its finding has gone stale" do
+      company.update!(board_vendor: "ashby", board_token: "acme", board_overlap: 0.975, board_evidence: "Lists the roles.",
+                      board_confirmed_at: 1.day.ago)
+
+      expect(described_class.company_lines(company).last).to eq(
+        "  board: ashby/acme, 98% of the page's roles, confirmed #{1.day.ago.utc.to_date}: read in place of the page"
+      )
+
+      company.update!(board_confirmed_at: 40.days.ago)
+      expect(described_class.company_lines(company).last).to include("so the page is read")
     end
 
     it "offers confirm and reject for a candidate" do

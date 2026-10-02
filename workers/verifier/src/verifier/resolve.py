@@ -28,6 +28,7 @@ comes back with the result, including what it cost, whatever the outcome.
 
 import re
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -295,7 +296,7 @@ class _Attempt:
             why = f"{guessed}, records the same company name."
         else:
             # The board's own link back to a company site says whose it is.
-            owner, host = _board_owner(self.reader.board_links(board), self.target.domain)
+            owner, host = board_owner(self.reader.board_links(board), self.target.domain)
             why = {
                 "confirmed": f"{guessed}, links to {host}, the company's own site.",
                 "elsewhere": f"{guessed}, links to {host}: another company's board.",
@@ -415,7 +416,7 @@ NOT_AN_OWNER = (
 )
 
 
-def _board_owner(links: list[str] | None, domain: str | None) -> tuple[str | None, str | None]:
+def board_owner(links: list[str] | None, domain: str | None) -> tuple[str | None, str | None]:
     """Whose board this is, from where its page links: ("confirmed" | "elsewhere" | None, the host)."""
     site = (domain or "").lower().removeprefix("www.")
     hosts = [
@@ -505,6 +506,10 @@ class ServicesReader:
     def guess_board(self, target: ResolveTarget) -> tuple[AtsBoard, list[Listing]] | None:
         candidates = ats.board_candidates(target.domain, target.name)
         return ats.find_board(candidates, self.services.http, wait=self.services.throttle.wait)
+
+    def guess_boards(self, target: ResolveTarget) -> Iterator[tuple[AtsBoard, list[Listing]]]:
+        candidates = ats.board_candidates(target.domain, target.name)
+        return ats.guessed_boards(candidates, self.services.http, wait=self.services.throttle.wait)
 
     def board_confirms(self, board: AtsBoard, target: ResolveTarget) -> bool:
         self.services.throttle.wait(ats.api_host(board))

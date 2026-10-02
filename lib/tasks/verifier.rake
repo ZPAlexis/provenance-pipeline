@@ -89,6 +89,14 @@ namespace :verifier do
     ENV["LIMIT"].present? ? scope.limit(Integer(ENV["LIMIT"])) : scope
   end
 
+  # Companies whose watched page is verified. An aggregator's postings belong to other employers:
+  # its own page says nothing about them.
+  watched = lambda do
+    Company.where(resolution_status: "resolved").where.not(kind: "aggregator").or(
+      Company.where(resolution_status: "resolved", kind: nil)
+    )
+  end
+
   money = ->(results) { results.sum { |r| Array(r["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } } }
 
   desc "Find careers pages for companies not yet attempted, and record them. Backs up first. [PAGE=on_record|none] " \
@@ -357,17 +365,10 @@ namespace :verifier do
        "estimated cost; runs only with GO=1, backing up first. RESULTS=dir records a passing Test B run's reads " \
        "instead of reading those pages again. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
   task verify: :environment do
-    # An aggregator's postings belong to other employers: its own page says nothing about them.
-    resolved = Company.where(resolution_status: "resolved").where.not(kind: "aggregator").or(
-      Company.where(resolution_status: "resolved", kind: nil)
-    )
-    companies = select_companies.call(resolved.where(id: Posting.select(:company_id))).to_a
+    companies = select_companies.call(watched.call.where(id: Posting.select(:company_id))).to_a
     abort "No resolved company has postings to verify." if companies.empty?
 
-    targets = companies.map do |company|
-      { id: company.id, url: company.careers_page_url, label: company.name, domain: company.domain, name: company.name,
-        postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location } } }
-    end
+    targets = companies.map { |company| Verifier::Targets.verify(company) }
 
     # Pages already read (a passing fresh Test B run): recorded as they are, never paid for twice.
     saved = [] # [run_id, result]: each saved read recorded under the run that made it
@@ -389,10 +390,16 @@ namespace :verifier do
       targets = targets.reject { |t| reused.include?(t[:id]) }
     end
 
-    # What one page read has cost so far, from the record: a guide, not a quote.
+    # What one page read has cost so far, from the record: a guide, not a quote. A company read
+    # through its confirmed board costs nothing; one with an earlier read may reuse it for nothing.
     per_page = LlmCall.where(purpose: "extract").average(:cost_usd).to_f
-    low, high = targets.size * per_page, targets.size * per_page * 3
+    via_board = targets.count { |t| t[:board] }
+    reusable = targets.count { |t| !t[:board] && t[:previous].any? }
+    paid = targets.size - via_board
+    low, high = (paid - reusable) * per_page, paid * per_page * 3
     puts "Plan: verify #{targets.sum { |t| t[:postings].size }} postings at #{targets.size} companies' watched pages."
+    puts "  #{via_board} read through a confirmed board (free); #{reusable} have earlier reads to reuse where " \
+         "their role links are unchanged (free when they are, a full read every 14 days)."
     puts format("Estimated cost: $%.2f–$%.2f (about $%.3f a page read so far; boards read through an ATS API cost " \
                 "nothing, and a list split across pages costs a read per page, up to %d).",
                 low, high, per_page, 10)
@@ -426,6 +433,29 @@ namespace :verifier do
     end
     puts "Cost of the pages read now: est. $#{format('%.4f', cost)}#{"   (details: #{run.dir})" if run}"
     report_stop.call(run) if run
+  end
+
+  desc "Look for a free ATS board listing the same roles as each page the LLM had to read, and read through it from " \
+       "then on. Never calls the LLM; backs up first. [COMPANY=name] [LIMIT=n]"
+  task find_boards: :environment do
+    targets = select_companies.call(watched.call).filter_map { |company| Verifier::Targets.board(company) }
+    abort "No company's page was read by the LLM since its board was last looked for." if targets.empty?
+
+    puts "Looking for boards for #{targets.size} companies whose pages the LLM read (no API cost)."
+    puts "Backed up to #{DatabaseBackup.call}\n\n"
+    run = build_worker.call("find_boards").run(targets, command: "boards")
+    ingest = Verifier::Ingest.new(run_id: run.id)
+    names = Company.where(id: targets.pluck(:id)).pluck(:id, :name).to_h
+    tally = Hash.new(0)
+    run.results.each do |result|
+      tally[ingest.board(result)] += 1
+      puts "  #{names[result['target_id']]}: #{result['outcome']}, #{result['evidence'] || result['reason']}"
+    rescue Verifier::Ingest::InvalidResult => e
+      puts "  NOT RECORDED, breaks the result contract: #{e.message}"
+    end
+    puts "\n#{tally['adopted']} boards read in place of their pages from now on; #{tally['rejected']} found but not " \
+         "listing the same roles; #{tally['none']} companies with no board found.   (details: #{run.dir})"
+    report_stop.call(run)
   end
 
   desc "Record a check you made yourself at the employer's page as a posting's verdict, audited as you. " \

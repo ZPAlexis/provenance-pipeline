@@ -89,6 +89,10 @@ class PageResult(BaseModel):
     many_employers_kind: Literal["recruiter", "job_board"] | None = None
     single_job_posting: bool = False  # the page is one job's own posting, not a list of openings
     next_page_url: str | None = None  # where the list continues, when the page links to its next page
+    # When the listings were last actually read by the LLM. A check that reused them
+    # (its role links unchanged) carries the original read's time, and the check reused.
+    listings_read_at: str | None = None
+    reused_from: str | None = None  # the stored page check whose listings were reused
     input_truncated: bool = False  # the model saw less than the whole page
     notes: str | None = None  # the extractor's short account of what the page showed
     content_hash: str | None = None  # sha256 of the normalized page text
@@ -191,6 +195,25 @@ class MatchResult(BaseModel):
     duration_ms: int = 0
 
 
+class PreviousRead(BaseModel):
+    """What a page showed when it was last read: reused when its role links are unchanged."""
+
+    page_check_id: str
+    url: str
+    final_url: str | None = None
+    listings: list[Listing] = Field(default_factory=list)
+    listing_count: int | None = None
+    stated_total: int | None = None
+    explicit_no_openings: bool = False
+    listings_incomplete: bool = False
+    many_employers: bool = False
+    many_employers_kind: Literal["recruiter", "job_board"] | None = None
+    single_job_posting: bool = False
+    next_page_url: str | None = None
+    content_hash: str | None = None
+    listings_read_at: str  # ISO 8601: when the LLM last actually read these listings
+
+
 class VerifyTarget(BaseModel):
     """A company's watched page and the postings to verify against it."""
 
@@ -200,6 +223,39 @@ class VerifyTarget(BaseModel):
     domain: str | None = None
     name: str | None = None
     postings: list[TrackedPosting]
+    # The company's own ATS board, confirmed to list the same roles: read through its
+    # API instead of rendering the page.
+    board: AtsBoard | None = None
+    previous: list[PreviousRead] = Field(default_factory=list)  # one per page of the list, from the last run
+
+
+class BoardTarget(BaseModel):
+    """A company whose watched page the LLM had to read: does a free board list the same roles?"""
+
+    id: str
+    name: str | None = None
+    domain: str | None = None
+    titles: list[str]  # the distinct role titles the page showed at its last full read
+
+
+class BoardResult(BaseModel):
+    """Whether a free board lists the same roles as a company's page: adopted only on the roles themselves."""
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["board"] = "board"
+    target_id: str
+    # adopted: read through it from now on; rejected: a board, but not the same roles;
+    # none: no board found; error: the search itself failed.
+    outcome: Literal["adopted", "rejected", "none", "error"]
+    reason: str | None = None  # why rejected or not searched: "low_overlap", "too_few_roles", "no_board_found"
+    board: AtsBoard | None = None  # the best board found, adopted or not
+    page_roles: int = 0  # distinct titles the page showed
+    board_roles: int = 0  # distinct titles on the board
+    overlap: float = 0.0  # share of the page's titles the board also lists
+    owner: Literal["confirmed", "elsewhere"] | None = None  # from its name record or where it links; evidence only
+    owner_host: str | None = None
+    evidence: str | None = None
+    duration_ms: int = 0
 
 
 class VerificationResult(BaseModel):

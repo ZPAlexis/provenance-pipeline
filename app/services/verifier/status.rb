@@ -35,8 +35,17 @@ module Verifier
         "  watched page: #{company.careers_page_url || '-'}#{" (#{company.ats_type})" if company.ats_type}",
         "  kind: #{company.kind || 'not set'}" +
           (company.kind_suggestion ? " (suggested: #{company.kind_suggestion}: #{company.kind_evidence})" : ""),
-        *("  candidate: #{company.resolution_candidate_url}" if company.resolution_candidate_url)
+        *("  candidate: #{company.resolution_candidate_url}" if company.resolution_candidate_url),
+        *board_line(company)
       ]
+    end
+
+    def board_line(company)
+      return [] unless company.board_vendor
+
+      use = company.board_in_use ? "read in place of the page" : "found over #{Company::BOARD_MAX_AGE.inspect} ago, so the page is read"
+      [ "  board: #{company.board_vendor}/#{company.board_token}, #{(company.board_overlap * 100).round}% of the page's " \
+        "roles, confirmed #{company.board_confirmed_at.utc.to_date}: #{use}" ]
     end
 
     def check_lines(company)
@@ -49,7 +58,8 @@ module Verifier
         listed = check.listing_count.nil? ? "" : ", #{check.listing_count} listed"
         listed += " of #{check.stated_total}" if check.stated_total
         "  #{check.checked_at.utc.strftime('%Y-%m-%d %H:%M')}  #{check.purpose}/#{check.step || '-'}  " \
-          "#{check.outcome}#{listed}#{" [#{flags.join(', ')}]" if flags.any?}#{" (#{check.reason})" if check.reason}\n" \
+          "#{check.outcome}#{" via #{check.read_via}" if check.read_via}#{listed}" \
+          "#{" [#{flags.join(', ')}]" if flags.any?}#{" (#{check.reason})" if check.reason}\n" \
           "      #{check.url}"
       end
     end

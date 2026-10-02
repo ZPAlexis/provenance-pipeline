@@ -17,6 +17,9 @@ SCROLL_PASSES = 4  # to trigger lazy-loaded listings
 LOAD_MORE_CLICKS = 10  # "load more" / "show more" buttons clicked per page, as a person would
 LOAD_MORE_PAUSE_MS = 1_000  # between clicks: each one asks the site for more
 MAX_PAGES = 10  # pages of one list followed through its "next" links, per company
+# A page's listings are reused while its role links are unchanged, but read again in
+# full at least this often, so a change the link signal misses cannot hide for long.
+LISTINGS_MAX_AGE_DAYS = 14
 
 # What the LLM is shown of a page.
 MAX_TEXT_CHARS = 150_000  # ~40k tokens; the largest board seen so far renders ~63k chars

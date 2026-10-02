@@ -8,15 +8,15 @@ page that could not be read is never mistaken for one with no openings.
 
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from urllib.parse import urlsplit
+from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx2
 from playwright.sync_api import Browser
 
 from verifier import ats
-from verifier.config import MAX_PAGES
-from verifier.contract import Listing, PageResult, Target
+from verifier.config import LISTINGS_MAX_AGE_DAYS, MAX_PAGES
+from verifier.contract import AtsBoard, Listing, PageResult, PreviousRead, Target
 from verifier.extract import ExtractionFailed, Extractor, input_truncated, link_url
 from verifier.politeness import HostThrottle
 from verifier.render import RenderedPage, RenderError, render
@@ -67,7 +67,7 @@ def verify_page(target: Target, services: Services) -> PageResult:
 
 
 def check_page(
-    target: Target, services: Services, *, ats_fallback: bool = True
+    target: Target, services: Services, *, ats_fallback: bool = True, previous: PreviousRead | None = None
 ) -> tuple[PageResult, RenderedPage | None]:
     """Check one page, returning the rendered page too when there is one, for its links.
 
@@ -149,6 +149,11 @@ def check_page(
         except (httpx2.HTTPError, ValueError, KeyError, TypeError):
             fallback = f"ats_api_failed:{board.vendor}"
 
+    # The page links to exactly the role pages it did last time: the same roles, so the
+    # listings read then are reused and the LLM is not paid to read them again.
+    if previous and (reused := _reused(previous, page)):
+        return finish(**reused, **seen)
+
     try:
         extraction, usage = services.extractor.extract(page)
     except ExtractionFailed as error:
@@ -180,9 +185,47 @@ def check_page(
         single_job_posting=extraction.single_job_posting,
         next_page_url=link_url(page, extraction.next_page),
         input_truncated=input_truncated(page),
+        listings_read_at=checked_at,
         notes=extraction.notes,
         llm=usage,
         **seen,
+    )
+
+
+def read_board(target: Target, board: AtsBoard, services: Services) -> PageResult:
+    """A company's confirmed board, read through its API in place of its watched page.
+
+    Comes back ok only with listings: a board that cannot be read, or that lists
+    nothing, is a reason to read the page itself, never evidence that every role closed.
+    """
+    started = time.monotonic()
+    checked_at = datetime.now(UTC).isoformat(timespec="seconds")
+
+    def finish(**fields) -> PageResult:
+        elapsed = int((time.monotonic() - started) * 1000)
+        return PageResult(
+            target_id=target.id,
+            url=ats.board_url(board),
+            checked_at=checked_at,
+            ats=board,
+            duration_ms=elapsed,
+            **fields,
+        )
+
+    if ats.on_company_host(board) and (refusal := services.robots.check(ats.api_url(board))):
+        return finish(outcome="blocked", reason=refusal)
+    try:
+        listings = _fetch_board(board, services)
+    except (httpx2.HTTPError, ValueError, KeyError, TypeError):
+        return finish(outcome="error", reason="board_unreadable")
+    if not listings:
+        return finish(outcome="error", reason="board_empty")
+    return finish(
+        outcome="ok",
+        method=f"ats_api:{board.vendor}",
+        listings=listings,
+        listing_count=len(listings),
+        notes=f"Read through the company's confirmed {board.vendor} board, in place of {target.url}.",
     )
 
 
@@ -197,7 +240,12 @@ def _fetch_board(board, services: Services) -> list[Listing]:
 
 
 def read_all(
-    target: Target, services: Services, *, ats_fallback: bool = True, max_pages: int | None = None
+    target: Target,
+    services: Services,
+    *,
+    ats_fallback: bool = True,
+    max_pages: int | None = None,
+    previous: list[PreviousRead] | None = None,
 ) -> tuple[list[PageResult], list[Listing], bool]:
     """Read a page and every next page of its list, up to `max_pages`.
 
@@ -205,9 +253,13 @@ def read_all(
     whole list was read: through an ATS API; up to the total the page states;
     or to a last page that neither links further nor says it shows only part.
     One job's own posting is never a whole list.
+
+    `previous` holds what each page showed at the last run. Every page is judged
+    on its own: one whose role links are unchanged reuses its listings.
     """
     max_pages = max_pages or MAX_PAGES
-    result, _ = check_page(target, services, ats_fallback=ats_fallback)
+    previous = _by_url(previous or [])
+    result, _ = check_page(target, services, ats_fallback=ats_fallback, previous=previous.get(_url_key(target.url)))
     checks = [result]
     if result.outcome != "ok":
         return checks, [], False
@@ -219,7 +271,12 @@ def read_all(
         if _url_key(next_url) in visited:
             break
         visited.add(_url_key(next_url))
-        page_result, _ = check_page(target.model_copy(update={"url": next_url}), services, ats_fallback=False)
+        page_result, _ = check_page(
+            target.model_copy(update={"url": next_url}),
+            services,
+            ats_fallback=False,
+            previous=previous.get(_url_key(next_url)),
+        )
         checks.append(page_result)
         if page_result.outcome != "ok":
             break
@@ -253,3 +310,71 @@ def _listing_key(listing: Listing) -> tuple:
 
 def _url_key(url: str) -> str:
     return url.split("#", 1)[0].rstrip("/").lower()
+
+
+def _by_url(reads: list[PreviousRead]) -> dict[str, PreviousRead]:
+    """Previous reads by the address asked for and the one it ended at."""
+    by_url: dict[str, PreviousRead] = {}
+    for read in reads:
+        for url in (read.url, read.final_url):
+            if url:
+                by_url.setdefault(_url_key(url), read)
+    return by_url
+
+
+# Query parameters that track a visit rather than name a role.
+_TRACKING = ("utm_", "gh_src", "trk")
+
+
+def _reused(previous: PreviousRead, page: RenderedPage) -> dict | None:
+    """The previous read's listings, when the page still shows the same roles and they are fresh enough."""
+    read_at = datetime.fromisoformat(previous.listings_read_at)
+    if read_at.tzinfo is None:
+        read_at = read_at.replace(tzinfo=UTC)
+    if datetime.now(UTC) - read_at > timedelta(days=LISTINGS_MAX_AGE_DAYS) or not _same_roles(previous, page):
+        return None
+    return {
+        "outcome": "ok",
+        "method": "reused",
+        "listings": previous.listings,
+        "listing_count": previous.listing_count,
+        "stated_total": previous.stated_total,
+        "explicit_no_openings": previous.explicit_no_openings,
+        "listings_incomplete": previous.listings_incomplete,
+        "many_employers": previous.many_employers,
+        "many_employers_kind": previous.many_employers_kind,
+        "single_job_posting": previous.single_job_posting,
+        "next_page_url": previous.next_page_url,
+        "listings_read_at": previous.listings_read_at,
+        "reused_from": previous.page_check_id,
+        "notes": f"The page links to the same role pages as when it was read on {read_at.date()}: "
+        "its listings were reused, not read again.",
+    }
+
+
+def _same_roles(previous: PreviousRead, page: RenderedPage) -> bool:
+    """The page links to exactly the role pages it did before: none gone, none new of the same kind.
+
+    "Of the same kind" means under the same folder as the earlier role links
+    (/jobs/123 and /jobs/456). Links that do not tell the roles apart (a role
+    without one, or roles sharing one) fall back to the page's whole text being
+    identical.
+    """
+    role_links = {_link_key(listing.url) for listing in previous.listings if listing.url}
+    if previous.listings and len(role_links) == len(previous.listings):
+        prefixes = {_link_prefix(url) for url in role_links}
+        return {_link_key(href) for _, href in page.links if _link_prefix(href) in prefixes} == role_links
+    return previous.content_hash is not None and previous.content_hash == page.content_hash
+
+
+def _link_prefix(url: str) -> tuple[str, str]:
+    parts = urlsplit(url)
+    return parts.netloc.lower().removeprefix("www."), parts.path.rstrip("/").rsplit("/", 1)[0]
+
+
+def _link_key(url: str) -> str:
+    parts = urlsplit(url)
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith(_TRACKING)])
+    return urlunsplit(
+        (parts.scheme.lower(), parts.netloc.lower().removeprefix("www."), parts.path.rstrip("/"), query, "")
+    )
