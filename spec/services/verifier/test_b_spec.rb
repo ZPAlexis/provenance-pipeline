@@ -106,13 +106,12 @@ RSpec.describe Verifier::TestB do
   end
 
   describe "fresh targets" do
-    it "sends each company's watched page and its scored postings, stored check or not" do
+    it "sends each company's watched page and all its postings, so a passing run can be recorded as it is" do
       posting = labeled("verified_live")
+      unlabeled = create(:posting, company: company, role_title: "Designer")
 
-      expect(described_class.new.verify_targets).to eq([
-        { id: company.id, url: company.careers_page_url, label: "Acme", domain: "acme.example", name: "Acme",
-          postings: [ { id: posting.id, title: "RevOps Engineer", location: posting.location } ] }
-      ])
+      expect(described_class.new.verify_targets.sole).to include(id: company.id, url: company.careers_page_url)
+      expect(described_class.new.verify_targets.sole[:postings].pluck(:id)).to contain_exactly(posting.id, unlabeled.id)
     end
 
     it "says why a posting at a company with no watched page is not measured" do

@@ -116,3 +116,17 @@ def test_a_watched_page_that_is_one_jobs_posting_proves_only_that_job(services, 
 
     assert result.reason == "single_job_posting"
     assert [v.verdict for v in result.verdicts] == ["verified_live", None]
+
+
+# Found in the first real run: TCS's careers portal, down for maintenance, read as a whole list of none.
+def test_a_rendered_page_that_showed_no_roles_and_did_not_say_so_is_never_a_whole_list(services, site):
+    _, listings, complete = read_all(target(site, "maintenance.html"), services)
+
+    assert listings == []
+    assert not complete
+
+
+def test_a_page_that_says_it_has_no_openings_is_a_whole_list_of_none(services, site):
+    _, listings, complete = read_all(target(site, "empty.html"), services)
+
+    assert (listings, complete) == ([], True)

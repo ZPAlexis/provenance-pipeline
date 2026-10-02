@@ -236,7 +236,12 @@ def _whole_list(checks: list[PageResult], listings: list[Listing]) -> bool:
     if last.outcome != "ok" or any(check.single_job_posting for check in checks):
         return False
     if (first.method or "").startswith("ats_api"):
-        return True
+        return True  # the vendor's own list, empty or not
+    if not listings and not any(check.explicit_no_openings for check in checks):
+        # A rendered page that showed no roles and did not say it has none (a
+        # maintenance screen, an app that never loaded, a landing page) is not
+        # evidence that any role is closed.
+        return False
     if first.stated_total is not None:
         return len(listings) >= first.stated_total
     return not last.listings_incomplete and not last.next_page_url

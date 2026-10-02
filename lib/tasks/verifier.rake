@@ -279,23 +279,42 @@ namespace :verifier do
 
   desc "Test B: verify labeled postings against their company's watched page and compare with the label. Read-only. " \
        "REPLAY=1 matches the listings stored by earlier checks (no page fetched); FRESH=1 reads every watched page " \
-       "now (costs API credit). NO_LLM=1 leaves near-misses undecided. [COMPANY=name] [MODEL=...]"
+       "now (costs API credit). RESULTS=dir[,dir] re-scores saved runs (no API cost; a later run wins for a " \
+       "company). NO_LLM=1 leaves near-misses undecided. [COMPANY=name] [IDS=company_id,...] [MODEL=...]"
   task test_b: :environment do
     # Reading every watched page costs API credit, so it is asked for by name, never a default.
-    replay = ENV["REPLAY"].present?
-    abort "Say REPLAY=1 (stored listings, no API cost) or FRESH=1 (reads every watched page now)." unless replay || ENV["FRESH"].present?
+    replay, rescore = ENV["REPLAY"].present?, ENV["RESULTS"].present?
+    unless replay || rescore || ENV["FRESH"].present?
+      abort "Say REPLAY=1 (stored listings, no API cost), RESULTS=dir (re-score a saved run, no API cost), " \
+            "or FRESH=1 (reads every watched page now)."
+    end
 
     postings = Posting.includes(:company)
     postings = postings.joins(:company).where("lower(companies.name) = ?", ENV["COMPANY"].strip.downcase) if ENV["COMPANY"].present?
+    postings = postings.where(company_id: ENV["IDS"].split(",").map(&:strip)) if ENV["IDS"].present?
     test = Verifier::TestB.new(postings)
-    targets = replay ? test.replay_targets : test.verify_targets
-    abort "No labeled postings at a company with a watched page#{' and a stored check of it' if replay}." if targets.empty?
 
-    flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
-    mode = replay ? "replay" : "fresh"
-    puts "Test B (#{mode}): #{targets.sum { |t| t[:postings].size }} labeled postings at #{targets.size} companies, " \
-         "#{flags.any? ? 'no LLM' : "near-misses judged by #{ENV['MODEL'].presence || 'the default model'}"}\n\n"
-    run = build_worker.call("test_b_#{mode}").run(targets, command: replay ? "match" : "verify", flags: flags)
+    if rescore
+      # Saved runs scored again, e.g. after recording hand checks: nothing is read, nothing is spent.
+      dirs = ENV["RESULTS"].split(",").map { |dir| Pathname.new(dir.strip) }
+      results = dirs.map { |dir| dir.join("results.jsonl") }.select(&:exist?)
+                    .flat_map { |file| file.readlines.map { |line| JSON.parse(line) } }
+                    .index_by { |result| result["target_id"] }.values
+      abort "No results in #{dirs.join(', ')}." if results.empty?
+      mode = "re-scored"
+      run = Verifier::Worker::Run.new(dir: run_dir.call("test_b_rescore").tap { |dir| FileUtils.mkdir_p(dir) },
+                                      results: results, stopped: nil)
+      puts "Test B (re-scored): #{results.size} companies' saved reads from #{dirs.map(&:basename).join(', ')}\n\n"
+    else
+      targets = replay ? test.replay_targets : test.verify_targets
+      abort "No labeled postings at a company with a watched page#{' and a stored check of it' if replay}." if targets.empty?
+
+      flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
+      mode = replay ? "replay" : "fresh"
+      puts "Test B (#{mode}): #{targets.sum { |t| t[:postings].size }} postings at #{targets.size} companies, " \
+           "#{flags.any? ? 'no LLM' : "near-misses judged by #{ENV['MODEL'].presence || 'the default model'}"}\n\n"
+      run = build_worker.call("test_b_#{mode}").run(targets, command: replay ? "match" : "verify", flags: flags)
+    end
     report = test.evaluate(run.results)
 
     puts format("\n%-24s %-34s %-14s %-14s %-8s %s", "company", "posting", "label", "verdict", "method", "result")
@@ -335,7 +354,8 @@ namespace :verifier do
   end
 
   desc "Verify postings against their company's watched page and record the verdicts. Shows the plan and its " \
-       "estimated cost; runs only with GO=1, backing up first. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
+       "estimated cost; runs only with GO=1, backing up first. RESULTS=dir records a passing Test B run's reads " \
+       "instead of reading those pages again. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
   task verify: :environment do
     # An aggregator's postings belong to other employers: its own page says nothing about them.
     resolved = Company.where(resolution_status: "resolved").where.not(kind: "aggregator").or(
@@ -347,6 +367,26 @@ namespace :verifier do
     targets = companies.map do |company|
       { id: company.id, url: company.careers_page_url, label: company.name, domain: company.domain, name: company.name,
         postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location } } }
+    end
+
+    # Pages already read (a passing fresh Test B run): recorded as they are, never paid for twice.
+    saved = [] # [run_id, result]: each saved read recorded under the run that made it
+    if ENV["RESULTS"].present?
+      wanted = targets.to_h { |t| [ t[:id], t ] }
+      ENV["RESULTS"].split(",").map { |dir| Pathname.new(dir.strip) }.each do |dir|
+        file = dir.join("results.jsonl")
+        abort "No results in #{dir}." unless file.exist?
+        file.readlines.map { |line| JSON.parse(line) }.each do |result|
+          next unless result["kind"] == "verification" && wanted.key?(result["target_id"])
+
+          saved.reject! { |_, earlier| earlier["target_id"] == result["target_id"] } # a later run wins
+          saved << [ dir.basename.to_s, result ]
+        end
+        puts "Reusing reads from #{dir.basename} (#{((Time.current - file.mtime) / 3600).round(1)} hours old)."
+      end
+      puts "#{saved.size} companies' saved reads are recorded as they are, not read again."
+      reused = saved.to_set { |_, result| result["target_id"] }
+      targets = targets.reject { |t| reused.include?(t[:id]) }
     end
 
     # What one page read has cost so far, from the record: a guide, not a quote.
@@ -361,26 +401,31 @@ namespace :verifier do
     # From here on, verdicts are written: back up first.
     puts "Backed up to #{DatabaseBackup.call}\n\n"
     flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
-    run = build_worker.call("verify").run(targets, command: "verify", flags: flags)
-
-    ingest = Verifier::Ingest.new(run_id: run.id)
     tally = Hash.new(0)
     invalid = []
-    run.results.each do |result|
-      ingest.verification(result).each { |what, count| tally[what] += count }
-    rescue Verifier::Ingest::InvalidResult => e
-      invalid << e.message
+    record = lambda do |results, run_id|
+      ingest = Verifier::Ingest.new(run_id: run_id)
+      results.each do |result|
+        ingest.verification(result).each { |what, count| tally[what] += count }
+      rescue Verifier::Ingest::InvalidResult => e
+        invalid << e.message
+      end
     end
 
-    puts "\nRecorded #{run.results.size - invalid.size}/#{targets.size} companies: " \
+    saved.group_by(&:first).each { |run_id, pairs| record.call(pairs.map(&:last), run_id) }
+    run = build_worker.call("verify").run(targets, command: "verify", flags: flags) if targets.any?
+    record.call(run.results, run.id) if run
+
+    recorded = saved.size + (run ? run.results.size : 0) - invalid.size
+    puts "\nRecorded #{recorded}/#{saved.size + targets.size} companies: " \
          "#{tally[:written]} verdicts written, #{tally[:unchanged]} confirmed unchanged, " \
          "#{tally[:inconclusive]} inconclusive (no verdict)"
     invalid.each { |message| puts "  NOT RECORDED, breaks the result contract: #{message}" }
-    cost = run.results.sum do |r|
+    cost = Array(run&.results).sum do |r|
       Array(r["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } + r.dig("match_llm", "cost_usd").to_f
     end
-    puts "Cost: est. $#{format('%.4f', cost)}   (details: #{run.dir})"
-    report_stop.call(run)
+    puts "Cost of the pages read now: est. $#{format('%.4f', cost)}#{"   (details: #{run.dir})" if run}"
+    report_stop.call(run) if run
   end
 
   desc "Record a check you made yourself at the employer's page as a posting's verdict, audited as you. " \
@@ -396,6 +441,19 @@ namespace :verifier do
     Verifier::HandCheck.record!(posting, verdict: ENV["VERDICT"].to_s.strip, note: ENV["NOTE"], roles: roles,
                                          work_mode: ENV["WORK_MODE"].presence)
     puts "#{posting.company.name} / #{posting.role_title}: #{posting.verification_state}, checked by hand"
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message
+  end
+
+  desc "Undo the verifier's latest verdict on a posting, restoring what it replaced. Audited as you. " \
+       "Usage: REASON=\"why the verdict was wrong\" bin/rails \"verifier:undo_verdict[posting_id]\""
+  task :undo_verdict, [ :id ] => :environment do |_task, args|
+    posting = Posting.find_by(id: args[:id]) or abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
+
+    # A correction cannot be regenerated from source, so it is backed up like any batch that writes.
+    puts "Backed up to #{DatabaseBackup.call}"
+    Verifier::HandCheck.undo_verdict!(posting, reasoning: ENV["REASON"])
+    puts "#{posting.company.name} / #{posting.role_title}: back to #{posting.verification_state}"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message
   end

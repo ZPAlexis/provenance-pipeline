@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1.2 in progress.** The verification worker renders careers pages and extracts their listings (1.2a); careers-page resolution (1.2b) is next. See [Build stages](#build-stages).
+> **Status: Stage 1.2 complete.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path. Next: a pass to cut what repeat runs cost, then manual capture (1.5). See [Build stages](#build-stages).
 
 ---
 
@@ -69,6 +69,14 @@ In practice the free-text evidence field was read every time to interpret the en
 **3. Gate expensive operations behind cheap ones.**
 Deterministic checks first (does the URL resolve? has the page changed?), model calls only on what survives. In prototyping, the AI research step cost ~25x the standard enrichment columns combined.
 
+Two more came out of building the verifier against real pages:
+
+**4. A negative needs the whole list.**
+A role is marked closed only when the verifier read every role the page lists: through the ATS's own API, to the end of its pagination, or up to the total the page states. Anything less (page one of fifty, a page that showed no roles and didn't say it has none, one job's ad instead of a list) is *inconclusive*, and no verdict is written. The rule is enforced twice: by the worker, and again at the write path.
+
+**5. What the agent isn't sure of goes to a person, and the person's call is on the record too.**
+A low-confidence find is held as a candidate, never watched. The operator confirms, rejects, sets the right page, says what kind of company it is, records a check they made themselves, or undoes a verdict, and each of those is audited under the human's own identity with their reason. Imported research labels turned out to be wrong often enough that checks made at the source, by the verifier or a person, are the authority.
+
 ## The permission model
 
 **This is the part that matters.** Each agent gets a deliberately different scope:
@@ -86,11 +94,23 @@ The last row is the point: the most consequential write is withheld from every a
 
 ```
 companies     name, domain (dedup key), careers_page_url, ats_type,
-              enrichment (jsonb), notes
+              resolution_status, resolution_method, resolution_confidence,
+              resolution_candidate_url, resolution_failure, resolved_at,
+              kind, kind_suggestion, kind_evidence, enrichment (jsonb), notes
 
 postings      company_id, role_title, location, posting_url, posted_on,
               source_slice, verification_state, roles_listed_count,
               work_mode, last_checked_at, enrichment (jsonb)
+
+page_checks   company_id, run_id, purpose (resolution | verification), step,
+              url, final_url, outcome, reason, read_via, ats_vendor, ats_board,
+              listing_count, stated_total, listings (jsonb snapshot),
+              matches (jsonb: each posting's outcome and reasoning),
+              listings_incomplete, single_job_posting, many_employers,
+              next_page_url, content_hash, checked_at
+
+llm_calls     page_check_id, run_id, purpose (extract | resolve | match), model,
+              settings, prompt_version, input_tokens, output_tokens, cost_usd
 
 audit_events  actor, action, target (polymorphic), changes_made (jsonb),
               model_version, reasoning, occurred_at
@@ -102,6 +122,9 @@ Notes on a few choices:
 - **JSONB `enrichment`** on both core tables. Upstream sources vary in shape — one export carries 7 columns, another 28. Structured core plus JSONB avoids a migration every time a source adds a field. Promote a key to a real column once it's filtered or sorted on regularly.
 - **`source_slice` lives on postings, not companies**, because one company can surface in several geographic pulls — the slice describes where the posting was found.
 - **`changes_made`, not `changes`** — the latter collides with `ActiveModel::Dirty#changes`.
+- **Page checks are evidence, not changes.** Every page read, whatever its outcome, is a `page_checks` row with a snapshot of every listing it saw, unfiltered, so a later search profile can be applied to past checks. Changes to companies and postings go through `audit_events`.
+- **`llm_calls` answers "what did this cost, and what produced it"** without the run directory: one row per model call, with the model the API reports having served, its settings, and a `prompt_version` hash over the prompt, output schema, and limits.
+- **Careers-page resolution is recorded beside the page:** how it was found, how sure we are (`high`, `medium`, `low`, or `confirmed` by a person), a held candidate, or why it failed. A low-confidence find waits in `resolution_candidate_url` and is never watched until a person confirms it.
 
 ### Verification fields
 
@@ -119,10 +142,11 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 **Stage 1 — Job Finder.** A thin vertical slice through the whole stack rather than a horizontal layer, so something useful ships before the CRUD work and the governance model is proven on real data early.
 
 - **1.1 — Schema and ingest** ✅
-- **1.2 — Verification agent** (Playwright + LLM, Python worker) ← *current*, in three slices:
-  - **1.2a — Render and extract** ✅ read a careers page in a real browser and extract its listings; known job boards (Greenhouse, Lever, Ashby, Workday) are read through their APIs instead. See [`workers/verifier`](workers/verifier).
-  - 1.2b — Resolve careers pages from a company's domain
-  - 1.2c — Match postings against listings and record verdicts
+- **1.2 — Verification agent** ✅ (Playwright + LLM, Python worker; see [`workers/verifier`](workers/verifier)), in three slices:
+  - **1.2a — Render and extract** ✅ read a careers page in a real browser and extract its listings; known job boards (Greenhouse, Lever, Ashby, Workday) are read through their APIs instead.
+  - **1.2b — Resolve careers pages** ✅ find each company's careers page from its domain, cheapest step first, with a confidence; low-confidence finds wait for a person. Measured by hiding the known pages of 71 labeled companies and finding them again: 87% found, none wrong at high or medium confidence.
+  - **1.2c — Match and verdict** ✅ read each watched page in full (pagination, "load more", ATS APIs), match every tracked posting against it, and record verdicts that follow the evidence. Measured against the research labels on fresh reads: 98% agreement, and no closed role reported open.
+- *Next:* a cost pass (reuse a page's listings when its text hasn't changed; prefer a company's free ATS board over an expensive page), then 1.5.
 - 1.3 — Scoped writes and provenance: short-lived, per-run agent credentials, checked at the single path every agent write goes through
 - 1.4 — Scheduled monitoring and digest: re-verify every watched company on a cadence — the sourcing mechanism, a scheduled re-run of 1.2 that catches both new roles and closures — then report what changed
 - 1.5 — Manual capture ("add by URL"): paste an employer careers link or a company domain to resolve, verify, and add it to the watch list
@@ -156,7 +180,30 @@ bin/rails clay:summary
 
 Every write the importer makes is recorded in `audit_events` as a create or an update, with `changes_made` holding `{ attribute => [before, after] }` (JSONB enrichment is diffed key by key). Rows are atomic, and re-importing a file writes nothing.
 
-`clay:summary` breaks down postings by slice, verification state, and work mode, and lists **suspect negatives** — `not_found` verdicts with zero roles listed. Those are the renderer's first targets in Stage 1.2.
+`clay:summary` breaks down postings by slice, verification state, and work mode, and lists **suspect negatives** — `not_found` verdicts with zero roles listed.
+
+### The verifier
+
+The worker lives in [`workers/verifier`](workers/verifier) (Python, managed with [uv](https://docs.astral.sh/uv/)):
+
+```bash
+cd workers/verifier && uv sync && uv run playwright install chromium
+```
+
+It calls the Anthropic API with a key kept outside the repo, in `~/.config/provenance-pipeline/anthropic.env` (mode 600, one line: `ANTHROPIC_API_KEY=...`). Rails reads it and hands it to the worker process alone; it is never exported to the shell. Tests never call the API.
+
+Everything runs through rake. Each run writes its targets and results under `tmp/verifier/` (ignored) and records what it found through the one audited write path:
+
+```bash
+bin/rails verifier:resolve                       # find careers pages (backs up the database first)
+bin/rails verifier:candidates                    # low-confidence finds waiting for a person
+bin/rails "verifier:confirm[company_id]"         # or verifier:reject, verifier:set_page, verifier:kind
+bin/rails "verifier:status[company name or id]"  # one company: its page, checks, postings, history
+bin/rails verifier:verify                        # shows the plan and its cost; GO=1 runs it
+bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
+```
+
+The tests that decide whether a slice works run locally against the private target list: `verifier:test_a`, `verifier:test_resolution`, and `verifier:test_b` (`REPLAY=1` replays stored page reads at no API cost; `FRESH=1` reads the pages now).
 
 Boot the server:
 
@@ -166,4 +213,4 @@ bin/rails server
 
 ## Note on data
 
-Source CSVs are **not committed** — they contain a live job-search target list. Keep exports outside the repo or in an ignored path.
+Source CSVs are **not committed** — they contain a live job-search target list. Keep exports outside the repo or in an ignored path. The verifier's run directories (`tmp/verifier/`) and database backups (`~/.local/share/provenance-pipeline/backups/`) hold the same list, so they stay out of the repo too.
