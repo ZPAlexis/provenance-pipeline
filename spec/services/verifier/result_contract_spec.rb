@@ -57,6 +57,37 @@ RSpec.describe Verifier::ResultContract do
     )
   end
 
+  it "refuses a reused read that does not name the read it reused, or a read time that is not a time" do
+    expect(described_class.page_errors(check(method: "reused"))).to include("a reused read must name the read it reused")
+    expect(described_class.page_errors(check(method: "reused", reused_from: "pc1", listings_read_at: "2026-09-28T12:00:00Z")))
+      .to be_empty
+    expect(described_class.page_errors(check(listings_read_at: "last week"))).to include("listings_read_at must be an ISO 8601 time")
+  end
+
+  describe ".board_errors" do
+    def board(**overrides)
+      { "kind" => "board", "target_id" => "c1", "outcome" => "adopted", "board" => { "vendor" => "ashby", "board" => "acme" },
+        "overlap" => 0.95, "evidence" => "ashby/acme lists 95% of the roles." }.merge(overrides.stringify_keys)
+    end
+
+    it "accepts a well-formed board, and an empty search" do
+      expect(described_class.board_errors(board)).to be_empty
+      expect(described_class.board_errors(board(outcome: "none", board: nil, overlap: 0.0, evidence: nil))).to be_empty
+    end
+
+    it "refuses an adoption below the overlap a board must show, or without its evidence" do
+      expect(described_class.board_errors(board(overlap: 0.89))).to include(/adopted with only 89%/)
+      expect(described_class.board_errors(board(evidence: ""))).to include("evidence is missing")
+    end
+
+    it "refuses an unknown outcome, vendor, or overlap" do
+      expect(described_class.board_errors(board(outcome: "maybe"))).to include(/unknown outcome "maybe"/)
+      expect(described_class.board_errors(board(board: { "vendor" => "taleo", "board" => "acme" })))
+        .to include("board must name a known vendor and its board")
+      expect(described_class.board_errors(board(overlap: 1.5))).to include("overlap must be a share from 0 to 1")
+    end
+  end
+
   describe ".verification_errors" do
     def verification(**overrides)
       { "kind" => "verification", "target_id" => "c1", "url" => "https://acme.example/careers", "outcome" => "ok",

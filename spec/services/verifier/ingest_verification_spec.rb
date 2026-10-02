@@ -96,4 +96,34 @@ RSpec.describe Verifier::Ingest, "#verification" do
     expect { ingest.verification(result(verdict("verified_live", posting_id: stranger.id))) }
       .to raise_error(described_class::InvalidResult, /not this company's/)
   end
+
+  it "keeps a check that reused an earlier read, linked to it, with when its listings were actually read" do
+    earlier = create(:page_check, company: company, purpose: "verification", url: company.careers_page_url,
+                                  checked_at: Time.utc(2026, 9, 28, 12))
+    reused = page(method: "reused", llm: nil, reused_from: earlier.id, listings_read_at: "2026-09-28T12:00:00+00:00")
+
+    ingest.verification(result(verdict("verified_live"), checks: [ reused ]))
+
+    check = company.page_checks.where(read_via: "reused").sole
+    expect(check).to have_attributes(reused_from: earlier, listings_read_at: Time.utc(2026, 9, 28, 12))
+    expect(check.llm_calls).to be_empty
+  end
+
+  it "refuses a check that claims to reuse another company's read, writing nothing" do
+    foreign = create(:page_check)
+    reused = page(method: "reused", llm: nil, reused_from: foreign.id, listings_read_at: "2026-09-28T12:00:00+00:00")
+
+    expect { ingest.verification(result(verdict("verified_live"), checks: [ reused ])) }
+      .to raise_error(described_class::InvalidResult, /reused read .* is not this company's/)
+    expect(company.page_checks.count).to eq(0)
+  end
+
+  it "says a verdict read through the company's board was read there" do
+    board = page(url: "https://job-boards.greenhouse.io/acme", final_url: nil, method: "ats_api:greenhouse", llm: nil,
+                 ats: { "vendor" => "greenhouse", "board" => "acme" })
+
+    ingest.verification(result(verdict("verified_live"), checks: [ board ]))
+
+    expect(posting.audit_events.sole.reasoning).to include("12 roles read on https://job-boards.greenhouse.io/acme, the whole list.")
+  end
 end

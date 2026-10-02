@@ -119,6 +119,33 @@ RSpec.describe Company do
     end
   end
 
+  describe "board" do
+    let(:company) do
+      create(:company, :resolved, board_vendor: "greenhouse", board_token: "acme", board_overlap: 0.97,
+                                  board_evidence: "Lists 97% of the page's roles.", board_confirmed_at: 1.day.ago)
+    end
+
+    it "is read in place of the page while its finding is fresh" do
+      expect(company.board_in_use).to eq(vendor: "greenhouse", board: "acme")
+
+      company.update!(board_confirmed_at: 31.days.ago)
+      expect(company.board_in_use).to be_nil
+    end
+
+    # The board was matched against the roles the old page showed.
+    it "is forgotten when the watched page changes" do
+      company.update!(careers_page_url: "https://acme.example/jobs")
+
+      expect(company.reload).to have_attributes(board_vendor: nil, board_token: nil, board_overlap: nil,
+                                                board_evidence: nil, board_confirmed_at: nil)
+    end
+
+    it "requires a known vendor, and a board name and confirmation time with one" do
+      expect(build(:company, board_vendor: "taleo", board_token: "acme", board_confirmed_at: Time.current)).not_to be_valid
+      expect(build(:company, board_vendor: "lever")).not_to be_valid
+    end
+  end
+
   describe "deletion" do
     let(:company) { create(:company) }
 

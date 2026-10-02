@@ -35,6 +35,13 @@ class Company < ApplicationRecord
   KINDS = %w[employer recruiter aggregator].freeze
   KIND_SUGGESTIONS = %w[recruiter aggregator].freeze
 
+  # A free ATS board found to list the same roles as the watched page
+  # (board_overlap of them, by title): verification reads its API in place of
+  # the page while the finding is fresh. careers_page_url stays the page on
+  # record; a different page voids the board, which was matched against this one.
+  BOARD_VENDORS = %w[greenhouse lever ashby workday].freeze
+  BOARD_MAX_AGE = 30.days
+
   validates :name, presence: true
   validates :domain, uniqueness: true, allow_nil: true
   validates :ats_type, inclusion: { in: ATS_TYPES }, allow_nil: true
@@ -51,6 +58,10 @@ class Company < ApplicationRecord
     validates :resolution_candidate_url, :resolution_method, :resolution_confidence, presence: true
   end
   validates :resolution_failure, presence: true, if: -> { resolution_status == "failed" }
+  validates :board_vendor, inclusion: { in: BOARD_VENDORS }, allow_nil: true
+  validates :board_token, :board_confirmed_at, presence: true, if: -> { board_vendor.present? }
+
+  before_save :forget_board, if: -> { careers_page_url_changed? && board_vendor.present? && !board_vendor_changed? }
 
   scope :with_careers_page, -> { where.not(careers_page_url: nil) }
   scope :needing_careers_page, -> { where(careers_page_url: nil) }
@@ -71,5 +82,18 @@ class Company < ApplicationRecord
     else
       find_or_initialize_by(name: name)
     end
+  end
+
+  # The board verification reads in place of the page, while its finding is fresh; nil to read the page.
+  def board_in_use
+    return unless board_vendor.present? && board_confirmed_at&.after?(BOARD_MAX_AGE.ago)
+
+    { vendor: board_vendor, board: board_token }
+  end
+
+  private
+
+  def forget_board
+    assign_attributes(board_vendor: nil, board_token: nil, board_overlap: nil, board_evidence: nil, board_confirmed_at: nil)
   end
 end

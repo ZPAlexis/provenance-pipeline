@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_02_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_02_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -49,6 +49,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_000001) do
     t.string "kind"
     t.string "kind_suggestion"
     t.text "kind_evidence"
+    t.string "board_vendor"
+    t.string "board_token"
+    t.decimal "board_overlap", precision: 4, scale: 3
+    t.text "board_evidence"
+    t.datetime "board_confirmed_at"
     t.index ["domain"], name: "index_companies_on_domain", unique: true, where: "(domain IS NOT NULL)"
     t.index ["enrichment"], name: "index_companies_on_enrichment", using: :gin
     t.index ["name"], name: "index_companies_on_name"
@@ -102,8 +107,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_000001) do
     t.boolean "single_job_posting", default: false, null: false
     t.string "next_page_url"
     t.jsonb "matches", default: [], null: false
+    t.uuid "reused_from_id"
+    t.datetime "listings_read_at"
     t.index ["company_id", "checked_at"], name: "index_page_checks_on_company_id_and_checked_at"
     t.index ["company_id"], name: "index_page_checks_on_company_id"
+    t.index ["reused_from_id"], name: "index_page_checks_on_reused_from_id"
     t.index ["run_id"], name: "index_page_checks_on_run_id"
   end
 
@@ -130,5 +138,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_000001) do
 
   add_foreign_key "llm_calls", "page_checks"
   add_foreign_key "page_checks", "companies"
+  add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify
   add_foreign_key "postings", "companies"
 end

@@ -8,7 +8,7 @@ companies; the renderer carries the rest.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
@@ -153,6 +153,13 @@ def find_board(
     would otherwise read as a company with no openings. `wait` is called with each
     API host before its request, to keep requests spaced.
     """
+    return next(guessed_boards(candidates, client, wait), None)
+
+
+def guessed_boards(
+    candidates: list[str], client: httpx2.Client, wait: Callable[[str], None]
+) -> Iterator[tuple[AtsBoard, list[Listing]]]:
+    """Every guessed board that exists and lists at least one job, in the order tried."""
     for vendor in GUESSABLE_VENDORS:
         for candidate in candidates:
             board = AtsBoard(vendor=vendor, board=candidate)
@@ -162,8 +169,7 @@ def find_board(
             except (httpx2.HTTPError, ValueError, KeyError, TypeError):
                 continue
             if listings:
-                return board, listings
-    return None
+                yield board, listings
 
 
 def _get_json(client: httpx2.Client, url: str, **params):
