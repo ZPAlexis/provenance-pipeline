@@ -61,7 +61,18 @@ module Verifier
       verdicts.each_with_index do |verdict, index|
         errors.concat(verdict_errors(verdict, complete: result["complete"]).map { |error| "verdict #{index + 1}: #{error}" })
       end
+      if verdicts.any? { |verdict| verdict.is_a?(Hash) && verdict["verdict"] == "not_found" } && read_nothing?(result, checks)
+        errors << "not_found from a page that listed no roles and did not say it has none"
+      end
       errors
+    end
+
+    # A rendered read that found no roles, where no page said it has none: a
+    # maintenance screen or an app that never loaded is not a list of zero.
+    def read_nothing?(result, checks)
+      result["listing_count"].to_i.zero? &&
+        checks.none? { |check| check.is_a?(Hash) && check["explicit_no_openings"] } &&
+        !checks.first.to_h["method"].to_s.start_with?("ats_api")
     end
 
     # A negative is written only from the whole list: checked here too, not left to the worker alone.

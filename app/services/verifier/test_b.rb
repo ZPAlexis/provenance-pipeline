@@ -120,10 +120,14 @@ module Verifier
 
     # One target per company: its scored postings, and the listings its watched page showed.
     # One target per company with a watched page: the page, and its scored postings.
+    # Every posting at the company, labeled or not: only labeled ones are scored,
+    # but a passing run's results can then be recorded as they are
+    # (verifier:verify RESULTS=), so these pages are never read twice.
     def verify_targets
-      @cases.select { |c| c.scored_label? && c.watched_url }.group_by(&:company_id).map do |company_id, cases|
-        { id: company_id, url: cases.first.watched_url, label: cases.first.company, domain: cases.first.domain,
-          name: cases.first.company, postings: cases.map { |c| { id: c.posting_id, title: c.title, location: c.location } } }
+      ids = @cases.select { |c| c.scored_label? && c.watched_url }.map(&:company_id).uniq
+      Company.where(id: ids).includes(:postings).order(:name).map do |company|
+        { id: company.id, url: company.careers_page_url, label: company.name, domain: company.domain, name: company.name,
+          postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location } } }
       end
     end
 

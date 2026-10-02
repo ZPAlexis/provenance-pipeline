@@ -33,4 +33,25 @@ RSpec.describe Verifier::HandCheck do
       expect(described_class.latest_verdict(posting)).to be_nil
     end
   end
+
+  describe ".undo_verdict!" do
+    it "restores what the verifier's latest verdict replaced, audited as the operator with why" do
+      pending_posting = create(:posting, verification_state: "pending")
+      pending_posting.update!(verification_state: "not_found", last_checked_at: Time.utc(2026, 10, 2, 14), roles_listed_count: 0)
+      AuditEvent.record_write!(pending_posting, actor: Verifier::Ingest::ACTOR, reasoning: "Run x.")
+
+      described_class.undo_verdict!(pending_posting, reasoning: "The portal was down for maintenance: no roles were read.")
+
+      expect(pending_posting.reload).to have_attributes(verification_state: "pending", last_checked_at: nil, roles_listed_count: nil)
+      event = pending_posting.audit_events.order(:occurred_at).last
+      expect(event.actor).to eq(AuditEvent::OPERATOR)
+      expect(event.reasoning).to include("Undid the verifier's verdict of #{Time.current.utc.to_date} (pending -> not_found).",
+                                         "down for maintenance")
+    end
+
+    it "refuses without a reason, or with no verifier verdict to undo" do
+      expect { described_class.undo_verdict!(posting, reasoning: "Wrong.") }.to raise_error(ArgumentError, /no verdict/)
+      expect { described_class.undo_verdict!(posting, reasoning: " ") }.to raise_error(ArgumentError, /REASON/)
+    end
+  end
 end

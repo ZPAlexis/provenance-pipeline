@@ -18,6 +18,25 @@ module Verifier
       end
     end
 
+    UNDONE = %w[verification_state last_checked_at roles_listed_count work_mode].freeze
+
+    # Restores what the verifier's latest verdict replaced, for a verdict the
+    # operator judges was reached on bad evidence. Audited as theirs, with why.
+    def undo_verdict!(posting, reasoning:, actor: AuditEvent::OPERATOR)
+      raise ArgumentError, "say why in REASON=\"...\": it becomes the audit reasoning" if reasoning.blank?
+
+      event = posting.audit_events.where(actor: Ingest::ACTOR).where("changes_made ? 'verification_state'")
+                     .order(:occurred_at).last or raise ArgumentError, "no verdict by the verifier to undo"
+      state = event.changes_made["verification_state"]
+      ApplicationRecord.transaction do
+        posting.update!(event.changes_made.slice(*UNDONE).transform_values(&:first))
+        AuditEvent.record_write!(
+          posting, actor: actor,
+          reasoning: "Undid the verifier's verdict of #{event.occurred_at.utc.to_date} (#{state.join(' -> ')}). #{reasoning}"
+        )
+      end
+    end
+
     # The verdict the operator's latest hand check left, read from the posting's
     # history: what verification_state was once that check was recorded.
     def latest_verdict(posting)

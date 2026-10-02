@@ -1,30 +1,60 @@
 # verifier
 
-The Python worker behind Stage 1.2. It has two commands. `extract` renders careers pages in a real browser and writes the job listings each one shows. `resolve` finds a company's careers page from its domain and name. Either way it writes one JSON result per target and never touches the database: Rails writes the targets file, runs the worker, validates every result against a fixed contract, and records it through one audited write path.
+The Python worker behind Stage 1.2. It never touches the database: Rails writes a targets file, runs the worker, validates every result against a fixed contract, and records it through one audited write path. One JSON result per target, appended as it goes, so a run that stops early keeps everything it finished.
 
 ```bash
-uv run verifier extract --targets targets.json --out results.jsonl [--model claude-haiku-4-5]
-uv run verifier resolve --targets companies.json --out resolutions.jsonl [--model claude-haiku-4-5]
+uv run verifier extract --targets targets.json --out results.jsonl   # read careers pages, list their roles
+uv run verifier resolve --targets companies.json --out results.jsonl # find each company's careers page
+uv run verifier verify  --targets companies.json --out results.jsonl # read each watched page in full, match its postings
+uv run verifier match   --targets snapshots.json --out results.jsonl # match against listings read before (nothing fetched)
 ```
 
-In practice it is run from Rails, which supplies the API credential:
+Every command takes `--model` (default `claude-haiku-4-5`) and `--delay` (seconds between requests to one host, default 5). `verify` and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
 
-```bash
-bin/rails "verifier:extract[https://example.com/careers]"   # one page
-bin/rails verifier:test_a                                    # Test A over every page with ground truth
-bin/rails verifier:resolve                                   # find and record careers pages (backs up first)
-bin/rails verifier:candidates                                # low-confidence finds waiting for a human
-bin/rails verifier:test_resolution                           # hide known pages, find them again
-```
+Exit codes: 0 finished; 2 bad input; 3 stopped, API credit exhausted; 4 stopped, credential missing or rejected; 5 stopped, the LLM service kept failing.
 
-## How a page is checked
+## How a page is read
 
-1. **robots.txt** is honored. A disallowed page is never requested, and an unreachable robots.txt counts as "disallow". When the company has a board on Greenhouse, Lever, or Ashby, found by its domain and name, the listings are read from that vendor's public API instead, and the result is marked `robots_disallowed_ats_fallback`, so the data's source stays visible.
-2. The page is **rendered in Chromium**, which runs its JavaScript, waits for it to settle, scrolls to trigger lazy loading, and reads every frame, since many job boards are embedded in iframes.
-3. If the page is, or embeds, a **Greenhouse, Lever, Ashby, or Workday** board, the listings come from that vendor's API: exact, free, and for Workday every page of its paginated results. Workday's API is on the company's own careers host, so it is checked against that host's robots.txt too.
-4. Otherwise **Claude** reads the rendered text and returns the listings as structured output. The page's links are numbered and the model answers with a link's number, so URLs come back exactly as the page had them. Calls stream, which leaves room for boards with hundreds of roles.
+1. **robots.txt is honored.** A disallowed page is never requested; an unreachable robots.txt counts as "disallow" and is retried once.
+2. **A known board is read through its vendor's public API**: Greenhouse, Lever, Ashby, or Workday, whether the address is the board, one job on it, or a company page that embeds it. Exact, free, and complete. Workday's API sits on the company's own host, so its robots.txt decides.
+3. **Otherwise the page is rendered in Chromium**: its JavaScript runs, it is scrolled for lazy loading, "load more" / "show more" buttons are clicked the way a person would (buttons only, never links, up to ten times), and every frame is read.
+4. **Claude reads the rendered text** and returns structured output: each role with its title, location, link (by number, so URLs come back exactly as the page had them), work mode, department, and employment type when the page states them; plus what the page itself says about the list: a stated total, "no openings", only part of the list (paginated, filtered to one department), one job's own posting, or many employers' roles.
+5. **Pagination is followed** through the "next page" link the extractor points to, up to ten pages per company.
 
-The crawler identifies itself in its user agent, waits between requests to the same host, and never tries to get past a bot challenge. A challenged or blocked page is reported as `inaccessible`, never as "no openings".
+The crawler names itself in its user agent, waits between requests to one host, and never tries to get past a bot challenge: a challenged or refused page is `inaccessible`, never "no openings".
+
+## How a careers page is found
+
+Cheapest, most certain step first. A page counts as found only when a check reads the company's own listings off it, or reads that it has none.
+
+1. **The page already on record**, if it still lists jobs.
+2. **Common paths** on the company's domain (`/careers`, `/jobs`, ...). A plain request goes first; only a path that answers is rendered.
+3. **Homepage links** that say careers or jobs (English, Portuguese, Spanish), on the company's own site or into a known board.
+4. **One link further** from a careers landing page that only links to its jobs, or a page showing only part of them: "All jobs" before a single department.
+5. **A guessed board** on Greenhouse, Lever, or Ashby, from the domain and name, kept only if its vendor records the same company name or **its own page links home to the company's domain**. A guess that links to another company's site is discarded.
+6. **Claude picks a link** from the homepage's numbered links, as a last resort.
+
+Every result carries a confidence, so a person looks only where it matters. **High**: the company's own site, or a page it links to. **Medium**: a guessed board confirmed by its vendor's name record or its home link. **Low**: an unconfirmed guess, a link Claude picked, or a page that still shows only part of its list. A low-confidence find comes back as a *candidate* that Rails never watches until a person confirms it.
+
+One job's own posting is never a careers page. A company's own page of many employers' roles comes back as a candidate with a *suggested kind*: a recruiter's client roles (its careers page, once the operator says so) or an aggregator's listings (never its careers page).
+
+## How postings are verified
+
+Each company's watched page is read in full, then every tracked posting is matched against everything read. Matching knows nothing about what anyone is looking for:
+
+1. **The same title**, ignoring case, punctuation, accents, and "Sr."/"Jr."
+2. **A close variant**: one title's words all within the other's, when the longer adds no level of responsibility ("Solutions Engineer" / "Senior Solutions Engineer, LATAM", but not "... Manager").
+3. **Near-misses only** (half the words shared) go to Claude, one call per page. A "same role" answer is not trusted when each title names something the other lacks.
+
+The location picks which listing is the posting's and is noted when it differs; it never decides the verdict. The verdict follows the evidence:
+
+| What was read | Matched | Not matched |
+|---|---|---|
+| The whole list (an ATS API, every page, or up to the stated total) | `verified_live` | `not_found` |
+| Only part of it, or a page that showed no roles and didn't say it has none | `verified_live` | *inconclusive*: no verdict |
+| Nothing: the site refused us, or robots.txt keeps us off | `inaccessible` | `inaccessible` |
+
+A watched page is never swapped for a guessed board during verification: resolution decides the page, verification only reads it.
 
 ## Development
 
@@ -35,16 +65,4 @@ uv run ruff check . && uv run ruff format --check .
 uv run pytest
 ```
 
-Tests run against a local synthetic site with a fake LLM: no network, no API key, no cost.
-
-## How a careers page is found
-
-Cheapest, most certain step first. A page counts as found only when a check reads listings off it, or reads that it has none.
-
-1. **The page already on record**, if there is one and it still lists jobs.
-2. **Common paths** on the company's domain (`/careers`, `/jobs`, `/about/careers`, `/company/careers`). A plain request goes first, and only a path that answers is rendered.
-3. **Homepage links** that say careers or jobs (in English, Portuguese, or Spanish) on the company's own site, or that lead to a known ATS board.
-4. **A guessed ATS board** on Greenhouse, Lever, or Ashby, from the domain and name.
-5. **Claude picks a link** from the homepage's numbered links, as a last resort.
-
-Every result carries a confidence, so a human looks only where it matters. **High**: a page on the company's own site, or a board its own homepage links to. **Medium**: a guessed Greenhouse board whose recorded company name matches. **Low**: an unconfirmed guess or a link Claude picked. A low-confidence find comes back as a *candidate*: Rails holds it apart from the watched page until a person confirms or rejects it, and that decision is audited as theirs. Every page checked along the way, and what each LLM call cost, is kept as evidence, whatever the outcome.
+Tests run against a local synthetic site (JavaScript-rendered lists, iframes, pagination, "load more", one job's posting, a maintenance page) with a fake LLM: no network, no API key, no cost.

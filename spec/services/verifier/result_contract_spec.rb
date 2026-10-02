@@ -60,7 +60,7 @@ RSpec.describe Verifier::ResultContract do
   describe ".verification_errors" do
     def verification(**overrides)
       { "kind" => "verification", "target_id" => "c1", "url" => "https://acme.example/careers", "outcome" => "ok",
-        "complete" => true, "checks" => [ check ],
+        "complete" => true, "listing_count" => 1, "checks" => [ check ],
         "verdicts" => [ { "posting_id" => "p1", "verdict" => "not_found", "method" => "none", "reasoning" => "Not there." } ] }
         .merge(overrides.stringify_keys)
     end
@@ -72,6 +72,15 @@ RSpec.describe Verifier::ResultContract do
     # The rule that keeps a role on page two from being marked closed, enforced at the write path too.
     it "refuses a negative from part of a list" do
       expect(described_class.verification_errors(verification(complete: false))).to include("verdict 1: not_found from part of a list")
+    end
+
+    # Found in the first real run: a careers portal down for maintenance, read as a whole list of none.
+    it "refuses a negative from a read that found no roles, unless a page said it has none or an ATS API listed none" do
+      empty = verification(listing_count: 0, checks: [ check(listing_count: 0, listings: []) ])
+
+      expect(described_class.verification_errors(empty)).to include(/listed no roles and did not say it has none/)
+      expect(described_class.verification_errors(verification(listing_count: 0, checks: [ check(listing_count: 0, explicit_no_openings: true) ]))).to be_empty
+      expect(described_class.verification_errors(verification(listing_count: 0, checks: [ check(listing_count: 0, method: "ats_api:lever") ]))).to be_empty
     end
 
     it "accepts no verdict (inconclusive) from part of a list" do
