@@ -41,6 +41,7 @@ EXTRACTION = PageExtraction(
     explicit_no_openings=False,
     listings_incomplete=False,
     many_employers=False,
+    many_employers_kind=None,
     single_job_posting=False,
     stated_total=None,
     next_page=None,

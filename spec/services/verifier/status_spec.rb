@@ -27,7 +27,7 @@ RSpec.describe Verifier::Status do
       text = described_class.lines(company).join("\n")
 
       expect(text).to include("Acme Robotics (acme.example)", "resolution: resolved, path_probe, high",
-                              "watched page: #{company.careers_page_url}")
+                              "watched page: #{company.careers_page_url}", "kind: not set")
       expect(text).to include("ok, 25 listed of 393 [partial]")
       expect(text).to include("RevOps Engineer: verified_live", "(Clay said not_found)")
       expect(text).to include("agent:verifier update resolution_status", "Found by path_probe.")

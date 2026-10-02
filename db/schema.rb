@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_01_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_02_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -46,6 +46,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_01_000002) do
     t.string "resolution_candidate_url"
     t.string "resolution_failure"
     t.datetime "resolved_at"
+    t.string "kind"
+    t.string "kind_suggestion"
+    t.text "kind_evidence"
     t.index ["domain"], name: "index_companies_on_domain", unique: true, where: "(domain IS NOT NULL)"
     t.index ["enrichment"], name: "index_companies_on_enrichment", using: :gin
     t.index ["name"], name: "index_companies_on_name"

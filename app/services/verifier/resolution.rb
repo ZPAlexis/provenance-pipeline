@@ -13,7 +13,7 @@ module Verifier
     def targets(companies)
       companies.reject { |company| anonymised?(company) }.map do |company|
         { id: company.id, label: company.name, domain: company.domain, name: company.name,
-          known_url: company.careers_page_url }
+          known_url: company.careers_page_url, kind: company.kind }
       end
     end
 

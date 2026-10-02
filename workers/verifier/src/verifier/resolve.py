@@ -12,12 +12,18 @@ A careers landing page that only links to its jobs, or a page that shows only
 some of them, is followed one link further (page_link), to the jobs page or the
 fuller board, at the confidence of the page that linked to it.
 
+A company's own page of many employers' roles is a recruiter's openings or an
+aggregator's listings: which, the operator decides. Until then it comes back
+as a candidate with a suggested kind; once the operator confirms "recruiter",
+such pages are its careers page.
+
 Confidence says how much a human needs to look: a page on the company's own
 site, or one its own pages link to, is high; a guessed board whose vendor
-records the same company name is medium; an unconfirmed guess or an LLM pick is
-low, and comes back as a candidate for a human to confirm, never as the page to
-watch. Every check made along the way comes back with the result, including
-what it cost, whatever the outcome.
+records the same company name, or whose own page links to the company's site,
+is medium; a guessed board that links to another company's site is discarded;
+an unconfirmed guess or an LLM pick is low, and comes back as a candidate for a
+human to confirm, never as the page to watch. Every check made along the way
+comes back with the result, including what it cost, whatever the outcome.
 """
 
 import re
@@ -42,7 +48,7 @@ from verifier.contract import (
 )
 from verifier.extract import CreditExhausted, ExtractionFailed, LinkChoice, LlmConfigError, link_url
 from verifier.pipeline import Services, check_page, read_homepage
-from verifier.render import RenderedPage
+from verifier.render import RenderedPage, RenderError, render
 
 COMMON_PATHS = ("/careers", "/jobs", "/about/careers", "/company/careers")
 
@@ -102,6 +108,7 @@ class PageReader(Protocol):
     def homepage(self, target: ResolveTarget, url: str) -> tuple[PageResult, RenderedPage | None]: ...
     def guess_board(self, target: ResolveTarget) -> tuple[AtsBoard, list[Listing]] | None: ...
     def board_confirms(self, board: AtsBoard, target: ResolveTarget) -> bool: ...
+    def board_links(self, board: AtsBoard) -> list[str] | None: ...
 
 
 class LinkPicker(Protocol):
@@ -184,12 +191,12 @@ class _Attempt:
         if not checked:
             return None
         result, page = checked
-        yields = _yields(result)
+        yields = _yields(result, self.target.kind)
         if (
             depth == 0
             and page
             and result.outcome == "ok"
-            and not result.many_employers
+            and not (result.many_employers and self.target.kind != "recruiter")
             and (not yields or _partial(result))
         ):
             # A landing page, or a partial one: the jobs, or all of them, are one link further.
@@ -206,7 +213,7 @@ class _Attempt:
                 if found and (not yields or _found_count(found) > (result.listing_count or 0)):
                     return found
         if not yields:
-            return None
+            return self.kind_candidate(result, step, evidence) if self.suggests_kind(result) else None
         if _partial(result):
             # We could not see the whole list: a person confirms it before it is watched.
             shown = f"{result.listing_count} of {result.stated_total}" if result.stated_total else "only some"
@@ -219,6 +226,38 @@ class _Attempt:
             method=step,
             confidence=confidence,
             evidence=evidence,
+        )
+
+    def suggests_kind(self, result: PageResult) -> bool:
+        """The company's own page lists many employers' roles, and nobody has said yet what kind of company it is."""
+        host = urlsplit(result.final_url or result.url).netloc.lower().removeprefix("www.")
+        site = (self.target.domain or "").lower().removeprefix("www.")
+        return (
+            result.outcome == "ok"
+            and result.many_employers
+            and self.target.kind is None
+            and bool(result.listing_count)
+            and bool(site)
+            and (host == site or host.endswith("." + site))
+        )
+
+    def kind_candidate(self, result: PageResult, step, evidence) -> ResolutionResult:
+        """Held for the operator: a recruiter's page is its careers page; an aggregator's is not."""
+        recruiter = result.many_employers_kind == "recruiter"
+        reads_as = "a recruiter's openings for its clients" if recruiter else "a job board of other companies' postings"
+        kind_evidence = (
+            f"Its own page {result.final_url or result.url} lists {result.listing_count} roles at many employers, "
+            f"and reads as {reads_as}."
+        )
+        return self.finish(
+            outcome="candidate",
+            careers_page_url=_watch_url(result),
+            ats=result.ats,
+            method=step,
+            confidence="low",
+            evidence=" ".join(filter(None, [evidence, kind_evidence, "Confirm the company's kind to decide."])),
+            kind_suggestion="recruiter" if recruiter else "aggregator",
+            kind_evidence=kind_evidence,
         )
 
     def check(self, url, step) -> tuple[PageResult, RenderedPage | None] | None:
@@ -250,17 +289,29 @@ class _Attempt:
                 listing_count=len(listings),
             )
         )
-        confirmed = self.reader.board_confirms(board, self.target)
         guessed = f"A {board.vendor} board named {board.board!r}, guessed from the company's name or domain"
+        if self.reader.board_confirms(board, self.target):
+            owner, host = "confirmed", None
+            why = f"{guessed}, records the same company name."
+        else:
+            # The board's own link back to a company site says whose it is.
+            owner, host = _board_owner(self.reader.board_links(board), self.target.domain)
+            why = {
+                "confirmed": f"{guessed}, links to {host}, the company's own site.",
+                "elsewhere": f"{guessed}, links to {host}: another company's board.",
+                None: f"{guessed}; nothing confirms it is this company's (its page names no company site).",
+            }[owner]
+        self.checks[-1] = self.checks[-1].model_copy(update={"notes": why})
+        if owner == "elsewhere":
+            self.checks[-1] = self.checks[-1].model_copy(update={"reason": "board_of_another_company"})
+            return None  # discarded: the ladder goes on
         return self.finish(
-            outcome="resolved" if confirmed else "candidate",
+            outcome="resolved" if owner == "confirmed" else "candidate",
             careers_page_url=url,
             ats=board,
             method="ats_guess",
-            confidence="medium" if confirmed else "low",
-            evidence=f"{guessed}, records the same company name."
-            if confirmed
-            else f"{guessed}; nothing confirms it is this company's.",
+            confidence="medium" if owner == "confirmed" else "low",
+            evidence=why,
         )
 
     def try_link_pick(self, page: RenderedPage, home_index: int) -> ResolutionResult | None:
@@ -327,18 +378,57 @@ def careers_links(page: RenderedPage, domain: str, *, from_homepage: bool) -> li
     return links[:MAX_HOMEPAGE_LINKS]
 
 
-def _yields(result: PageResult) -> bool:
+def _yields(result: PageResult, kind: str | None = None) -> bool:
     """A careers page: its own listings were read off it, or it says it has none.
 
     One job's own page is not one: it is what a posting links to, and watching it
-    would see that job and never the next.
+    would see that job and never the next. A page of many employers' roles is one
+    only for a company the operator confirmed is a recruiter: those roles are its
+    openings.
     """
     return (
         result.outcome == "ok"
-        and not result.many_employers
+        and (not result.many_employers or kind == "recruiter")
         and not _one_job_page(result)
         and (bool(result.listing_count) or result.explicit_no_openings)
     )
+
+
+# Hosts a board page links to that say nothing about whose board it is: the
+# vendors themselves, social sites, and cookie or privacy services.
+NOT_AN_OWNER = (
+    *NOT_A_BOARD,
+    "lever.co",
+    "ashbyhq.com",
+    "greenhouse.io",
+    "greenhouse.com",
+    "myworkdayjobs.com",
+    "workday.com",
+    "smartrecruiters.com",
+    "workable.com",
+    "onetrust.com",
+    "cookielaw.org",
+    "cookiepedia.co.uk",
+    "trustarc.com",
+    "gstatic.com",
+    "apple.com",
+)
+
+
+def _board_owner(links: list[str] | None, domain: str | None) -> tuple[str | None, str | None]:
+    """Whose board this is, from where its page links: ("confirmed" | "elsewhere" | None, the host)."""
+    site = (domain or "").lower().removeprefix("www.")
+    hosts = [
+        host
+        for host in (urlsplit(link).netloc.lower().removeprefix("www.") for link in links or [])
+        if host and not any(host == other or host.endswith("." + other) for other in NOT_AN_OWNER)
+    ]
+    own = next((host for host in hosts if site and (host == site or host.endswith("." + site))), None)
+    if own:
+        return "confirmed", own
+    if hosts:
+        return "elsewhere", max(set(hosts), key=hosts.count)
+    return None, None
 
 
 def _job_url(url: str | None) -> bool:
@@ -419,3 +509,16 @@ class ServicesReader:
     def board_confirms(self, board: AtsBoard, target: ResolveTarget) -> bool:
         self.services.throttle.wait(ats.api_host(board))
         return ats.names_match(ats.board_name(board, self.services.http), target.name)
+
+    def board_links(self, board: AtsBoard) -> list[str] | None:
+        """Where the board's own page links off the vendor's site; None when the page could not be read."""
+        url = ats.board_url(board)
+        if self.services.robots.check(url):
+            return None
+        host = urlsplit(url).netloc
+        self.services.throttle.wait(host)
+        try:
+            page = render(self.services.browser, url)
+        except RenderError:
+            return None
+        return [href for _, href in page.links if urlsplit(href).netloc not in ("", host)]

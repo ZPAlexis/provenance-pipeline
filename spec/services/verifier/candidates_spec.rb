@@ -92,4 +92,21 @@ RSpec.describe Verifier::Candidates do
       expect(AuditEvent.count).to eq(0)
     end
   end
+
+  describe ".set_kind!" do
+    it "records the kind the operator judged, clearing the suggestion, audited as theirs" do
+      company.update!(kind_suggestion: "recruiter", kind_evidence: "Its own page lists 30 roles at many employers.")
+
+      described_class.set_kind!(company, "recruiter", reasoning: "A search firm: these are its client roles.")
+
+      expect(company.reload).to have_attributes(kind: "recruiter", kind_suggestion: nil)
+      event = company.audit_events.sole
+      expect(event.actor).to eq(AuditEvent::OPERATOR)
+      expect(event.reasoning).to eq("Kind set by hand: recruiter. A search firm: these are its client roles.")
+    end
+
+    it "refuses an unknown kind" do
+      expect { described_class.set_kind!(company, "agency") }.to raise_error(ArgumentError, /kind is one of/)
+    end
+  end
 end
