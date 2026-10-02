@@ -176,6 +176,7 @@ def check_page(
         explicit_no_openings=extraction.explicit_no_openings,
         listings_incomplete=extraction.listings_incomplete,
         many_employers=extraction.many_employers,
+        many_employers_kind=extraction.many_employers_kind if extraction.many_employers else None,
         single_job_posting=extraction.single_job_posting,
         next_page_url=link_url(page, extraction.next_page),
         input_truncated=input_truncated(page),

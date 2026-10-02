@@ -29,6 +29,9 @@ module Verifier
         errors << "a #{outcome} result cannot be #{result['confidence']} confidence" if (outcome == "resolved") == (result["confidence"] == "low")
       end
       errors << "unknown failure #{result['failure'].inspect}" if outcome == "failed" && !WORKER_FAILURES.include?(result["failure"])
+      unless result["kind_suggestion"].nil? || Company::KIND_SUGGESTIONS.include?(result["kind_suggestion"])
+        errors << "unknown kind suggestion #{result['kind_suggestion'].inspect}"
+      end
 
       checks = result["checks"]
       return errors << "checks must be a list" unless checks.is_a?(Array)

@@ -98,6 +98,28 @@ RSpec.describe Verifier::Ingest do
     end
   end
 
+  describe "a suggested kind" do
+    def suggesting(kind)
+      result("candidate", careers_page_url: "https://acme.example/jobs", method: "path_probe", confidence: "low",
+                          kind_suggestion: kind, kind_evidence: "Its own page lists 30 roles at many employers.")
+    end
+
+    it "is held for the operator with its evidence" do
+      ingest.resolution(suggesting("recruiter"))
+
+      expect(company.reload).to have_attributes(kind: nil, kind_suggestion: "recruiter",
+                                                kind_evidence: "Its own page lists 30 roles at many employers.")
+    end
+
+    it "never overrides a kind the operator set" do
+      company.update!(kind: "employer")
+
+      ingest.resolution(suggesting("aggregator"))
+
+      expect(company.reload).to have_attributes(kind: "employer", kind_suggestion: nil)
+    end
+  end
+
   describe "a failure" do
     it "records why, and every check that was tried" do
       ingest.resolution(result("failed", failure: "not_found",

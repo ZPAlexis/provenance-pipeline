@@ -170,6 +170,10 @@ module Verifier
           resolution_status: "candidate", resolution_method: result["method"],
           resolution_confidence: result["confidence"], resolution_candidate_url: url, resolution_failure: nil
         )
+        # A suggested kind waits for the operator; a kind they set is never overwritten.
+        if result["kind_suggestion"] && company.kind.nil?
+          company.assign_attributes(kind_suggestion: result["kind_suggestion"], kind_evidence: result["kind_evidence"])
+        end
       when "failed"
         company.assign_attributes(
           resolution_status: "failed", resolution_failure: result["failure"],

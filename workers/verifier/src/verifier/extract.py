@@ -14,7 +14,7 @@ exact link the page contained.
 import hashlib
 import json
 from collections.abc import Callable
-from typing import Protocol
+from typing import Literal, Protocol
 
 import anthropic
 import pydantic
@@ -49,6 +49,7 @@ Rules:
 - shows_job_listings is false when this is not a page that lists jobs at all, such as a marketing page or a careers page that only links to where the jobs are.
 - listings_incomplete is true only when the page itself shows it lists some of its openings but not all: pagination, a "load more" or "see all" control, a stated total larger than what is listed, cut-off text, a link to a fuller job board, or a list narrowed to one department, team, location, or other filter of a larger list. A page that links to an "All jobs" list, or to other departments' or locations' job pages, is showing a narrowed list. A role without a link does not make the list incomplete.
 - many_employers is true when the listings are for many different employers, as on a job board, aggregator, or marketplace, rather than for the one company whose page this is.
+- many_employers_kind, only when many_employers: recruiter when the page is a recruiting or staffing firm's own openings, filled for its clients; job_board when it is a job board, aggregator, or marketplace showing other companies' own postings. Null when many_employers is false.
 - single_job_posting is true when the page is one job's own posting (its description and how to apply), even if it also shows other or similar roles. A careers page that lists only one opening is not a single job posting.
 - next_page is the number, in brackets, of the link to the next page of these same listings (pagination such as "Next", "›", or "2"); null when the list does not continue on another page. Never a link to one role.
 - Never invent a role.
@@ -69,6 +70,7 @@ class PageExtraction(BaseModel):
     explicit_no_openings: bool
     listings_incomplete: bool
     many_employers: bool
+    many_employers_kind: Literal["recruiter", "job_board"] | None
     single_job_posting: bool
     stated_total: int | None
     next_page: int | None  # 1-based number of the link to the list's next page

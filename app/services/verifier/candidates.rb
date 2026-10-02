@@ -55,6 +55,19 @@ module Verifier
       end
     end
 
+    # What kind of company it is, as the operator judges it: a recruiter's own
+    # board of client roles then counts as its careers page, and an aggregator's
+    # postings are known to belong to other employers.
+    def set_kind!(company, kind, reasoning: nil, actor: ACTOR)
+      raise ArgumentError, "kind is one of #{Company::KINDS.join(', ')}" unless Company::KINDS.include?(kind)
+
+      ApplicationRecord.transaction do
+        company.update!(kind: kind, kind_suggestion: nil)
+        AuditEvent.record_write!(company, actor: actor,
+                                          reasoning: [ "Kind set by hand: #{kind}.", reasoning.presence ].compact.join(" "))
+      end
+    end
+
     def require_candidate!(company)
       return if company.resolution_status == "candidate"
 

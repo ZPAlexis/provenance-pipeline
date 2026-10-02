@@ -31,6 +31,8 @@ class FakeReader:
         home_outcome=None,
         board=None,
         confirms=False,
+        board_links=None,
+        many=None,
     ):
         self.answering = set(answering)
         self.pages = pages or {}
@@ -42,6 +44,8 @@ class FakeReader:
         self.home_outcome = home_outcome or ("ok" if home is not None else "inaccessible")
         self.board = board
         self.confirms = confirms
+        self.links_off_board = board_links
+        self.many = many or {}  # url -> "recruiter" | "job_board": a page of many employers' roles
         self.checked: list[tuple[str, str]] = []
 
     def answers(self, url):
@@ -61,7 +65,8 @@ class FakeReader:
             listing_count=count,
             listings=[Listing(title=f"Role {n}") for n in range(count or 0)],
             listings_incomplete=url in self.partial,
-            many_employers=url in self.aggregator,
+            many_employers=url in self.aggregator or url in self.many,
+            many_employers_kind=self.many.get(url),
             stated_total=self.stated.get(url),
             ats=self.boards.get(url),
         )
@@ -84,6 +89,9 @@ class FakeReader:
 
     def board_confirms(self, board, target):
         return self.confirms
+
+    def board_links(self, board):
+        return self.links_off_board
 
 
 class FakePicker:
@@ -353,8 +361,9 @@ def test_keeps_a_partial_page_when_nothing_further_shows_more():
     assert "only some of its openings" in result.evidence
 
 
-# A job board's own /jobs page lists other companies' openings.
-def test_an_aggregators_listings_are_not_the_companys_careers_page():
+# A job board's own /jobs page lists other companies' openings: never watched
+# unasked, never followed further, and held for the operator to say what it is.
+def test_an_aggregators_listings_are_held_for_the_operator_never_watched():
     jobs = "https://acme.example/jobs"
     reader = FakeReader(
         answering={jobs},
@@ -365,8 +374,17 @@ def test_an_aggregators_listings_are_not_the_companys_careers_page():
 
     result = resolve(reader)
 
-    assert result.outcome == "failed"
+    assert (result.outcome, result.confidence, result.kind_suggestion) == ("candidate", "low", "aggregator")
     assert reader.checked == [(jobs, "path_probe")]
+
+
+def test_a_third_party_page_of_many_employers_roles_is_never_a_candidate():
+    board = "https://bigjobs.example/acme"
+    reader = FakeReader(home=page([("Careers", board)]), pages={board: 18}, aggregator={board})
+
+    result = resolve(reader)
+
+    assert result.outcome == "failed"
 
 
 def test_a_link_followed_from_an_llm_pick_is_still_only_a_candidate():
@@ -497,3 +515,85 @@ def test_from_a_careers_page_the_whole_list_is_tried_before_a_part_of_it():
     result = resolve(reader, ACME.model_copy(update={"known_url": job}))
 
     assert result.careers_page_url == "https://acme.example/jobs/search"
+
+
+# The operator's own method (Arcadia): a guessed board's page links home to its company.
+def test_a_guessed_board_that_links_to_the_companys_site_is_confirmed():
+    board = AtsBoard(vendor="ashby", board="acme")
+    reader = FakeReader(
+        home=page([]), board=(board, [Listing(title="GTM Engineer")]), board_links=["https://acme.example/"]
+    )
+
+    result = resolve(reader)
+
+    assert (result.outcome, result.method, result.confidence) == ("resolved", "ats_guess", "medium")
+    assert "links to acme.example, the company's own site" in result.evidence
+
+
+def test_a_guessed_board_that_links_to_another_company_is_discarded_and_the_ladder_goes_on():
+    board = AtsBoard(vendor="lever", board="acme")
+    reader = FakeReader(
+        home=page([("Life at Acme", "https://acme.example/life")]),
+        pages={"https://acme.example/life": 3},
+        board=(board, [Listing(title="GTM Engineer")]),
+        board_links=["https://www.linkedin.com/company/acme-io", "https://acme.io/", "https://acme.io/about"],
+    )
+
+    result = resolve(reader, picker=FakePicker(link=1))
+
+    assert (result.outcome, result.method) == ("candidate", "llm_link")
+    guess = next(check for check in result.checks if check.step == "ats_guess")
+    assert guess.reason == "board_of_another_company"
+    assert "links to acme.io: another company's board" in guess.notes
+
+
+def test_a_guessed_board_naming_no_company_site_stays_a_candidate():
+    board = AtsBoard(vendor="lever", board="acme")
+    reader = FakeReader(
+        home=page([]), board=(board, [Listing(title="GTM Engineer")]), board_links=["https://lever.co/"]
+    )
+
+    result = resolve(reader)
+
+    assert (result.outcome, result.confidence) == ("candidate", "low")
+    assert "names no company site" in result.evidence
+
+
+def test_a_companys_own_page_of_many_employers_roles_comes_back_with_a_suggested_kind():
+    jobs = "https://acme.example/openroles"
+    reader = FakeReader(
+        answering={"https://acme.example/jobs"},
+        pages={"https://acme.example/jobs": 30},
+        many={"https://acme.example/jobs": "recruiter"},
+    )
+
+    result = resolve(reader)
+
+    assert (result.outcome, result.confidence, result.kind_suggestion) == ("candidate", "low", "recruiter")
+    assert "a recruiter's openings for its clients" in result.kind_evidence
+    assert jobs  # the page held is the one read
+
+
+def test_a_confirmed_recruiters_own_page_of_client_roles_is_its_careers_page():
+    reader = FakeReader(
+        answering={"https://acme.example/jobs"},
+        pages={"https://acme.example/jobs": 30},
+        many={"https://acme.example/jobs": "recruiter"},
+    )
+
+    result = resolve(reader, ACME.model_copy(update={"kind": "recruiter"}))
+
+    assert (result.outcome, result.method, result.confidence) == ("resolved", "path_probe", "high")
+    assert result.kind_suggestion is None
+
+
+def test_a_confirmed_aggregators_page_of_other_companies_postings_is_never_its_careers_page():
+    reader = FakeReader(
+        answering={"https://acme.example/jobs"},
+        pages={"https://acme.example/jobs": 30},
+        many={"https://acme.example/jobs": "job_board"},
+    )
+
+    result = resolve(reader, ACME.model_copy(update={"kind": "aggregator"}))
+
+    assert result.outcome == "failed"

@@ -29,6 +29,12 @@ class Company < ApplicationRecord
   RESOLUTION_CONFIDENCES = %w[high medium low confirmed].freeze
   RESOLUTION_FAILURES = %w[no_domain anonymised not_found blocked inaccessible rejected].freeze
 
+  # What kind of company: a recruiter's own board of client roles is its careers
+  # page; an aggregator's listings are other companies' own postings. The operator
+  # sets kind; resolution only suggests one (kind_suggestion, with kind_evidence).
+  KINDS = %w[employer recruiter aggregator].freeze
+  KIND_SUGGESTIONS = %w[recruiter aggregator].freeze
+
   validates :name, presence: true
   validates :domain, uniqueness: true, allow_nil: true
   validates :ats_type, inclusion: { in: ATS_TYPES }, allow_nil: true
@@ -36,6 +42,8 @@ class Company < ApplicationRecord
   validates :resolution_method, inclusion: { in: RESOLUTION_METHODS }, allow_nil: true
   validates :resolution_confidence, inclusion: { in: RESOLUTION_CONFIDENCES }, allow_nil: true
   validates :resolution_failure, inclusion: { in: RESOLUTION_FAILURES }, allow_nil: true
+  validates :kind, inclusion: { in: KINDS }, allow_nil: true
+  validates :kind_suggestion, inclusion: { in: KIND_SUGGESTIONS }, allow_nil: true
   with_options if: -> { resolution_status == "resolved" } do
     validates :careers_page_url, :resolution_method, :resolution_confidence, presence: true
   end

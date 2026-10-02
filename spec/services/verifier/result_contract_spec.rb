@@ -39,6 +39,10 @@ RSpec.describe Verifier::ResultContract do
     expect(errors(resolution(outcome: "candidate", confidence: "high"))).to include(/cannot be high/)
   end
 
+  it "refuses a kind suggestion it does not know" do
+    expect(errors(resolution(outcome: "candidate", confidence: "low", kind_suggestion: "agency"))).to include(/unknown kind suggestion/)
+  end
+
   it "refuses failure reasons only Rails decides" do
     expect(errors(resolution(outcome: "failed", failure: "rejected"))).to include(/unknown failure/)
   end

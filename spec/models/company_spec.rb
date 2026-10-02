@@ -61,6 +61,9 @@ RSpec.describe Company do
       expect(build(:company, :resolved, resolution_confidence: "certain")).not_to be_valid
       expect(build(:company, resolution_status: "failed", resolution_failure: "bad_luck")).not_to be_valid
       expect(build(:company, resolution_status: "pending")).not_to be_valid
+      expect(build(:company, kind: "agency")).not_to be_valid
+      expect(build(:company, kind_suggestion: "employer")).not_to be_valid # only recruiter or aggregator is ever suggested
+      expect(build(:company, kind: "recruiter", kind_suggestion: "aggregator")).to be_valid
     end
 
     it "separates companies still to resolve from candidates awaiting confirmation" do

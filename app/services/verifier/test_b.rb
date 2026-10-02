@@ -27,7 +27,7 @@ module Verifier
     SCORED_LABELS = %w[verified_live not_found].freeze
 
     Case = Struct.new(:posting_id, :company_id, :company, :title, :location, :label, :result, :snapshot,
-                      :watched_url, :domain, :hand_verdict, keyword_init: true) do
+                      :watched_url, :domain, :hand_verdict, :aggregator, keyword_init: true) do
       def verdict = result&.dig("verdict")
 
       def scored_label? = SCORED_LABELS.include?(label)
@@ -45,6 +45,7 @@ module Verifier
 
       def why_unmeasured
         return "label #{label}: says nothing about the role" unless scored_label?
+        return "an aggregator: its postings belong to other employers" if aggregator
         return "the company has no watched page" unless watched_url
         return "not checked (no stored check of the watched page, in a replay)" unless result
 
@@ -111,8 +112,9 @@ module Verifier
         Case.new(posting_id: posting.id, company_id: company.id, company: company.name, title: posting.role_title,
                  location: posting.location, label: label,
                  domain: company.domain, hand_verdict: HandCheck.latest_verdict(posting),
-                 watched_url: (company.careers_page_url if company.resolution_status == "resolved"),
-                 snapshot: (self.class.snapshot_for(company) if company.resolution_status == "resolved"))
+                 aggregator: company.kind == "aggregator",
+                 watched_url: (company.careers_page_url if company.resolution_status == "resolved" && company.kind != "aggregator"),
+                 snapshot: (self.class.snapshot_for(company) if company.resolution_status == "resolved" && company.kind != "aggregator"))
       end
     end
 

@@ -94,6 +94,17 @@ RSpec.describe Verifier::TestB do
     end
   end
 
+  it "does not measure an aggregator's postings: they belong to other employers" do
+    company.update!(kind: "aggregator")
+    snapshot(company)
+    labeled("verified_live")
+
+    test = described_class.new
+
+    expect([ test.verify_targets, test.replay_targets ]).to eq([ [], [] ])
+    expect(test.evaluate([]).cases.sole.why_unmeasured).to eq("an aggregator: its postings belong to other employers")
+  end
+
   describe "fresh targets" do
     it "sends each company's watched page and its scored postings, stored check or not" do
       posting = labeled("verified_live")

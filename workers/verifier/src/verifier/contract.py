@@ -12,6 +12,9 @@ from verifier import RESULT_SCHEMA_VERSION
 
 WorkMode = Literal["remote", "hybrid", "onsite", "unknown"]
 EmploymentType = Literal["full_time", "part_time", "contract", "internship", "temporary", "unknown"]
+# What kind of company a page's roles say it is. A recruiter's own board lists its
+# clients' roles, and those are its openings; an aggregator's lists other companies' own.
+CompanyKind = Literal["employer", "recruiter", "aggregator"]
 
 # ok           the page was read and its listings extracted (possibly zero)
 # blocked      we chose not to fetch it (robots.txt)
@@ -82,6 +85,8 @@ class PageResult(BaseModel):
         False  # the page shows only some of its openings (pagination, "load more", a fuller board)
     )
     many_employers: bool = False  # the listings are many employers' (a job board or aggregator), not one company's
+    # When many_employers: a recruiter's client roles, or a job board's other companies' postings.
+    many_employers_kind: Literal["recruiter", "job_board"] | None = None
     single_job_posting: bool = False  # the page is one job's own posting, not a list of openings
     next_page_url: str | None = None  # where the list continues, when the page links to its next page
     input_truncated: bool = False  # the model saw less than the whole page
@@ -100,6 +105,7 @@ class ResolveTarget(BaseModel):
     domain: str | None = None
     name: str | None = None
     known_url: str | None = None  # a page already on record, tried first
+    kind: CompanyKind | None = None  # as the operator confirmed it; None while unconfirmed
 
 
 class ResolutionResult(BaseModel):
@@ -121,6 +127,9 @@ class ResolutionResult(BaseModel):
     confidence: Literal["high", "medium", "low"] | None = None
     failure: Literal["no_domain", "not_found", "blocked", "inaccessible"] | None = None
     evidence: str | None = None  # a sentence for the human reviewing a candidate
+    # The kind the pages read suggest, held for the operator to confirm; with its evidence.
+    kind_suggestion: Literal["recruiter", "aggregator"] | None = None
+    kind_evidence: str | None = None
     reason: str | None = None  # for outcome "error"
     checks: list[PageResult] = Field(default_factory=list)
     duration_ms: int = 0

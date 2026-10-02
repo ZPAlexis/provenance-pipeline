@@ -6,7 +6,8 @@ RSpec.describe Verifier::Resolution do
       company = create(:company, :with_careers_page, name: "Acme", domain: "acme.example")
 
       expect(described_class.targets([ company ])).to eq([
-        { id: company.id, label: "Acme", domain: "acme.example", name: "Acme", known_url: "https://acme.example/careers" }
+        { id: company.id, label: "Acme", domain: "acme.example", name: "Acme", known_url: "https://acme.example/careers",
+          kind: nil }
       ])
     end
 

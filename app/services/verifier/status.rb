@@ -33,6 +33,8 @@ module Verifier
           [ company.resolution_method, company.resolution_confidence ].compact.map { |v| ", #{v}" }.join +
           (company.resolution_failure ? ", failure #{company.resolution_failure}" : ""),
         "  watched page: #{company.careers_page_url || '-'}#{" (#{company.ats_type})" if company.ats_type}",
+        "  kind: #{company.kind || 'not set'}" +
+          (company.kind_suggestion ? " (suggested: #{company.kind_suggestion}: #{company.kind_evidence})" : ""),
         *("  candidate: #{company.resolution_candidate_url}" if company.resolution_candidate_url)
       ]
     end

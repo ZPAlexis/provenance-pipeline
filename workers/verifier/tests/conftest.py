@@ -87,6 +87,7 @@ class FakeExtractor:
             explicit_no_openings="no open positions" in page.text.lower(),
             listings_incomplete="load more" in page.text.lower() or next_page is not None,
             many_employers=False,
+            many_employers_kind=None,
             single_job_posting="apply for this job" in page.text.lower(),
             stated_total=None,
             next_page=next_page,

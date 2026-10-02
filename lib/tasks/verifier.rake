@@ -146,6 +146,10 @@ namespace :verifier do
       puts "#{company.id}  #{company.name} (#{company.domain || 'no domain'})"
       puts "  #{company.resolution_candidate_url}  [#{company.resolution_method}]"
       puts "  #{evidence}" if evidence
+      if company.kind_suggestion
+        puts "  Suggested kind: #{company.kind_suggestion}. Confirm it with " \
+             "bin/rails \"verifier:kind[#{company.id},#{company.kind_suggestion}]\" (or employer/recruiter/aggregator)."
+      end
     end
     puts "\nbin/rails \"verifier:confirm[ID]\" makes it the watched page; bin/rails \"verifier:reject[ID]\" turns it down;"
     puts "URL=\"https://...\" REASON=\"...\" bin/rails \"verifier:set_page[ID]\" sets the right page when you know it."
@@ -175,6 +179,21 @@ namespace :verifier do
     company = Verifier::Status.find(args[:company]) or
       abort "No single company matches #{args[:company].inspect}. Try its exact name or its id."
     puts Verifier::Status.lines(company)
+  end
+
+  desc "Say what kind of company it is: employer, recruiter, or aggregator. Audited as the operator. " \
+       "Usage: [REASON=\"...\"] bin/rails \"verifier:kind[company_id,recruiter]\""
+  task :kind, [ :id, :kind ] => :environment do |_task, args|
+    company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}."
+    Verifier::Candidates.set_kind!(company, args[:kind].to_s.strip, reasoning: ENV["REASON"])
+    puts "#{company.name}: #{company.kind}"
+    if company.resolution_status == "candidate"
+      verb = company.kind == "aggregator" ? "reject" : "confirm"
+      puts "Its candidate page is still waiting: bin/rails \"verifier:#{verb}[#{company.id}]\" " \
+           "(an aggregator's page of other companies' postings is not its careers page)."
+    end
+  rescue ArgumentError => e
+    abort e.message
   end
 
   desc "Set a company's careers page by hand, whatever its state. Audited as the operator. " \
@@ -318,7 +337,11 @@ namespace :verifier do
   desc "Verify postings against their company's watched page and record the verdicts. Shows the plan and its " \
        "estimated cost; runs only with GO=1, backing up first. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
   task verify: :environment do
-    companies = select_companies.call(Company.where(resolution_status: "resolved").where(id: Posting.select(:company_id))).to_a
+    # An aggregator's postings belong to other employers: its own page says nothing about them.
+    resolved = Company.where(resolution_status: "resolved").where.not(kind: "aggregator").or(
+      Company.where(resolution_status: "resolved", kind: nil)
+    )
+    companies = select_companies.call(resolved.where(id: Posting.select(:company_id))).to_a
     abort "No resolved company has postings to verify." if companies.empty?
 
     targets = companies.map do |company|
