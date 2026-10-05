@@ -474,6 +474,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "httpx2" },
     { name = "playwright" },
     { name = "pydantic" },
 ]
@@ -487,6 +488,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=1.9,<2" },
+    { name = "httpx2", specifier = ">=2,<3" },
     { name = "playwright", specifier = ">=1.63,<2" },
     { name = "pydantic", specifier = ">=2,<3" },
 ]
