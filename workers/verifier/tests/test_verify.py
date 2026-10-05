@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 
 import httpx2
@@ -6,8 +7,8 @@ import pytest
 from verifier import pipeline
 from verifier.contract import AtsBoard, Listing, PreviousRead, Target, TrackedPosting, VerifyTarget
 from verifier.match import Matcher
-from verifier.pipeline import read_all
-from verifier.render import render
+from verifier.pipeline import _link_key, _reused, read_all
+from verifier.render import RenderedPage, render
 from verifier.verify import verify_company
 
 
@@ -249,3 +250,98 @@ def test_reads_the_page_when_its_confirmed_board_lists_nothing_or_fails(services
         f"The company's confirmed board (greenhouse/acme) could not be used ({reason})"
     )
     assert [v.verdict for v in result.verdicts] == ["verified_live"]
+
+
+# Found in the 2026-10-05 run: Plutus21's record held two reads whose addresses differ only by a
+# trailing slash, and the older one, showing other roles, was the one compared.
+def test_the_newest_read_of_an_address_is_the_one_compared(services, site):
+    (first,), _, _ = read_all(target(site, "static.html"), services)
+    older = previous(
+        first,
+        page_check_id="pc:older",
+        url=site.url("static.html") + "/",
+        listings=first.listings[1:],
+        listings_read_at=(datetime.now(UTC) - timedelta(days=3)).isoformat(timespec="seconds"),
+    )
+
+    checks, _, _ = read_all(target(site, "static.html"), services, previous=[older, previous(first)])
+
+    assert (checks[0].method, checks[0].reused_from) == ("reused", "pc:static.html")
+
+
+def test_a_route_after_the_hash_names_the_role_and_an_anchor_does_not():
+    assert _link_key("https://acme.example/plugins/oscp/#/jobs/405") == "https://acme.example/plugins/oscp#/jobs/405"
+    assert _link_key("https://acme.example/jobs/12#apply") == "https://acme.example/jobs/12"
+    assert _link_key("https://www.acme.example/jobs/12/?utm_source=x") == "https://acme.example/jobs/12"
+
+
+# Found in the same run: Arcadia's roles link to #/jobs/405, #/jobs/406, ... on one address,
+# so dropping the fragment made every role the same link and the page was read again.
+def test_a_board_that_routes_roles_after_the_hash_reuses_its_listings_when_they_are_unchanged():
+    base = "https://acme.example/plugins/oscp/"
+    links = [(f"Role {n}", f"{base}#/jobs/{n}") for n in (405, 406, 407)]
+    page = RenderedPage(
+        final_url=base, status=200, title="Jobs", text="Jobs", links=[("Home", "https://acme.example/"), *links]
+    )
+    read = PreviousRead(
+        page_check_id="pc1",
+        url=base,
+        listings=[Listing(title=text, url=url) for text, url in links],
+        listing_count=3,
+        content_hash="sha256:other",
+        listings_read_at=datetime.now(UTC).isoformat(timespec="seconds"),
+    )
+
+    assert _reused(read, page)["method"] == "reused"
+    assert _reused(read.model_copy(update={"listings": read.listings[:2]}), page) is None  # a role added
+
+
+def workday_jobs(total):
+    def handler(request):
+        offset = json.loads(request.content)["offset"]
+        postings = [
+            {
+                "title": "RevOps Engineer" if offset + i == 0 else f"Role {offset + i}",
+                "externalPath": f"/job/R{offset + i}",
+            }
+            for i in range(min(20, total - offset))
+        ]
+        return httpx2.Response(200, json={"total": total if offset == 0 else 0, "jobPostings": postings})
+
+    return httpx2.Client(transport=httpx2.MockTransport(handler))
+
+
+# GE Vernova's Workday board lists 2,024 roles, more than the reader's guard of 2,000.
+def test_a_board_read_only_in_part_finds_roles_live_but_never_calls_one_closed(services, monkeypatch):
+    monkeypatch.setattr(pipeline.ats, "WORKDAY_MAX_PAGES", 2)
+    monkeypatch.setattr(services.robots, "check", lambda url: None)
+    services.http = workday_jobs(45)
+    company = VerifyTarget(
+        id="c1",
+        url="https://acme.example/careers",
+        board=AtsBoard(vendor="workday", board="acme.wd1/Careers"),
+        postings=postings("RevOps Engineer", "Designer"),
+    )
+
+    result = verify_company(company, services, Matcher())
+
+    check = result.checks[0]
+    assert (check.method, check.listing_count, check.stated_total, check.listings_incomplete) == (
+        "ats_api:workday",
+        40,
+        45,
+        True,
+    )
+    assert "only the first 40 were read" in check.notes
+    assert result.complete is False
+    assert [v.verdict for v in result.verdicts] == ["verified_live", None]
+
+
+def test_a_known_boards_address_read_only_in_part_is_not_a_whole_list(services, monkeypatch):
+    monkeypatch.setattr(pipeline.ats, "WORKDAY_MAX_PAGES", 2)
+    monkeypatch.setattr(services.robots, "check", lambda url: None)
+    services.http = workday_jobs(45)
+
+    checks, listings, complete = read_all(Target(id="c1", url="https://acme.wd1.myworkdayjobs.com/Careers"), services)
+
+    assert (len(listings), checks[0].stated_total, complete) == (40, 45, False)

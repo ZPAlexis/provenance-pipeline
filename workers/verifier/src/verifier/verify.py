@@ -62,7 +62,7 @@ def _read(page_target: Target, target: VerifyTarget, services: Services):
     if target.board:
         via_board = read_board(page_target, target.board, services)
         if via_board.outcome == "ok":
-            return [via_board], via_board.listings, True  # the vendor's own list
+            return [via_board], via_board.listings, not via_board.listings_incomplete  # the vendor's own list
     checks, listings, complete = read_all(page_target, services, ats_fallback=False, previous=target.previous)
     if target.board:
         why = (

@@ -52,6 +52,28 @@ def test_a_title_that_adds_a_level_is_not_a_variant():
     assert not variant("RevOps Engineer", "Lead RevOps Engineer")
 
 
+# Found in the 2026-10-05 run: Baker Hughes' "Quality Engineer – After Market Solutions" in
+# Niterói was reported live on a "Quality Engineer" in Indonesia.
+def test_a_generic_listing_is_not_a_variant_of_a_more_specific_posting():
+    assert not variant("Quality Engineer – After Market Solutions", "Quality Engineer")
+    assert not variant("Product Marketing / GTM Engineer", "Product Marketing")
+    assert variant("Quality Engineer", "Quality Engineer – After Market Solutions")  # the listing is the more specific
+
+
+def test_a_posting_may_add_only_seniority_or_region_to_the_listing():
+    assert variant("Senior Solutions Engineer, LATAM", "Solutions Engineer")
+    assert variant("Sr. Solutions Engineer - Brazil", "Solutions Engineer")
+    assert not variant("Solutions Engineer Manager", "Solutions Engineer")
+
+
+def test_a_specific_posting_missing_from_a_whole_list_is_not_found_despite_a_generic_listing():
+    result = Matcher().match(
+        target([("Quality Engineer – After Market Solutions", "Niterói, Brazil")], [("Quality Engineer", "Batam")])
+    )
+
+    assert only(result).verdict == "not_found"
+
+
 def test_an_exact_title_is_live():
     verdict = only(
         Matcher().match(target([("RevOps Engineer", None)], [("Designer", None), ("RevOps Engineer", None)]))

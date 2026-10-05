@@ -390,19 +390,19 @@ namespace :verifier do
       targets = targets.reject { |t| reused.include?(t[:id]) }
     end
 
-    # What one page read has cost so far, from the record: a guide, not a quote. A company read
-    # through its confirmed board costs nothing; one with an earlier read may reuse it for nothing.
+    # A ceiling from the record: what each page cost when last read in full. A company read
+    # through its confirmed board costs nothing; a page whose roles are unchanged reuses its
+    # earlier read for nothing; one never verified is priced at the average page read.
     per_page = LlmCall.where(purpose: "extract").average(:cost_usd).to_f
+    by_id = companies.index_by(&:id)
     via_board = targets.count { |t| t[:board] }
     reusable = targets.count { |t| !t[:board] && t[:previous].any? }
-    paid = targets.size - via_board
-    low, high = (paid - reusable) * per_page, paid * per_page * 3
+    ceiling = targets.reject { |t| t[:board] }.sum { |t| Verifier::Targets.full_read_cost(by_id[t[:id]]) || per_page }
     puts "Plan: verify #{targets.sum { |t| t[:postings].size }} postings at #{targets.size} companies' watched pages."
     puts "  #{via_board} read through a confirmed board (free); #{reusable} have earlier reads to reuse where " \
          "their role links are unchanged (free when they are, a full read every 14 days)."
-    puts format("Estimated cost: $%.2f–$%.2f (about $%.3f a page read so far; boards read through an ATS API cost " \
-                "nothing, and a list split across pages costs a read per page, up to %d).",
-                low, high, per_page, 10)
+    puts format("Estimated cost: at most $%.2f, what these pages cost when last read in full; less for every page " \
+                "whose roles are unchanged, plus about a cent for near-miss checks.", ceiling)
     next puts("\nNothing run. Run it with GO=1.") unless ENV["GO"].present?
 
     # From here on, verdicts are written: back up first.

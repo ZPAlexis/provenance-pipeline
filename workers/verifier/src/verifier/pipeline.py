@@ -87,14 +87,7 @@ def check_page(
     board = ats.detect([target.url])
     if board and not (ats.on_company_host(board) and services.robots.check(ats.api_url(board))):
         try:
-            listings = _fetch_board(board, services)
-            return finish(
-                outcome="ok",
-                method=f"ats_api:{board.vendor}",
-                ats=board,
-                listings=listings,
-                listing_count=len(listings),
-            )
+            return finish(**_board_read(board, services))
         except (httpx2.HTTPError, ValueError, KeyError, TypeError):
             pass  # read the page itself instead
 
@@ -137,15 +130,7 @@ def check_page(
         fallback = f"ats_api_blocked:{board.vendor}"
     elif board:
         try:
-            listings = _fetch_board(board, services)
-            return finish(
-                outcome="ok",
-                method=f"ats_api:{board.vendor}",
-                ats=board,
-                listings=listings,
-                listing_count=len(listings),
-                **seen,
-            )
+            return finish(**_board_read(board, services), **seen)
         except (httpx2.HTTPError, ValueError, KeyError, TypeError):
             fallback = f"ats_api_failed:{board.vendor}"
 
@@ -207,36 +192,49 @@ def read_board(target: Target, board: AtsBoard, services: Services) -> PageResul
             target_id=target.id,
             url=ats.board_url(board),
             checked_at=checked_at,
-            ats=board,
             duration_ms=elapsed,
-            **fields,
+            **({"ats": board} | fields),
         )
 
     if ats.on_company_host(board) and (refusal := services.robots.check(ats.api_url(board))):
         return finish(outcome="blocked", reason=refusal)
     try:
-        listings = _fetch_board(board, services)
+        read = _board_read(board, services)
     except (httpx2.HTTPError, ValueError, KeyError, TypeError):
         return finish(outcome="error", reason="board_unreadable")
-    if not listings:
+    if not read["listings"]:
         return finish(outcome="error", reason="board_empty")
-    return finish(
-        outcome="ok",
-        method=f"ats_api:{board.vendor}",
-        listings=listings,
-        listing_count=len(listings),
-        notes=f"Read through the company's confirmed {board.vendor} board, in place of {target.url}.",
-    )
+    instead = f"Read through the company's confirmed {board.vendor} board, in place of {target.url}."
+    return finish(**read | {"notes": " ".join(filter(None, [instead, read.get("notes")]))})
 
 
-def _fetch_board(board, services: Services) -> list[Listing]:
-    """Every listing on a known board, through its API, with requests spaced like any other."""
+def fetch_board(board: AtsBoard, services: Services) -> list[Listing]:
+    """Every listing on a known board, through its API, with requests spaced like any other.
+
+    Raises IncompleteBoard, carrying what was read, for a board larger than the reader's guard.
+    """
 
     def space_out() -> None:
         services.throttle.wait(ats.api_host(board))
 
     space_out()
     return ats.fetch_listings(board, services.http, pause=space_out)
+
+
+def _board_read(board: AtsBoard, services: Services) -> dict:
+    """A board's listings as a check's fields: the whole list, or, cut short, a part that says so."""
+    fields = {"outcome": "ok", "method": f"ats_api:{board.vendor}", "ats": board}
+    try:
+        listings = fetch_board(board, services)
+    except ats.IncompleteBoard as cut:
+        return fields | {
+            "listings": cut.listings,
+            "listing_count": len(cut.listings),
+            "stated_total": cut.total,
+            "listings_incomplete": True,
+            "notes": f"The board lists {cut.total} roles; only the first {len(cut.listings)} were read.",
+        }
+    return fields | {"listings": listings, "listing_count": len(listings)}
 
 
 def read_all(
@@ -292,7 +290,7 @@ def _whole_list(checks: list[PageResult], listings: list[Listing]) -> bool:
     first, last = checks[0], checks[-1]
     if last.outcome != "ok" or any(check.single_job_posting for check in checks):
         return False
-    if (first.method or "").startswith("ats_api"):
+    if (first.method or "").startswith("ats_api") and not first.listings_incomplete:
         return True  # the vendor's own list, empty or not
     if not listings and not any(check.explicit_no_openings for check in checks):
         # A rendered page that showed no roles and did not say it has none (a
@@ -313,9 +311,9 @@ def _url_key(url: str) -> str:
 
 
 def _by_url(reads: list[PreviousRead]) -> dict[str, PreviousRead]:
-    """Previous reads by the address asked for and the one it ended at."""
+    """Previous reads by the address asked for and the one it ended at; the newest where addresses meet."""
     by_url: dict[str, PreviousRead] = {}
-    for read in reads:
+    for read in sorted(reads, key=lambda read: _read_at(read.listings_read_at), reverse=True):
         for url in (read.url, read.final_url):
             if url:
                 by_url.setdefault(_url_key(url), read)
@@ -326,11 +324,14 @@ def _by_url(reads: list[PreviousRead]) -> dict[str, PreviousRead]:
 _TRACKING = ("utm_", "gh_src", "trk")
 
 
+def _read_at(value: str) -> datetime:
+    read_at = datetime.fromisoformat(value)
+    return read_at if read_at.tzinfo else read_at.replace(tzinfo=UTC)
+
+
 def _reused(previous: PreviousRead, page: RenderedPage) -> dict | None:
     """The previous read's listings, when the page still shows the same roles and they are fresh enough."""
-    read_at = datetime.fromisoformat(previous.listings_read_at)
-    if read_at.tzinfo is None:
-        read_at = read_at.replace(tzinfo=UTC)
+    read_at = _read_at(previous.listings_read_at)
     if datetime.now(UTC) - read_at > timedelta(days=LISTINGS_MAX_AGE_DAYS) or not _same_roles(previous, page):
         return None
     return {
@@ -373,8 +374,14 @@ def _link_prefix(url: str) -> tuple[str, str]:
 
 
 def _link_key(url: str) -> str:
+    """A role link compared as the role it names: tracking parameters and in-page anchors aside.
+
+    A fragment that is a route (#/jobs/405, #!/jobs/405), as single-page job boards use, names
+    the role and is kept.
+    """
     parts = urlsplit(url)
     query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith(_TRACKING)])
+    route = parts.fragment.rstrip("/") if parts.fragment.startswith(("/", "!/")) else ""
     return urlunsplit(
-        (parts.scheme.lower(), parts.netloc.lower().removeprefix("www."), parts.path.rstrip("/"), query, "")
+        (parts.scheme.lower(), parts.netloc.lower().removeprefix("www."), parts.path.rstrip("/"), query, route)
     )

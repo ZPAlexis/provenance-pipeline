@@ -155,6 +155,35 @@ def test_raises_on_a_vendor_api_error():
         ats.fetch_listings(AtsBoard(vendor="greenhouse", board="gone"), client)
 
 
+def workday_handler(total, offsets=None):
+    def handler(request):
+        offset = json.loads(request.content)["offset"]
+        if offsets is not None:
+            offsets.append(offset)
+        postings = [
+            {
+                "title": f"Role {offset + i}",
+                "externalPath": f"/job/Remote/Role_R{offset + i}",
+                "locationsText": "Testville",
+            }
+            for i in range(min(20, total - offset))
+        ]
+        return httpx2.Response(200, json={"total": total if offset == 0 else 0, "jobPostings": postings})
+
+    return handler
+
+
+# A board larger than the reader's guard is never passed off as the whole list.
+def test_a_workday_board_larger_than_the_guard_comes_back_as_a_part(monkeypatch):
+    monkeypatch.setattr(ats, "WORKDAY_MAX_PAGES", 2)
+    client = httpx2.Client(transport=httpx2.MockTransport(workday_handler(45)))
+
+    with pytest.raises(ats.IncompleteBoard) as cut:
+        ats.fetch_listings(AtsBoard(vendor="workday", board="acme.wd1/Careers"), client)
+
+    assert (len(cut.value.listings), cut.value.total) == (40, 45)
+
+
 def test_reads_every_page_of_a_workday_board():
     offsets, pauses = [], []
 
@@ -284,3 +313,41 @@ def test_finds_every_guessed_board_that_lists_jobs():
         AtsBoard(vendor="greenhouse", board="acme"),
         AtsBoard(vendor="ashby", board="acme"),
     ]
+
+
+def test_a_workday_request_that_fails_once_is_asked_again(monkeypatch):
+    calls = []
+    handler = workday_handler(45)
+
+    def flaky(request):
+        calls.append(json.loads(request.content)["offset"])
+        return httpx2.Response(503) if len(calls) == 2 else handler(request)
+
+    client = httpx2.Client(transport=httpx2.MockTransport(flaky))
+
+    listings = ats.fetch_listings(AtsBoard(vendor="workday", board="acme.wd1/Careers"), client)
+
+    assert (len(listings), calls) == (45, [0, 20, 20, 40])
+
+
+# Found with Baker Hughes: one failed request among dozens threw the whole board away.
+def test_a_workday_board_that_keeps_failing_partway_keeps_what_was_read():
+    handler = workday_handler(45)
+
+    def failing_after_first(request):
+        offset = json.loads(request.content)["offset"]
+        return handler(request) if offset == 0 else httpx2.Response(503)
+
+    client = httpx2.Client(transport=httpx2.MockTransport(failing_after_first))
+
+    with pytest.raises(ats.IncompleteBoard) as cut:
+        ats.fetch_listings(AtsBoard(vendor="workday", board="acme.wd1/Careers"), client)
+
+    assert (len(cut.value.listings), cut.value.total) == (20, 45)
+
+
+def test_a_workday_board_that_fails_on_its_first_page_fails():
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda request: httpx2.Response(503)))
+
+    with pytest.raises(httpx2.HTTPError):
+        ats.fetch_listings(AtsBoard(vendor="workday", board="acme.wd1/Careers"), client)

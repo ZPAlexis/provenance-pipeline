@@ -18,9 +18,10 @@ ROLES = [
 class FakeBoardReader:
     """Scripted boards: `boards` is every guessed board that lists jobs, in the order tried."""
 
-    def __init__(self, boards=(), confirms=False, links=None):
-        self.boards, self.confirms, self.links = list(boards), confirms, links
+    def __init__(self, boards=(), confirms=False, links=None, behind=None):
+        self.boards, self.confirms, self.links, self.behind = list(boards), confirms, links, behind
         self.searched = False
+        self.job_pages = []
 
     def guess_boards(self, target):
         self.searched = True
@@ -32,13 +33,17 @@ class FakeBoardReader:
     def board_links(self, board):
         return self.links
 
+    def board_behind(self, url):
+        self.job_pages.append(url)
+        return self.behind
+
 
 def board(vendor, name, titles):
     return AtsBoard(vendor=vendor, board=name), [Listing(title=title) for title in titles]
 
 
-def company(titles=ROLES):
-    return BoardTarget(id="c1", name="Acme", domain="acme.example", titles=titles)
+def company(titles=ROLES, job_urls=("https://acme.example/jobs/role-1",)):
+    return BoardTarget(id="c1", name="Acme", domain="acme.example", titles=titles, job_urls=list(job_urls))
 
 
 def test_adopts_a_board_listing_the_same_roles_as_the_page():
@@ -131,3 +136,25 @@ def test_reports_no_board_when_none_is_found():
     result = find_board(company(), FakeBoardReader())
 
     assert (result.outcome, result.reason) == ("none", "no_board_found")
+
+
+# Found with GE Vernova: its own job pages send Apply to a Workday board, which no name can guess.
+def test_adopts_a_board_behind_the_companys_own_job_pages_when_no_guess_lists_the_roles():
+    reader = FakeBoardReader(behind=board("workday", "acme.wd1/Careers", ROLES + ["Welder"]))
+
+    result = find_board(company(), reader)
+
+    assert (result.outcome, result.board) == ("adopted", AtsBoard(vendor="workday", board="acme.wd1/Careers"))
+    assert (result.owner, result.owner_host) == ("confirmed", "acme.example")
+    assert "the company's own job page links to it (https://acme.example/jobs/role-1)" in result.evidence
+    assert reader.job_pages == ["https://acme.example/jobs/role-1"]
+
+
+def test_looks_behind_the_job_pages_only_when_no_guessed_board_lists_the_roles():
+    adopted = FakeBoardReader([board("greenhouse", "acme", ROLES)], behind=board("workday", "acme.wd1/Careers", ROLES))
+    rejected = FakeBoardReader([board("greenhouse", "acme", ["Line Cook"])], behind=None)
+
+    assert find_board(company(), adopted).board == AtsBoard(vendor="greenhouse", board="acme")
+    assert adopted.job_pages == []
+    assert find_board(company(), rejected).outcome == "rejected"
+    assert rejected.job_pages == ["https://acme.example/jobs/role-1"]

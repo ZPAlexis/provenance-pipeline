@@ -48,7 +48,7 @@ from verifier.contract import (
     Target,
 )
 from verifier.extract import CreditExhausted, ExtractionFailed, LinkChoice, LlmConfigError, link_url
-from verifier.pipeline import Services, check_page, read_homepage
+from verifier.pipeline import Services, check_page, fetch_board, read_homepage
 from verifier.render import RenderedPage, RenderError, render
 
 COMMON_PATHS = ("/careers", "/jobs", "/about/careers", "/company/careers")
@@ -514,6 +514,28 @@ class ServicesReader:
     def board_confirms(self, board: AtsBoard, target: ResolveTarget) -> bool:
         self.services.throttle.wait(ats.api_host(board))
         return ats.names_match(ats.board_name(board, self.services.http), target.name)
+
+    def board_behind(self, url: str) -> tuple[AtsBoard, list[Listing]] | None:
+        """A known board one of the company's job pages is on, links to, or embeds (its apply button,
+        say), with that board's listings. The page is rendered, never read by the LLM."""
+        board = ats.detect([url])
+        if not board:
+            if self.services.robots.check(url):
+                return None
+            self.services.throttle.wait(urlsplit(url).netloc)
+            try:
+                page = render(self.services.browser, url)
+            except RenderError:
+                return None
+            board = ats.detect([href for _, href in page.links] + page.urls)
+        if not board or (ats.on_company_host(board) and self.services.robots.check(ats.api_url(board))):
+            return None
+        try:
+            return board, fetch_board(board, self.services)
+        except ats.IncompleteBoard as cut:
+            return board, cut.listings  # enough to compare roles; verification reads it as a part
+        except (httpx2.HTTPError, ValueError, KeyError, TypeError):
+            return None
 
     def board_links(self, board: AtsBoard) -> list[str] | None:
         """Where the board's own page links off the vendor's site; None when the page could not be read."""
