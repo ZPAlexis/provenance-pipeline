@@ -76,14 +76,21 @@ def same_title(a: str, b: str) -> bool:
     return bool(title_words(a)) and title_words(a) == title_words(b)
 
 
-def variant(a: str, b: str) -> bool:
-    """One title's words all within the other's, when what the longer adds does not change the job's level.
+def variant(posting: str, listing: str) -> bool:
+    """The listing names the posting's role in other words: one title's words all within the other's.
 
-    "Solutions Engineer" / "Senior Solutions Engineer, LATAM" is a variant; "Solutions
-    Engineer" / "Solutions Engineer Manager" is a different job, so it goes to the LLM.
+    The listing may add words that don't change the job's level: "Solutions Engineer" /
+    "Senior Solutions Engineer, LATAM" is a variant, "Solutions Engineer" / "Solutions
+    Engineer Manager" a different job. The posting may add only seniority or region: a
+    generic listing never stands in for a more specific posting ("Quality Engineer" is not
+    "Quality Engineer – After Market Solutions"). Anything else goes to the near-miss check.
     """
-    shorter, longer = sorted((set(title_words(a)), set(title_words(b))), key=len)
-    return len(shorter) >= 2 and shorter <= longer and not (longer - shorter) & LEVEL_WORDS
+    wanted, listed = set(title_words(posting)), set(title_words(listing))
+    if wanted <= listed:
+        return len(wanted) >= 2 and not (listed - wanted) & LEVEL_WORDS
+    if listed <= wanted:
+        return len(listed) >= 2 and wanted - listed <= SENIORITY_WORDS | REGION_WORDS | FILLER_WORDS
+    return False
 
 
 def overlap(a: str, b: str) -> float:

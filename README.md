@@ -47,7 +47,7 @@ That separates two jobs that browsing job sites does at once, badly:
 
 **The tradeoff, stated plainly: roles at companies outside the list are missed.** There is no crawl, so the list only grows by judgment. That is deliberate. Search-then-filter optimizes for recall; watching a curated list optimizes for precision and fit, which is what this system is for.
 
-**Nothing in the code is specific to one kind of role.** Verification reads every role a careers page shows (a *listing*) and checks whether a tracked *posting* is among them, without knowing what anyone is looking for. The only place a target field enters is a search profile stored as data — titles and keywords, seniority, locations and work mode, exclusions — which decides which new roles are worth reporting. Another field, or another person, is another profile.
+**Nothing in the code is specific to one kind of role.** Verification reads every role a careers page shows (a *listing*) and checks whether a tracked *posting* is among them, without knowing what anyone is looking for. The only place a target field enters is a search profile stored as data — titles and keywords, seniority, locations and work mode, exclusions — which decides which roles are suggested; the user picks the ones to track. Another field, or another person, is another profile.
 
 Two consequences shape the build. A company's careers page becomes a **watch target**, re-checked on a schedule for months — a higher bar than resolving a page once for a single check. And re-verification makes postings **stateful**: `verified_live` → `not_found` is a lifecycle transition, not a correction, and the audit log is what makes "when did this role close?" answerable.
 
@@ -152,10 +152,10 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
   - **1.2c — Match and verdict** ✅ read each watched page in full (pagination, "load more", ATS APIs), match every tracked posting against it, and record verdicts that follow the evidence. Measured against the research labels on fresh reads: 98% agreement, and no closed role reported open.
   - **Cost pass** ✅ the LLM reads a page only when its role links changed (or every 14 days), and a company's own free ATS board is read in place of its page when it lists the same roles.
 - 1.3 — Scoped writes and provenance: short-lived, per-run agent credentials, checked at the single path every agent write goes through
-- 1.4 — Scheduled monitoring and digest: re-verify every watched company on a cadence — the sourcing mechanism, a scheduled re-run of 1.2 that catches both new roles and closures — then report what changed
-- 1.5 — Manual capture ("add by URL"): paste an employer careers link or a company domain to resolve, verify, and add it to the watch list
+- 1.4 — Monitoring on demand, and what changed: re-verify one role, one company, or every watched company when the user asks — a re-run of 1.2 that catches both new roles and closures — then show what changed since the last check. A schedule the operator sets comes later, with a host.
+- 1.5 — Capture and watched roles: the first web UI. A search profile suggests roles from the watched pages, the user picks which to track, and each tracked role gets a "check now" button that answers *still listed* or *no longer listed*. Paste a careers link, a posting link, or a company domain to resolve, verify, and add it to the watch list.
 
-**Build order is 1.2 → 1.5 → 1.3 → 1.4.** Manual capture needs only 1.2, so it ships first to make the tool usable early; because every agent write goes through one path, 1.3's credential check covers it without rework.
+**Build order is 1.2 → 1.5 → 1.3 → 1.4.** Capture needs only 1.2, so it ships first to make the tool usable early; because every agent write goes through one path, 1.3's credential check covers it without rework. Monitoring is human-triggered first, so nothing waits on a host or a scheduler.
 
 **Stage 2 — Pipeline system.** Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents.
 
@@ -164,7 +164,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 ## Stack
 
 - **Rails 8.1 / Ruby 3.4.8 / PostgreSQL** — core application and system of record
-- **solid_queue** — scheduled re-verification in Stage 1.4; until then the verifier runs on demand
+- **solid_queue** — for a schedule, once there is a host; until then the verifier runs on demand
 - **Python + Playwright** — agent workers. Required rather than preferred: the verification step needs headless rendering plus LLM tooling, and both are strongest there.
 - **RSpec, Rubocop, Brakeman, bundler-audit**
 

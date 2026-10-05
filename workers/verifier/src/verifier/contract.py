@@ -236,6 +236,8 @@ class BoardTarget(BaseModel):
     name: str | None = None
     domain: str | None = None
     titles: list[str]  # the distinct role titles the page showed at its last full read
+    # A few of the page's role links: a board behind the company's own site shows only on its job pages.
+    job_urls: list[str] = Field(default_factory=list)
 
 
 class BoardResult(BaseModel):

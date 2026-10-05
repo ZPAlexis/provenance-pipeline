@@ -57,13 +57,15 @@ RSpec.describe Verifier::Targets do
   end
 
   describe ".board" do
-    it "sends the distinct roles every page of the latest LLM read showed" do
+    it "sends the distinct roles every page of the latest LLM read showed, and a role link to look behind" do
       read(at: 9.days.ago, run_id: "old", listings: [ { "title" => "Gone Role" } ])
-      read(run_id: "latest", listings: [ { "title" => "Account Executive" }, { "title" => "Data Engineer" } ])
+      read(run_id: "latest", listings: [ { "title" => "Account Executive" },
+                                         { "title" => "Data Engineer", "url" => "https://acme.example/jobs/2" } ])
       read(url: "#{page}?page=2", run_id: "latest", listings: [ { "title" => "Data Engineer" }, { "title" => "Recruiter" } ])
 
       expect(described_class.board(company)).to eq(
-        id: company.id, name: "Acme", domain: "acme.example", titles: [ "Account Executive", "Data Engineer", "Recruiter" ]
+        id: company.id, name: "Acme", domain: "acme.example", titles: [ "Account Executive", "Data Engineer", "Recruiter" ],
+        job_urls: [ "https://acme.example/jobs/2" ]
       )
     end
 
@@ -84,6 +86,26 @@ RSpec.describe Verifier::Targets do
 
     it "skips a company never verified" do
       expect(described_class.board(company)).to be_nil
+    end
+  end
+
+  describe ".full_read_cost" do
+    it "is what every page of the latest verification cost, a reused page at what the read it reused cost" do
+      first = read(at: 3.days.ago, run_id: "earlier")
+      create(:llm_call, page_check: first, cost_usd: 0.03)
+      read(run_id: "latest", read_via: "reused", reused_from: first)
+      second = read(url: "#{page}?page=2", run_id: "latest")
+      create(:llm_call, page_check: second, cost_usd: 0.02)
+      create(:llm_call, page_check: second, purpose: "match", cost_usd: 0.001) # matching is not reading
+
+      expect(described_class.full_read_cost(company)).to be_within(1e-9).of(0.05)
+    end
+
+    it "is nothing for a page read through an ATS API, and nil for a company never verified" do
+      expect(described_class.full_read_cost(company)).to be_nil
+
+      read(read_via: "ats_api:lever")
+      expect(described_class.full_read_cost(company)).to eq(0.0)
     end
   end
 end

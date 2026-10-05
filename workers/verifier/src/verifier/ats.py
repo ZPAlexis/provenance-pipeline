@@ -39,6 +39,14 @@ GUESSABLE_VENDORS = ("greenhouse", "lever", "ashby")
 _CORPORATE_SUFFIXES = {"inc", "llc", "ltd", "ltda", "limited", "corp", "corporation", "co", "gmbh", "sa", "plc"}
 
 
+class IncompleteBoard(Exception):  # noqa: N818 -- a result, not an error
+    """A board read only in part: it lists more roles than the reader's guard allows."""
+
+    def __init__(self, listings: list[Listing], total: int):
+        super().__init__(f"read {len(listings)} of {total} roles")
+        self.listings, self.total = listings, total
+
+
 def detect(urls: list[str]) -> AtsBoard | None:
     """The first known ATS board among a page's own, frame, and embed URLs."""
     for url in urls:
@@ -125,7 +133,8 @@ def on_company_host(board: AtsBoard) -> bool:
 
 
 def fetch_listings(board: AtsBoard, client: httpx2.Client, pause: Callable[[], None] = lambda: None) -> list[Listing]:
-    """Every open listing on the board. Raises on HTTP errors. `pause` spaces out paged requests."""
+    """Every open listing on the board. Raises on HTTP errors, and IncompleteBoard, carrying what
+    was read, when the board is larger than the reader's guard. `pause` spaces out paged requests."""
     if board.vendor == "workday":
         return _workday(board, client, pause)
     return {"greenhouse": _greenhouse, "lever": _lever, "ashby": _ashby}[board.vendor](board, client)
@@ -237,14 +246,12 @@ def _workday(board: AtsBoard, client: httpx2.Client, pause: Callable[[], None]) 
     for page in range(WORKDAY_MAX_PAGES):
         if page:
             pause()
-        response = client.post(
-            url,
-            json={"appliedFacets": {}, "limit": WORKDAY_PAGE_SIZE, "offset": len(listings), "searchText": ""},
-            headers={"User-Agent": USER_AGENT},
-            follow_redirects=True,
-        )
-        response.raise_for_status()
-        data = response.json()
+        try:
+            data = _workday_page(client, url, len(listings), pause)
+        except httpx2.HTTPError:
+            if listings:  # what was read before the failure stands, as a part that says so
+                raise IncompleteBoard(listings, total) from None
+            raise
         if total is None:
             total = data.get("total") or 0  # reported on the first page only
         postings = data.get("jobPostings") or []
@@ -259,7 +266,30 @@ def _workday(board: AtsBoard, client: httpx2.Client, pause: Callable[[], None]) 
         ]
         if not postings or len(listings) >= total:
             break
+    if len(listings) < total:
+        raise IncompleteBoard(listings, total)  # cut short by the guard: never the whole list
     return listings
+
+
+def _workday_page(client: httpx2.Client, url: str, offset: int, pause: Callable[[], None]) -> dict:
+    """One page of a Workday board, asked for again once, after a pause, if the request fails:
+    a long board takes dozens of requests, and one failure should not lose the rest."""
+    for attempt in range(2):
+        if attempt:
+            pause()
+        try:
+            response = client.post(
+                url,
+                json={"appliedFacets": {}, "limit": WORKDAY_PAGE_SIZE, "offset": offset, "searchText": ""},
+                headers={"User-Agent": USER_AGENT},
+                follow_redirects=True,
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx2.HTTPError:
+            if attempt:
+                raise
+    raise AssertionError("unreachable")
 
 
 def _normalize_mode(value: str | None) -> WorkMode:
