@@ -100,9 +100,10 @@ companies     name, domain (dedup key), careers_page_url, ats_type,
               board_overlap, board_evidence, board_confirmed_at,
               enrichment (jsonb), notes
 
-postings      company_id, role_title, location, posting_url, posted_on,
-              source_slice, verification_state, roles_listed_count,
-              work_mode, last_checked_at, enrichment (jsonb)
+postings      company_id, role_title, location, posting_url, job_url, posted_on,
+              source_slice, tracking (suggested | tracked | dismissed),
+              verification_state, roles_listed_count, work_mode,
+              last_checked_at, enrichment (jsonb)
 
 page_checks   company_id, run_id, purpose (resolution | verification), step,
               url, final_url, outcome, reason, read_via, ats_vendor, ats_board,
@@ -128,6 +129,7 @@ Notes on a few choices:
 - **Page checks are evidence, not changes.** Every page read, whatever its outcome, is a `page_checks` row with a snapshot of every listing it saw, unfiltered, so a later search profile can be applied to past checks. Changes to companies and postings go through `audit_events`.
 - **`llm_calls` answers "what did this cost, and what produced it"** without the run directory: one row per model call, with the model the API reports having served, its settings, and a `prompt_version` hash over the prompt, output schema, and limits.
 - **A repeat read is paid for only when the roles may have changed.** A page that links to exactly the role pages it did last time reuses that read's listings, and its check names the read it reused (`reused_from_id`); listings are read in full again once 14 days old (`listings_read_at`). A company whose free ATS board lists at least 90% of its page's roles has that board recorded beside the page (`board_*`, with the evidence) and read in its place for 30 days; the page stays the one on record.
+- **Only the operator tracks a role.** A posting is `suggested` (proposed by the agent), `tracked` (on the operator's watch list), or `dismissed` (declined for good, never checked again); the agent may suggest, never track. `job_url` is the role's own page at the employer, learned from the listing it matched, so the next check finds the role by its link before its title; `posting_url` stays where it was found.
 - **Careers-page resolution is recorded beside the page:** how it was found, how sure we are (`high`, `medium`, `low`, or `confirmed` by a person), a held candidate, or why it failed. A low-confidence find waits in `resolution_candidate_url` and is never watched until a person confirms it.
 
 ### Verification fields
@@ -205,6 +207,8 @@ bin/rails "verifier:confirm[company_id]"         # or verifier:reject, verifier:
 bin/rails "verifier:status[company name or id]"  # one company: its page, checks, postings, history
 bin/rails verifier:verify                        # shows the plan and its cost; GO=1 runs it
 bin/rails verifier:find_boards                   # free boards listing the same roles as LLM-read pages (no API cost)
+bin/rails "verifier:check[posting_id]"          # is this role still listed? its own page first, then its company's
+bin/rails "verifier:track[posting_id]"          # or verifier:dismiss: your watch list, with NOTE="why"
 bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
 ```
 

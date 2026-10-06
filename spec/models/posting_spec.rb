@@ -100,4 +100,20 @@ RSpec.describe Posting do
       end
     end
   end
+  describe "tracking" do
+    it "is tracked unless said otherwise, and is one of suggested, tracked, or dismissed" do
+      expect(described_class.new.tracking).to eq("tracked")
+      expect(build(:posting, tracking: "suggested")).to be_valid
+      expect(build(:posting, tracking: "watched")).not_to be_valid
+    end
+
+    it "leaves dismissed postings out of the ones checked" do
+      tracked = create(:posting)
+      suggested = create(:posting, tracking: "suggested")
+      create(:posting, tracking: "dismissed")
+
+      expect(described_class.not_dismissed).to contain_exactly(tracked, suggested)
+      expect(described_class.tracked).to contain_exactly(tracked)
+    end
+  end
 end

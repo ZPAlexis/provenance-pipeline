@@ -28,6 +28,7 @@ from typing import Protocol
 
 from verifier.contract import Listing, LlmUsage, MatchResult, MatchTarget, PostingVerdict, TrackedPosting
 from verifier.extract import ExtractionFailed, MatchDecisions
+from verifier.links import link_key
 
 ABBREVIATIONS = {"sr": "senior", "jr": "junior"}
 # Words that tell two near-miss titles apart without making them different jobs.
@@ -119,6 +120,10 @@ class Matcher:
         cases: list[Case] = []
 
         for posting in target.postings:
+            linked = _linked(posting, listings)
+            if linked:
+                verdicts[posting.id] = _live(posting, listings, linked, "link")
+                continue
             exact = [i for i, listing in enumerate(listings) if same_title(posting.title, listing.title)]
             if exact:
                 verdicts[posting.id] = _live(posting, listings, exact, "exact")
@@ -178,6 +183,9 @@ def _live(posting: TrackedPosting, listings: list[Listing], indexes: list[int], 
     listing = listings[index]
     shown = f'"{listing.title}"' + (f" ({listing.location})" if listing.location else "")
     how = f', a variant of the posting\'s "{posting.title}"' if method == "variant" else ""
+    if method == "link":
+        renamed = "" if same_title(posting.title, listing.title) else f', titled "{posting.title}" when tracked'
+        how = f" at the posting's own link{renamed}"
     return PostingVerdict(
         posting_id=posting.id,
         verdict="verified_live",
@@ -187,6 +195,14 @@ def _live(posting: TrackedPosting, listings: list[Listing], indexes: list[int], 
         location_note=_location_note(posting, listing),
         reasoning=f"The page lists {shown}{how}.",
     )
+
+
+def _linked(posting: TrackedPosting, listings: list[Listing]) -> list[int]:
+    """Listings at the posting's own address: the same role whatever its title says now."""
+    if not posting.url:
+        return []
+    own = link_key(posting.url)
+    return [i for i, listing in enumerate(listings) if listing.url and link_key(listing.url) == own]
 
 
 def _unmatched(posting: TrackedPosting, target: MatchTarget, why: str | None = None) -> PostingVerdict:

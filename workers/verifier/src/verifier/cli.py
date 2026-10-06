@@ -1,4 +1,4 @@
-"""`verifier extract|resolve|match|verify|boards --targets targets.json --out results.jsonl`
+"""`verifier extract|resolve|match|verify|check|boards --targets targets.json --out results.jsonl`
 
 extract  checks each careers page and extracts its listings: one PageResult per target.
 resolve  finds each company's careers page: one ResolutionResult per target,
@@ -7,7 +7,9 @@ match    matches a company's tracked postings against listings already read (a
          stored page check): one MatchResult per target, nothing rendered.
 verify   reads each company's watched page in full and matches its postings
          against it: one VerificationResult per company.
-         For match and verify, `--no-llm` leaves near-misses undecided.
+check    checks one tracked role per target: its own page first, then its
+         company's watched page. One VerificationResult per role.
+         For match, verify, and check, `--no-llm` leaves near-misses undecided.
 boards   looks for a free board listing the same roles as a page the LLM had to
          read: one BoardResult per company. Never calls the LLM.
 
@@ -32,6 +34,7 @@ import httpx2
 from playwright.sync_api import sync_playwright
 
 from verifier.boards import find_board
+from verifier.check import check_posting
 from verifier.config import DEFAULT_MODEL, DOMAIN_DELAY_SECONDS, MODEL_SETTINGS
 from verifier.contract import (
     BoardResult,
@@ -113,6 +116,13 @@ def run_verify(targets: list[VerifyTarget], out_path: Path, services: Services, 
     return _run(targets, out_path, lambda target: verify_company(target, services, matcher), failed, log)
 
 
+def run_check(targets: list[VerifyTarget], out_path: Path, services: Services, matcher: Matcher, log=sys.stderr):
+    def failed(target: VerifyTarget, reason: str) -> VerificationResult:
+        return VerificationResult(target_id=target.id, url=target.url, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: check_posting(target, services, matcher), failed, log)
+
+
 def run_match(targets: list[MatchTarget], out_path: Path, matcher: Matcher, log=sys.stderr) -> RunSummary:
     def failed(target: MatchTarget, reason: str) -> MatchResult:
         return MatchResult(
@@ -192,6 +202,8 @@ def _describe(target: Target | ResolveTarget | BoardTarget, result: Result) -> s
         for verdict in result.verdicts:
             tally[verdict.verdict or "inconclusive"] = tally.get(verdict.verdict or "inconclusive", 0) + 1
         list_kind = "whole list" if result.complete else "partial list"
+        if any(verdict.method == "posting_page" for verdict in result.verdicts):
+            list_kind = "its own page"
         return f"{target.label or target.id}: {tally or result.reason} ({list_kind}) {timing}"
     if isinstance(result, ResolutionResult):
         label = target.label or target.domain or target.id
@@ -218,17 +230,24 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("resolve", parents=[common], help="find companies' careers pages")
     match = commands.add_parser("match", parents=[common], help="match postings against listings already read")
     verify = commands.add_parser("verify", parents=[common], help="read watched pages in full and verify postings")
-    for command in (match, verify):
+    check = commands.add_parser("check", parents=[common], help="check one tracked role per target, its own page first")
+    for command in (match, verify, check):
         command.add_argument("--no-llm", action="store_true", help="leave near-misses undecided")
     commands.add_parser("boards", parents=[common], help="find free boards listing the same roles as LLM-read pages")
     args = parser.parse_args(argv)
 
-    model = {"resolve": ResolveTarget, "match": MatchTarget, "verify": VerifyTarget, "boards": BoardTarget}.get(
-        args.command, Target
-    )
+    model = {
+        "resolve": ResolveTarget,
+        "match": MatchTarget,
+        "verify": VerifyTarget,
+        "check": VerifyTarget,
+        "boards": BoardTarget,
+    }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
         targets = [model.model_validate(item) for item in payload["targets"]]
+        if args.command == "check" and any(len(target.postings) != 1 for target in targets):
+            raise ValueError("each check target carries exactly one posting")
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"could not read targets from {args.targets}: {error}", file=sys.stderr)
         return EXIT_BAD_INPUT
@@ -259,9 +278,10 @@ def main(argv: list[str] | None = None) -> int:
                 summary = run_resolve(targets, args.out, resolver)
             elif args.command == "boards":
                 summary = run_boards(targets, args.out, ServicesReader(services))
-            elif args.command == "verify":
+            elif args.command in ("verify", "check"):
                 matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=args.model))
-                summary = run_verify(targets, args.out, services, matcher)
+                run_command = run_verify if args.command == "verify" else run_check
+                summary = run_command(targets, args.out, services, matcher)
             else:
                 summary = run(targets, args.out, services)
         finally:

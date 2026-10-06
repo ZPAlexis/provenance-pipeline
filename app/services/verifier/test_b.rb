@@ -27,7 +27,7 @@ module Verifier
     SCORED_LABELS = %w[verified_live not_found].freeze
 
     Case = Struct.new(:posting_id, :company_id, :company, :title, :location, :label, :result, :snapshot,
-                      :watched_url, :domain, :hand_verdict, :aggregator, keyword_init: true) do
+                      :watched_url, :domain, :hand_verdict, :aggregator, :job_url, keyword_init: true) do
       def verdict = result&.dig("verdict")
 
       def scored_label? = SCORED_LABELS.include?(label)
@@ -110,7 +110,7 @@ module Verifier
         label = self.class.label_for(posting) or next
         company = posting.company
         Case.new(posting_id: posting.id, company_id: company.id, company: company.name, title: posting.role_title,
-                 location: posting.location, label: label,
+                 location: posting.location, label: label, job_url: posting.job_url,
                  domain: company.domain, hand_verdict: HandCheck.latest_verdict(posting),
                  aggregator: company.kind == "aggregator",
                  watched_url: (company.careers_page_url if company.resolution_status == "resolved" && company.kind != "aggregator"),
@@ -127,7 +127,7 @@ module Verifier
       ids = @cases.select { |c| c.scored_label? && c.watched_url }.map(&:company_id).uniq
       Company.where(id: ids).includes(:postings).order(:name).map do |company|
         { id: company.id, url: company.careers_page_url, label: company.name, domain: company.domain, name: company.name,
-          postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location } } }
+          postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location, url: p.job_url } } }
       end
     end
 
@@ -136,7 +136,7 @@ module Verifier
         check = cases.first.snapshot
         { id: company_id, label: cases.first.company, page_check_id: check.id, complete: self.class.complete?(check),
           listings: check.listings,
-          postings: cases.map { |c| { id: c.posting_id, title: c.title, location: c.location } } }
+          postings: cases.map { |c| { id: c.posting_id, title: c.title, location: c.location, url: c.job_url } } }
       end
     end
 

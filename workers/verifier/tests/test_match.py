@@ -201,3 +201,39 @@ def test_regions_and_seniority_do_not_count_as_naming_something_else():
     )
 
     assert verdict.verdict == "verified_live"
+
+
+# A role is known by its link: the listing at the posting's own address is its role, renamed or not.
+def test_a_listing_at_the_postings_own_link_is_its_role_whatever_its_title_says_now():
+    own = "https://acme.example/jobs/42"
+    result = Matcher().match(
+        MatchTarget(
+            id="c1",
+            complete=True,
+            listings=[
+                Listing(title="RevOps Engineer", url="https://acme.example/jobs/41"),
+                Listing(title="Revenue Operations Engineer II", url=own + "/?utm_source=board"),
+            ],
+            postings=[TrackedPosting(id="p1", title="RevOps Engineer", url=own)],
+        )
+    )
+
+    verdict = only(result)
+    assert (verdict.verdict, verdict.method, verdict.listing_index) == ("verified_live", "link", 1)
+    assert verdict.reasoning == (
+        """The page lists "Revenue Operations Engineer II" at the posting's own link, titled "RevOps Engineer" """
+        "when tracked."
+    )
+
+
+def test_a_posting_whose_link_is_not_listed_is_matched_by_title_as_before():
+    result = Matcher().match(
+        MatchTarget(
+            id="c1",
+            complete=True,
+            listings=[Listing(title="RevOps Engineer", url="https://acme.example/jobs/41")],
+            postings=[TrackedPosting(id="p1", title="RevOps Engineer", url="https://acme.example/jobs/9")],
+        )
+    )
+
+    assert (only(result).verdict, only(result).method) == ("verified_live", "exact")

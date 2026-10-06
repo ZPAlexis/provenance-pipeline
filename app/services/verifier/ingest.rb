@@ -123,12 +123,14 @@ module Verifier
         verification_state: verdict["verdict"],
         roles_listed_count: (result["listing_count"] if result["outcome"] == "ok"),
         work_mode: observed_work_mode(verdict),
-        last_checked_at: checked_at
+        last_checked_at: checked_at,
+        job_url: learned_job_url(posting, verdict)
       )
-      # Only a verdict that changes is a change worth an audit event. The rest of
-      # what a check observed (counts drift from check to check) is refreshed with
-      # it, and the page check is the provenance.
-      unless posting.verification_state_changed?
+      # Only a verdict that changes, or a role found at a new address, is a change
+      # worth an audit event. The rest of what a check observed (counts drift from
+      # check to check) is refreshed with it, and the page check is the provenance.
+      changed = posting.verification_state_changed?
+      unless changed || posting.job_url_changed?
         posting.save!
         return :unchanged
       end
@@ -136,7 +138,14 @@ module Verifier
       posting.save!
       AuditEvent.record_write!(posting, actor: ACTOR, model_version: model_version(result),
                                         reasoning: verdict_reasoning(verdict, result))
-      :written
+      changed ? :written : :unchanged
+    end
+
+    # The role's own page, from the listing a live verdict matched: how the next
+    # check finds the role first, and how "check now" starts.
+    def learned_job_url(posting, verdict)
+      url = verdict.dig("listing", "url")
+      verdict["verdict"] == "verified_live" && ResultContract.web_url?(url) ? url : posting.job_url
     end
 
     # As the matched listing states it; nil when it was not observed (Posting's contract).
@@ -146,7 +155,7 @@ module Verifier
     end
 
     def verdict_reasoning(verdict, result)
-      read = if result["outcome"] == "ok"
+      read = if result["outcome"] == "ok" && result["listing_count"]
         "#{result['listing_count']} roles read on #{result['checks'].first['url']}#{', the whole list' if result['complete']}."
       end
       [ verdict["reasoning"], verdict["location_note"], read, "Run #{@run_id}." ].compact_blank.join(" ")

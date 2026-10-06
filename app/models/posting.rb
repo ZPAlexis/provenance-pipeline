@@ -38,12 +38,25 @@ class Posting < ApplicationRecord
   # that could not decide (part of a list read, nothing matched) writes nothing
   # here. The operator's own checks (verifier:hand_check) are verdicts too,
   # audited as theirs.
+  # --- Tracking: the operator's watch list ----------------------------------
+  #
+  # suggested  proposed by the agent (from a search profile, 1.5c); checked with
+  #            its company, for free, but not watched.
+  # tracked    chosen by the operator: watched, and checked on demand.
+  # dismissed  declined by the operator for good: never checked or suggested again.
+  # Only the operator tracks or dismisses (Verifier::Tracking).
+  #
+  # job_url is the role's own page at the employer, learned from the listing it
+  # matched; posting_url is where it was found (often LinkedIn, never fetched).
+  TRACKING = %w[suggested tracked dismissed].freeze
+
   VERIFICATION_STATES = %w[pending verified_live not_found inaccessible].freeze
   VERDICTS = (VERIFICATION_STATES - %w[pending]).freeze
   WORK_MODES = %w[remote hybrid onsite unknown].freeze
 
   validates :role_title, presence: true
   validates :verification_state, inclusion: { in: VERIFICATION_STATES }
+  validates :tracking, inclusion: { in: TRACKING }
   validates :work_mode, inclusion: { in: WORK_MODES }, allow_nil: true
   validates :posting_url, uniqueness: true, allow_nil: true
   validates :last_checked_at, presence: true, if: :verdict?
@@ -55,6 +68,8 @@ class Posting < ApplicationRecord
   validates :roles_listed_count, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
 
   scope :pending, -> { where(verification_state: "pending") }
+  scope :tracked, -> { where(tracking: "tracked") }
+  scope :not_dismissed, -> { where.not(tracking: "dismissed") }
   scope :live, -> { where(verification_state: "verified_live") }
   scope :remote, -> { where(work_mode: "remote") }
   scope :from_slice, ->(slice) { where(source_slice: slice) }

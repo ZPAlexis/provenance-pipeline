@@ -119,6 +119,14 @@ def test_one_unexpected_failure_does_not_lose_the_run(services, site, tmp_path, 
     assert results[0].checked_at
 
 
+def test_a_check_target_carries_exactly_one_posting(tmp_path):
+    bad = tmp_path / "targets.json"
+    postings = [{"id": "p1", "title": "A"}, {"id": "p2", "title": "B"}]
+    bad.write_text(json.dumps({"targets": [{"id": "c1", "url": "https://acme.example/careers", "postings": postings}]}))
+
+    assert cli.main(["check", "--targets", str(bad), "--out", str(tmp_path / "out.jsonl")]) == cli.EXIT_BAD_INPUT
+
+
 def test_rejects_an_unreadable_targets_file(tmp_path):
     bad = tmp_path / "targets.json"
     bad.write_text(json.dumps({"not_targets": []}))

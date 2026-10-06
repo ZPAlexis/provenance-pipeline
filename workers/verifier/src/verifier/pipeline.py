@@ -9,7 +9,7 @@ page that could not be read is never mistaken for one with no openings.
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 import httpx2
 from playwright.sync_api import Browser
@@ -18,6 +18,7 @@ from verifier import ats
 from verifier.config import LISTINGS_MAX_AGE_DAYS, MAX_PAGES
 from verifier.contract import AtsBoard, Listing, PageResult, PreviousRead, Target
 from verifier.extract import ExtractionFailed, Extractor, input_truncated, link_url
+from verifier.links import link_key, link_prefix
 from verifier.politeness import HostThrottle
 from verifier.render import RenderedPage, RenderError, render
 from verifier.robots import RobotsPolicy
@@ -87,7 +88,7 @@ def check_page(
     board = ats.detect([target.url])
     if board and not (ats.on_company_host(board) and services.robots.check(ats.api_url(board))):
         try:
-            return finish(**_board_read(board, services))
+            return finish(**board_read(board, services))
         except (httpx2.HTTPError, ValueError, KeyError, TypeError):
             pass  # read the page itself instead
 
@@ -130,7 +131,7 @@ def check_page(
         fallback = f"ats_api_blocked:{board.vendor}"
     elif board:
         try:
-            return finish(**_board_read(board, services), **seen)
+            return finish(**board_read(board, services), **seen)
         except (httpx2.HTTPError, ValueError, KeyError, TypeError):
             fallback = f"ats_api_failed:{board.vendor}"
 
@@ -199,7 +200,7 @@ def read_board(target: Target, board: AtsBoard, services: Services) -> PageResul
     if ats.on_company_host(board) and (refusal := services.robots.check(ats.api_url(board))):
         return finish(outcome="blocked", reason=refusal)
     try:
-        read = _board_read(board, services)
+        read = board_read(board, services)
     except (httpx2.HTTPError, ValueError, KeyError, TypeError):
         return finish(outcome="error", reason="board_unreadable")
     if not read["listings"]:
@@ -221,8 +222,11 @@ def fetch_board(board: AtsBoard, services: Services) -> list[Listing]:
     return ats.fetch_listings(board, services.http, pause=space_out)
 
 
-def _board_read(board: AtsBoard, services: Services) -> dict:
-    """A board's listings as a check's fields: the whole list, or, cut short, a part that says so."""
+def board_read(board: AtsBoard, services: Services) -> dict:
+    """A board's listings as a check's fields: the whole list, or, cut short, a part that says so.
+
+    Raises what fetching raises (HTTP errors, an unexpected payload) for the caller to fall back on.
+    """
     fields = {"outcome": "ok", "method": f"ats_api:{board.vendor}", "ats": board}
     try:
         listings = fetch_board(board, services)
@@ -320,10 +324,6 @@ def _by_url(reads: list[PreviousRead]) -> dict[str, PreviousRead]:
     return by_url
 
 
-# Query parameters that track a visit rather than name a role.
-_TRACKING = ("utm_", "gh_src", "trk")
-
-
 def _read_at(value: str) -> datetime:
     read_at = datetime.fromisoformat(value)
     return read_at if read_at.tzinfo else read_at.replace(tzinfo=UTC)
@@ -361,27 +361,8 @@ def _same_roles(previous: PreviousRead, page: RenderedPage) -> bool:
     without one, or roles sharing one) fall back to the page's whole text being
     identical.
     """
-    role_links = {_link_key(listing.url) for listing in previous.listings if listing.url}
+    role_links = {link_key(listing.url) for listing in previous.listings if listing.url}
     if previous.listings and len(role_links) == len(previous.listings):
-        prefixes = {_link_prefix(url) for url in role_links}
-        return {_link_key(href) for _, href in page.links if _link_prefix(href) in prefixes} == role_links
+        prefixes = {link_prefix(url) for url in role_links}
+        return {link_key(href) for _, href in page.links if link_prefix(href) in prefixes} == role_links
     return previous.content_hash is not None and previous.content_hash == page.content_hash
-
-
-def _link_prefix(url: str) -> tuple[str, str]:
-    parts = urlsplit(url)
-    return parts.netloc.lower().removeprefix("www."), parts.path.rstrip("/").rsplit("/", 1)[0]
-
-
-def _link_key(url: str) -> str:
-    """A role link compared as the role it names: tracking parameters and in-page anchors aside.
-
-    A fragment that is a route (#/jobs/405, #!/jobs/405), as single-page job boards use, names
-    the role and is kept.
-    """
-    parts = urlsplit(url)
-    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith(_TRACKING)])
-    route = parts.fragment.rstrip("/") if parts.fragment.startswith(("/", "!/")) else ""
-    return urlunsplit(
-        (parts.scheme.lower(), parts.netloc.lower().removeprefix("www."), parts.path.rstrip("/"), query, route)
-    )
