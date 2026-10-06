@@ -30,9 +30,10 @@ from verifier.contract import (
     VerifyTarget,
 )
 from verifier.links import same_job
-from verifier.match import FILLER_WORDS, REGION_WORDS, SENIORITY_WORDS, Matcher, title_words
+from verifier.match import Matcher
 from verifier.pipeline import Services, board_read
 from verifier.render import RenderError, render
+from verifier.titles import FILLER_WORDS, REGION_WORDS, SENIORITY_WORDS, title_words
 from verifier.verify import verify_company
 
 # Wording a job page uses once a role is closed: English, Portuguese, Spanish.

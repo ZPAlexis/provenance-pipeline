@@ -78,22 +78,6 @@ WHOLE_LIST_WORDS = re.compile(
 NOT_LISTINGS = re.compile(
     r"saved|alert|log ?in|sign ?(?:in|up)|talent (?:community|network|pool)|subscribe", re.IGNORECASE
 )
-# Sites a careers page links to that are never its own board.
-NOT_A_BOARD = (
-    "linkedin.com",
-    "indeed.com",
-    "glassdoor.com",
-    "facebook.com",
-    "instagram.com",
-    "x.com",
-    "twitter.com",
-    "youtube.com",
-    "wellfound.com",
-    "angel.co",
-    "builtin.com",
-    "google.com",
-)
-
 # Pages checked for listings per company, beyond the homepage. Each check can
 # cost an extraction, so this bounds what one company can cost.
 MAX_CHECKS = 6
@@ -296,7 +280,7 @@ class _Attempt:
             why = f"{guessed}, records the same company name."
         else:
             # The board's own link back to a company site says whose it is.
-            owner, host = board_owner(self.reader.board_links(board), self.target.domain)
+            owner, host = ats.board_owner(self.reader.board_links(board), self.target.domain)
             why = {
                 "confirmed": f"{guessed}, links to {host}, the company's own site.",
                 "elsewhere": f"{guessed}, links to {host}: another company's board.",
@@ -367,7 +351,7 @@ def careers_links(page: RenderedPage, domain: str, *, from_homepage: bool) -> li
         elif (
             not LISTING_WORDS.search(text or "")
             or NOT_LISTINGS.search(text or "")
-            or any(host == other or host.endswith("." + other) for other in NOT_A_BOARD)
+            or any(host == other or host.endswith("." + other) for other in ats.NOT_A_BOARD)
         ):
             continue
         chosen.setdefault(_key(url), (text, url))
@@ -393,43 +377,6 @@ def _yields(result: PageResult, kind: str | None = None) -> bool:
         and not _one_job_page(result)
         and (bool(result.listing_count) or result.explicit_no_openings)
     )
-
-
-# Hosts a board page links to that say nothing about whose board it is: the
-# vendors themselves, social sites, and cookie or privacy services.
-NOT_AN_OWNER = (
-    *NOT_A_BOARD,
-    "lever.co",
-    "ashbyhq.com",
-    "greenhouse.io",
-    "greenhouse.com",
-    "myworkdayjobs.com",
-    "workday.com",
-    "smartrecruiters.com",
-    "workable.com",
-    "onetrust.com",
-    "cookielaw.org",
-    "cookiepedia.co.uk",
-    "trustarc.com",
-    "gstatic.com",
-    "apple.com",
-)
-
-
-def board_owner(links: list[str] | None, domain: str | None) -> tuple[str | None, str | None]:
-    """Whose board this is, from where its page links: ("confirmed" | "elsewhere" | None, the host)."""
-    site = (domain or "").lower().removeprefix("www.")
-    hosts = [
-        host
-        for host in (urlsplit(link).netloc.lower().removeprefix("www.") for link in links or [])
-        if host and not any(host == other or host.endswith("." + other) for other in NOT_AN_OWNER)
-    ]
-    own = next((host for host in hosts if site and (host == site or host.endswith("." + site))), None)
-    if own:
-        return "confirmed", own
-    if hosts:
-        return "elsewhere", max(set(hosts), key=hosts.count)
-    return None, None
 
 
 def _job_url(url: str | None) -> bool:
