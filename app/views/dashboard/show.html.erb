@@ -1,0 +1,78 @@
+<% content_for :title, "Dashboard · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="sub">Where the roles you track stand, and what changed lately.</p>
+  </div>
+</div>
+
+<h2>Tracked roles</h2>
+<div class="tiles">
+  <% [ [ "verified_live", "live" ], [ "not_found", "gone" ], [ "inaccessible", "unsure" ], [ "pending", "" ] ].each do |state, tone| %>
+    <%= link_to roles_path(anchor: state), class: [ "tile", tone ] do %>
+      <div class="value"><%= @roles.fetch(state, 0) %></div>
+      <div class="label"><%= answer_label(state) %></div>
+    <% end %>
+  <% end %>
+  <%= link_to roles_path(tab: "suggested"), class: "tile" do %>
+    <div class="value"><%= @tracking.fetch("suggested", 0) %></div>
+    <div class="label">Suggested</div>
+  <% end %>
+  <%= link_to roles_path(tab: "dismissed"), class: "tile" do %>
+    <div class="value"><%= @tracking.fetch("dismissed", 0) %></div>
+    <div class="label">Dismissed</div>
+  <% end %>
+</div>
+<% if @stale.positive? %>
+  <p class="muted small"><%= pluralize(@stale, "tracked role") %> not checked in the last <%= Overview::STALE_AFTER.inspect %>.</p>
+<% end %>
+
+<h2>Companies and cost</h2>
+<div class="tiles">
+  <%= link_to companies_path, class: "tile" do %>
+    <div class="value"><%= @companies[:watched] %></div>
+    <div class="label">Companies watched</div>
+  <% end %>
+  <%= link_to companies_path, class: "tile" do %>
+    <div class="value"><%= @companies[:boards] %></div>
+    <div class="label">Read through a free board</div>
+  <% end %>
+  <%= link_to companies_path(view: "candidates"), class: "tile" do %>
+    <div class="value"><%= @companies[:candidates] %></div>
+    <div class="label">Careers pages to confirm</div>
+  <% end %>
+  <div class="tile">
+    <div class="value"><%= money(@spend[:last_30_days]) %></div>
+    <div class="label">API credit, last 30 days</div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= money(@spend[:total]) %></div>
+    <div class="label">API credit, all time · last call <%= ago(@spend[:last_call]) %></div>
+  </div>
+</div>
+
+<h2>Recent verdict changes</h2>
+<% if @changes.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>When</th><th>Role</th><th>Company</th><th>Change</th><th>By</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <% @changes.each do |event| %>
+          <% role = event.target %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= role ? link_to(role.role_title, role_path(role)) : tag.span("deleted role", class: "muted") %></td>
+            <td><%= link_to(role.company.name, company_path(role.company)) if role %></td>
+            <td class="nowrap"><%= change_summary(event) %></td>
+            <td><%= actor_label(event.actor) %></td>
+            <td class="reason"><%= event.reasoning.to_s.truncate(180) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">No verdict has changed yet.</p>
+<% end %>

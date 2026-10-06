@@ -6,7 +6,8 @@ Rails.application.routes.draw do
   # Health check endpoint for whatever host or uptime monitor runs the app
   get "up" => "rails/health#show", as: :rails_health_check
 
+  root "dashboard#show"
+  resources :roles, only: %i[index show]
+  resources :companies, only: %i[index show]
   get "about", to: "pages#about"
-
-  root "pages#home"
 end

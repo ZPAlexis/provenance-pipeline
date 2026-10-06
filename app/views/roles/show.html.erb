@@ -1,0 +1,66 @@
+<% content_for :title, "#{@role.role_title} · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1><%= @role.role_title %></h1>
+    <p class="sub">
+      <%= link_to @role.company.name, company_path(@role.company) %><%= " · #{@role.location}" if @role.location %>
+    </p>
+  </div>
+  <div><%= answer_badge(@role.verification_state) %> <%= tracking_badge(@role.tracking) %></div>
+</div>
+
+<dl class="facts">
+  <dt>Answer</dt>
+  <dd><%= answer_label(@role.verification_state) %><%= ", checked " if @role.last_checked_at %><%= ago(@role.last_checked_at) if @role.last_checked_at %></dd>
+  <dt>Roles on the page then</dt>
+  <dd><%= @role.roles_listed_count || tag.span("unknown", class: "muted") %></dd>
+  <dt>Work mode</dt>
+  <dd><%= @role.work_mode || tag.span("not stated", class: "muted") %></dd>
+  <dt>Its own page</dt>
+  <dd><%= @role.job_url ? outside_link(@role.job_url, label: @role.job_url) : tag.span("not known yet", class: "muted") %></dd>
+  <dt>Found at</dt>
+  <dd><%= @role.posting_url ? outside_link(@role.posting_url, label: @role.posting_url) : tag.span("—", class: "muted") %></dd>
+  <dt>Watched page</dt>
+  <dd><%= outside_link(@role.company.careers_page_url, label: @role.company.careers_page_url) %></dd>
+</dl>
+
+<h2>History</h2>
+<p class="muted small">Every change to this role: who made it, and why. Checks that confirmed the answer change nothing and are listed below.</p>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>When</th><th>Change</th><th>By</th><th>Why</th></tr></thead>
+    <tbody>
+      <% @history.each do |event| %>
+        <tr>
+          <td><%= ago(event.occurred_at) %></td>
+          <td class="nowrap"><%= change_summary(event) %></td>
+          <td><%= actor_label(event.actor) %></td>
+          <td class="reason"><%= event.reasoning %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<h2>Checks</h2>
+<% if @checks.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Read</th><th class="num">Roles</th><th>Answer</th><th>How it matched</th></tr></thead>
+      <tbody>
+        <% @checks.each do |check| %>
+          <% match = check.matches.find { |m| m["posting_id"] == @role.id } %>
+          <tr>
+            <td><%= ago(check.checked_at) %></td>
+            <td><%= outside_link(check.url) %><br><span class="muted small"><%= read_via_label(check.read_via) %></span></td>
+            <td class="num"><%= check.listing_count %></td>
+            <td><%= match["verdict"] ? answer_badge(match["verdict"]) : tag.span("inconclusive", class: "badge unsure") %></td>
+            <td class="reason"><%= match["reasoning"] %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">No check has looked for this role yet.</p>
+<% end %>

@@ -1,0 +1,19 @@
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th><th>Own page</th></tr>
+    </thead>
+    <tbody>
+      <% roles.each do |role| %>
+        <tr>
+          <td><%= link_to role.role_title, role_path(role) %></td>
+          <td><%= link_to role.company.name, company_path(role.company) %></td>
+          <td class="muted"><%= role.location %></td>
+          <td><%= answer_badge(role.verification_state) %></td>
+          <td><%= ago(role.last_checked_at) %></td>
+          <td><%= outside_link(role.job_url) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
