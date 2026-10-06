@@ -82,3 +82,6 @@ yarn-debug.log*
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+
+# Claude Code settings for one machine (permission allowlists with local paths)
+/.claude/settings.local.json
