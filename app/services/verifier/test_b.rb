@@ -96,13 +96,19 @@ module Verifier
         checks.where.not(ats_vendor: nil).to_a.reverse.find { |c| Resolution.board_url(c.ats_vendor, c.ats_board) == url }
     end
 
-    # The whole list was read: through an ATS API, or from a page that says it
-    # shows everything. A total the page states settles it, as in resolution.
+    # Whether a stored check read the whole list, by the worker's own rule
+    # (workers/verifier pipeline._whole_list), applied to the one check replayed:
+    # never one job's ad; an ATS API's list unless it was read only in part; never
+    # a rendered page that showed no roles and did not say it has none; up to the
+    # total the page states; otherwise a page that neither says it shows only part
+    # nor links to a next page. A copy until 1.4 stores the worker's own answer.
     def self.complete?(check)
-      return true if check.read_via.to_s.start_with?("ats_api")
+      return false if check.single_job_posting
+      return true if check.read_via.to_s.start_with?("ats_api") && !check.listings_incomplete
+      return false if check.listing_count.to_i.zero? && !check.explicit_no_openings
       return check.listing_count.to_i >= check.stated_total if check.stated_total
 
-      !check.listings_incomplete
+      !check.listings_incomplete && check.next_page_url.blank?
     end
 
     def initialize(postings = Posting.includes(:company))

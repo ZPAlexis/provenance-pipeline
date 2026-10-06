@@ -63,6 +63,20 @@ RSpec.describe Verifier::TestB do
         .to be(true)
     end
 
+    # The worker's rule (pipeline._whole_list), point for point: a replay never calls
+    # part of a list whole, so it never scores a not_found the worker could not write.
+    it "judges a stored check whole only as the worker would" do
+      whole = ->(**attributes) { described_class.complete?(build(:page_check, **attributes)) }
+
+      expect(whole.call(read_via: "ats_api:greenhouse", listing_count: 0, listings: [])).to be(true) # the vendor's own list
+      expect(whole.call(read_via: "ats_api:workday", listing_count: 2000, stated_total: 2024, listings_incomplete: true))
+        .to be(false) # a board larger than the reader's guard
+      expect(whole.call(listing_count: 20, next_page_url: "https://acme.example/jobs?page=2")).to be(false)
+      expect(whole.call(listing_count: 1, single_job_posting: true)).to be(false)
+      expect(whole.call(listing_count: 0, listings: [])).to be(false) # a page that never loaded its roles
+      expect(whole.call(listing_count: 0, listings: [], explicit_no_openings: true)).to be(true)
+    end
+
     it "leaves out companies with no watched page or no stored check of it" do
       labeled("verified_live", at: create(:company, :resolution_candidate))
       labeled("verified_live")
