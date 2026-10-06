@@ -43,7 +43,7 @@ RSpec.describe Verifier::TestB do
       expect(described_class.new.replay_targets).to eq([
         { id: company.id, label: "Acme", page_check_id: check.id, complete: true,
           listings: [ { "title" => "RevOps Engineer" } ],
-          postings: [ { id: posting.id, title: "RevOps Engineer", location: posting.location } ] }
+          postings: [ { id: posting.id, title: "RevOps Engineer", location: posting.location, url: nil } ] }
       ])
     end
 

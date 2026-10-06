@@ -97,6 +97,51 @@ RSpec.describe Verifier::Ingest, "#verification" do
       .to raise_error(described_class::InvalidResult, /not this company's/)
   end
 
+  describe "the role's own page" do
+    def live_at(url, **overrides)
+      verdict("verified_live", listing: { "title" => "RevOps Engineer", "work_mode" => "remote", "url" => url }, **overrides)
+    end
+
+    it "is learned from the listing a live verdict matched, and audited when it is new" do
+      posting.update!(verification_state: "verified_live", last_checked_at: Time.utc(2026, 9, 30, 12))
+
+      tally = ingest.verification(result(live_at("https://acme.example/jobs/7")))
+
+      expect(tally).to eq(unchanged: 1)
+      expect(posting.reload.job_url).to eq("https://acme.example/jobs/7")
+      expect(posting.audit_events.where(actor: "agent:verifier").sole.changes_made["job_url"])
+        .to eq([ nil, "https://acme.example/jobs/7" ])
+    end
+
+    it "is refreshed quietly when the role is at the same address" do
+      posting.update!(verification_state: "verified_live", last_checked_at: Time.utc(2026, 9, 30, 12),
+                      job_url: "https://acme.example/jobs/7")
+
+      expect { ingest.verification(result(live_at("https://acme.example/jobs/7"))) }.not_to change(AuditEvent, :count)
+    end
+
+    it "is kept when a verdict matched no listing" do
+      posting.update!(job_url: "https://acme.example/jobs/7")
+
+      ingest.verification(result(verdict("not_found", listing: nil)))
+
+      expect(posting.reload.job_url).to eq("https://acme.example/jobs/7")
+    end
+
+    # Check now: the role's own page was clearly up, and no list was read.
+    it "records a role its own page showed, without a count of roles it never read" do
+      own = page(url: "https://acme.example/jobs/7", method: "render", listing_count: nil, listings: [], llm: nil)
+      shown = live_at("https://acme.example/jobs/7", method: "posting_page", listing_index: nil,
+                                                     reasoning: "Its own page is up and shows the role (https://acme.example/jobs/7).")
+
+      ingest.verification(result(shown, complete: false, listing_count: nil, checks: [ own ]))
+
+      expect(posting.reload).to have_attributes(verification_state: "verified_live", roles_listed_count: nil)
+      expect(posting.audit_events.sole.reasoning)
+        .to eq("Its own page is up and shows the role (https://acme.example/jobs/7). Run 20261001T120000Z-verify.")
+    end
+  end
+
   it "keeps a check that reused an earlier read, linked to it, with when its listings were actually read" do
     earlier = create(:page_check, company: company, purpose: "verification", url: company.careers_page_url,
                                   checked_at: Time.utc(2026, 9, 28, 12))

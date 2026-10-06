@@ -71,9 +71,10 @@ module Verifier
       [ "Postings (#{postings.size}):" ] + postings.map do |posting|
         checked = posting.last_checked_at ? " on #{posting.last_checked_at.utc.to_date}" : ""
         label = TestB.label_for(posting)
-        "  #{posting.role_title}: #{posting.verification_state}#{checked}" \
+        "  #{posting.role_title}: #{posting.verification_state}#{checked} [#{posting.tracking}]" \
           "#{" (Clay said #{label})" if label && label != posting.verification_state}\n" \
-          "      #{posting.posting_url}  (posting #{posting.id})"
+          "      own page: #{posting.job_url || 'not known yet'}  (found at #{posting.posting_url || '-'}; " \
+          "posting #{posting.id})"
       end
     end
 
@@ -87,7 +88,9 @@ module Verifier
 
     def next_steps(company)
       set = "URL=\"https://...\" REASON=\"...\" bin/rails \"verifier:set_page[#{company.id}]\""
-      case company.resolution_status
+      check = [ "To check a role now: bin/rails \"verifier:check[posting_id]\"; to stop watching one: " \
+                "NOTE=\"...\" bin/rails \"verifier:dismiss[posting_id]\"" ]
+      check + case company.resolution_status
       when "candidate"
         [ "Next: bin/rails \"verifier:confirm[#{company.id}]\" or \"verifier:reject[#{company.id}]\", or #{set}" ]
       else

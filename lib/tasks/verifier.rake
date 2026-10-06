@@ -365,7 +365,7 @@ namespace :verifier do
        "estimated cost; runs only with GO=1, backing up first. RESULTS=dir records a passing Test B run's reads " \
        "instead of reading those pages again. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
   task verify: :environment do
-    companies = select_companies.call(watched.call.where(id: Posting.select(:company_id))).to_a
+    companies = select_companies.call(watched.call.where(id: Posting.not_dismissed.select(:company_id))).to_a
     abort "No resolved company has postings to verify." if companies.empty?
 
     targets = companies.map { |company| Verifier::Targets.verify(company) }
@@ -456,6 +456,71 @@ namespace :verifier do
     puts "\n#{tally['adopted']} boards read in place of their pages from now on; #{tally['rejected']} found but not " \
          "listing the same roles; #{tally['none']} companies with no board found.   (details: #{run.dir})"
     report_stop.call(run)
+  end
+
+  desc "Check one role now: its own page at the employer first, then its company's careers page. Records the " \
+       "verdict like any check; backs up first. Usage: bin/rails \"verifier:check[posting_id]\" [MODEL=...]"
+  task :check, [ :id ] => :environment do |_task, args|
+    posting = Posting.includes(:company).find_by(id: args[:id]) or
+      abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
+    company = posting.company
+    abort "#{posting.role_title} is dismissed: track it again first (verifier:track)." if posting.tracking == "dismissed"
+    abort "#{company.name} has no watched careers page (resolution: #{company.resolution_status || 'not attempted'})." \
+      unless company.resolution_status == "resolved"
+    abort "#{company.name} is an aggregator: its postings belong to other employers (postings:move)." \
+      if company.kind == "aggregator"
+
+    puts "Checking #{company.name} / #{posting.role_title}: " \
+         "#{posting.job_url ? "its own page first, #{posting.job_url}" : 'no page of its own on record'}."
+    ceiling = Verifier::Targets.full_read_cost(company)
+    puts format("At most about $%.2f, if its careers page has changed and must be read again.", ceiling) if ceiling&.positive?
+    puts "Backed up to #{DatabaseBackup.call}"
+    run = build_worker.call("check").run([ Verifier::Targets.check(posting) ], command: "check")
+    result = run.results.first or abort "The check left no result.#{" (#{run.stopped})" if run.stopped}"
+    Verifier::Ingest.new(run_id: run.id).verification(result)
+
+    verdict = Array(result["verdicts"]).first
+    answer = { "verified_live" => "STILL LISTED", "not_found" => "NO LONGER LISTED" }[verdict&.dig("verdict")] ||
+             "COULDN'T CONFIRM"
+    cost = Array(result["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } + result.dig("match_llm", "cost_usd").to_f
+    puts "\n#{posting.role_title}: #{answer}"
+    puts "  #{verdict ? verdict['reasoning'] : "The check failed (#{result['reason']}); nothing was written."}"
+    puts format("  Cost: est. $%.4f   (details: %s)", cost, run.dir)
+    report_stop.call(run)
+  rescue Verifier::Ingest::InvalidResult => e
+    abort "NOT RECORDED, breaks the result contract: #{e.message}"
+  end
+
+  desc "Track a role: on your watch list, checked by every run and by verifier:check. Audited as you. " \
+       "Usage: NOTE=\"why\" bin/rails \"verifier:track[posting_id]\""
+  task :track, [ :id ] => :environment do |_task, args|
+    posting = Posting.find_by(id: args[:id]) or abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
+    puts "Backed up to #{DatabaseBackup.call}"
+    Verifier::Tracking.track!(posting, note: ENV["NOTE"])
+    puts "#{posting.company.name} / #{posting.role_title}: tracked"
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message
+  end
+
+  desc "Dismiss a role for good: never checked or suggested again (track it again to undo). Audited as you. " \
+       "Usage: NOTE=\"why\" bin/rails \"verifier:dismiss[posting_id]\""
+  task :dismiss, [ :id ] => :environment do |_task, args|
+    posting = Posting.find_by(id: args[:id]) or abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
+    puts "Backed up to #{DatabaseBackup.call}"
+    Verifier::Tracking.dismiss!(posting, note: ENV["NOTE"])
+    puts "#{posting.company.name} / #{posting.role_title}: dismissed"
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message
+  end
+
+  desc "Fill in each posting's own page at the employer from the listing it already matched. No API cost; " \
+       "backs up first."
+  task backfill_job_urls: :environment do
+    puts "Backed up to #{DatabaseBackup.call}"
+    learned = Verifier::JobUrls.backfill!
+    remaining = Posting.not_dismissed.where(job_url: nil).count
+    puts "#{learned} postings learned their own page; #{remaining} have none yet " \
+         "(never matched live, or the listing they matched had no link)."
   end
 
   desc "Record a check you made yourself at the employer's page as a posting's verdict, audited as you. " \

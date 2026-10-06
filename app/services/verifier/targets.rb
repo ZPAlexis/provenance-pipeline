@@ -9,13 +9,19 @@ module Verifier
     # the board confirmed to list the same roles, read in place of the page; and
     # what each page of its list showed when last read, reused while the page's
     # role links are unchanged. The worker decides on reuse, and reads in full
-    # at least every 14 days.
-    def verify(company)
+    # at least every 14 days. A dismissed posting is never checked; each posting
+    # carries its own page at the employer when known, which matching tries first.
+    def verify(company, postings: company.postings.not_dismissed)
       {
         id: company.id, url: company.careers_page_url, label: company.name, domain: company.domain, name: company.name,
-        postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location } },
+        postings: postings.map { |p| { id: p.id, title: p.role_title, location: p.location, url: p.job_url } },
         board: company.board_in_use, previous: previous_reads(company)
       }
+    end
+
+    # One role to check now: its company's watched page with that posting alone.
+    def check(posting)
+      verify(posting.company, postings: [ posting ])
     end
 
     # The latest read of each address whose listings the LLM read (or carried over from such a read).

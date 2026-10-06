@@ -146,7 +146,8 @@ class ResolutionResult(BaseModel):
 # None (inconclusive) when the list was partial and nothing matched, so the
 # posting keeps its last verdict.
 Verdict = Literal["verified_live", "not_found", "inaccessible"]
-MatchMethod = Literal["exact", "variant", "llm", "none"]
+# link: the listing is at the posting's own address; posting_page: the role's own page shows it.
+MatchMethod = Literal["link", "exact", "variant", "llm", "posting_page", "none"]
 
 
 class TrackedPosting(BaseModel):
@@ -155,6 +156,7 @@ class TrackedPosting(BaseModel):
     id: str
     title: str
     location: str | None = None
+    url: str | None = None  # the role's own page at the employer, when known: matched before any title
 
 
 class MatchTarget(BaseModel):

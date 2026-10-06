@@ -41,7 +41,8 @@ module Verifier
     end
 
     VERIFICATION_OUTCOMES = %w[ok inaccessible error].freeze
-    MATCH_METHODS = %w[exact variant llm none].freeze
+    # link: the listing at the posting's own address; posting_page: the role's own page showed it.
+    MATCH_METHODS = %w[link exact variant llm posting_page none].freeze
 
     def verification_errors(result)
       return [ "not an object" ] unless result.is_a?(Hash)

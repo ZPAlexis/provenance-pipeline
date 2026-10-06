@@ -6,8 +6,9 @@ import pytest
 
 from verifier import pipeline
 from verifier.contract import AtsBoard, Listing, PreviousRead, Target, TrackedPosting, VerifyTarget
+from verifier.links import link_key
 from verifier.match import Matcher
-from verifier.pipeline import _link_key, _reused, read_all
+from verifier.pipeline import _reused, read_all
 from verifier.render import RenderedPage, render
 from verifier.verify import verify_company
 
@@ -270,9 +271,9 @@ def test_the_newest_read_of_an_address_is_the_one_compared(services, site):
 
 
 def test_a_route_after_the_hash_names_the_role_and_an_anchor_does_not():
-    assert _link_key("https://acme.example/plugins/oscp/#/jobs/405") == "https://acme.example/plugins/oscp#/jobs/405"
-    assert _link_key("https://acme.example/jobs/12#apply") == "https://acme.example/jobs/12"
-    assert _link_key("https://www.acme.example/jobs/12/?utm_source=x") == "https://acme.example/jobs/12"
+    assert link_key("https://acme.example/plugins/oscp/#/jobs/405") == "https://acme.example/plugins/oscp#/jobs/405"
+    assert link_key("https://acme.example/jobs/12#apply") == "https://acme.example/jobs/12"
+    assert link_key("https://www.acme.example/jobs/12/?utm_source=x") == "https://acme.example/jobs/12"
 
 
 # Found in the same run: Arcadia's roles link to #/jobs/405, #/jobs/406, ... on one address,

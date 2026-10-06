@@ -23,7 +23,7 @@ RSpec.describe Verifier::Targets do
       target = described_class.verify(company)
 
       expect(target).to include(id: company.id, url: page, board: nil,
-                                postings: [ { id: posting.id, title: "RevOps Engineer", location: nil } ])
+                                postings: [ { id: posting.id, title: "RevOps Engineer", location: nil, url: nil } ])
       expect(target[:previous].pluck(:page_check_id)).to contain_exactly(latest.id, second.id)
       expect(target[:previous].find { |r| r[:page_check_id] == latest.id })
         .to include(content_hash: "sha256:new", next_page_url: "#{page}?page=2", listings: latest.listings)
@@ -106,6 +106,25 @@ RSpec.describe Verifier::Targets do
 
       read(read_via: "ats_api:lever")
       expect(described_class.full_read_cost(company)).to eq(0.0)
+    end
+  end
+  describe "postings sent" do
+    it "never sends a dismissed posting, and sends each one's own page when known" do
+      tracked = create(:posting, company: company, role_title: "RevOps Engineer", job_url: "https://acme.example/jobs/1")
+      create(:posting, company: company, role_title: "Designer", tracking: "dismissed")
+
+      expect(described_class.verify(company)[:postings])
+        .to eq([ { id: tracked.id, title: "RevOps Engineer", location: nil, url: "https://acme.example/jobs/1" } ])
+    end
+
+    it "checks one role alone, with its company's watched page" do
+      role = create(:posting, company: company, role_title: "RevOps Engineer")
+      create(:posting, company: company, role_title: "Designer")
+
+      target = described_class.check(role)
+
+      expect(target).to include(id: company.id, url: page)
+      expect(target[:postings].pluck(:id)).to eq([ role.id ])
     end
   end
 end

@@ -7,10 +7,11 @@ uv run verifier extract --targets targets.json --out results.jsonl   # read care
 uv run verifier resolve --targets companies.json --out results.jsonl # find each company's careers page
 uv run verifier verify  --targets companies.json --out results.jsonl # read each watched page in full, match its postings
 uv run verifier match   --targets snapshots.json --out results.jsonl # match against listings read before (nothing fetched)
+uv run verifier check   --targets roles.json --out results.jsonl     # is one role still listed? its own page first
 uv run verifier boards  --targets companies.json --out results.jsonl # find free boards listing the same roles (no LLM)
 ```
 
-Every command takes `--model` (default `claude-haiku-4-5`) and `--delay` (seconds between requests to one host, default 5). `verify` and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards` never calls the LLM. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
+Every command takes `--model` (default `claude-haiku-4-5`) and `--delay` (seconds between requests to one host, default 5). `verify`, `check`, and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards` never calls the LLM. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
 
 Exit codes: 0 finished; 2 bad input; 3 stopped, API credit exhausted; 4 stopped, credential missing or rejected; 5 stopped, the LLM service kept failing.
 
@@ -56,6 +57,15 @@ The location picks which listing is the posting's and is noted when it differs; 
 | Nothing: the site refused us, or robots.txt keeps us off | `inaccessible` | `inaccessible` |
 
 A watched page is never swapped for a guessed board during verification: resolution decides the page, verification only reads it.
+
+## Checking one role now
+
+`check` answers one question for one tracked role: is it still listed? Matching tries the role's own link first (a listing at the posting's own address is its role, whatever its title says now), then titles as above.
+
+1. **The role's own page**, when it is known. On a known ATS, the board's API lists every role, free, so it settles the answer either way. On the company's own site, the page is loaded but never read by the LLM: when it loads, shows the role, and doesn't say it is closed ("no longer accepting applications", in English, Portuguese, or Spanish), the role is still listed.
+2. **The company's careers page** otherwise: when the role's page is gone, leads elsewhere, says the role is closed, doesn't show it, or isn't known. The role or a close one is looked for there, and "no longer listed" needs the whole list, as for any verdict. A role found again under a new link is still listed, and the verdict carries the new link.
+
+The answer is *still listed*, *no longer listed*, or *couldn't confirm*, with why. Whether a role was filled is never claimed: a page rarely says.
 
 ## Paying for a read only when something may have changed
 

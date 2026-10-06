@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_02_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_05_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -129,10 +129,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_000002) do
     t.jsonb "enrichment", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "tracking", default: "tracked", null: false
+    t.string "job_url"
     t.index ["company_id", "role_title"], name: "index_postings_on_company_id_and_role_title"
     t.index ["company_id"], name: "index_postings_on_company_id"
     t.index ["posting_url"], name: "index_postings_on_posting_url", unique: true, where: "(posting_url IS NOT NULL)"
     t.index ["source_slice"], name: "index_postings_on_source_slice"
+    t.index ["tracking"], name: "index_postings_on_tracking"
     t.index ["verification_state"], name: "index_postings_on_verification_state"
   end
 

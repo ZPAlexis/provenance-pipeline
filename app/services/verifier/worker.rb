@@ -15,7 +15,7 @@ module Verifier
 
     RESULT_SCHEMA_VERSION = 2
 
-    COMMANDS = %w[extract resolve match verify boards].freeze
+    COMMANDS = %w[extract resolve match verify check boards].freeze
 
     # Exit codes from workers/verifier/src/verifier/cli.py for a run that
     # stopped early on purpose, keeping every result it finished.
@@ -48,6 +48,7 @@ module Verifier
     # match: targets are [{ id:, label:, page_check_id:, complete:, listings:, postings: }], one MatchResult
     # each; nothing is fetched. `flags` are passed through, e.g. ["--no-llm"].
     # verify: targets from Verifier::Targets.verify, one VerificationResult each.
+    # check: targets from Verifier::Targets.check (one posting each), one VerificationResult each.
     # boards: targets from Verifier::Targets.board, one BoardResult each; never calls the LLM.
     def run(targets, command: "extract", flags: [])
       raise ArgumentError, "unknown worker command #{command.inspect}" unless COMMANDS.include?(command)
