@@ -22,9 +22,9 @@ from collections.abc import Iterable, Iterator
 from typing import Protocol
 from urllib.parse import urlsplit
 
+from verifier.ats import board_owner
 from verifier.contract import AtsBoard, BoardResult, BoardTarget, Listing, ResolveTarget
-from verifier.match import title_words
-from verifier.resolve import board_owner
+from verifier.titles import title_words
 
 ADOPT_OVERLAP = 0.9  # share of the page's distinct roles the board must also list
 # Fewer roles than this are too few to tell two companies' boards apart, and cost little to read.

@@ -20,57 +20,21 @@ the whole list was read; otherwise inconclusive (no verdict), so a role on page
 two is never marked closed.
 """
 
-import re
 import time
-import unicodedata
 from collections.abc import Callable
 from typing import Protocol
 
 from verifier.contract import Listing, LlmUsage, MatchResult, MatchTarget, PostingVerdict, TrackedPosting
 from verifier.extract import ExtractionFailed, MatchDecisions
 from verifier.links import link_key
+from verifier.titles import FILLER_WORDS, LEVEL_WORDS, REGION_WORDS, SENIORITY_WORDS, title_words
 
-ABBREVIATIONS = {"sr": "senior", "jr": "junior"}
-# Words that tell two near-miss titles apart without making them different jobs.
-SENIORITY_WORDS = {"senior", "junior", "staff", "i", "ii", "iii", "iv", "1", "2", "3"}
-REGION_WORDS = {
-    "latam", "latin", "america", "americas", "north", "south", "emea", "apac", "amer", "europe", "eu", "uk",
-    "us", "usa", "na", "global", "remote", "brazil", "brasil", "mexico", "canada", "argentina", "colombia",
-}  # fmt: skip
-FILLER_WORDS = {"and", "of", "the", "for", "de", "da", "do", "e", "y", "en", "to", "a", "an"}
-
-# Words that make a title a different level of responsibility, not a variant.
-LEVEL_WORDS = {
-    "manager",
-    "management",
-    "director",
-    "head",
-    "vp",
-    "vice",
-    "president",
-    "chief",
-    "officer",
-    "lead",
-    "leader",
-    "principal",
-    "intern",
-    "internship",
-    "apprentice",
-    "trainee",
-    "assistant",
-}
 NEAR_MISS = 0.5  # share of words in common, out of the longer title's
 MAX_CANDIDATES = 8  # near-miss listings shown to the LLM per posting
 
 
 class Adjudicator(Protocol):
     def decide(self, cases: list["Case"], listings: list[Listing]) -> tuple[MatchDecisions, LlmUsage]: ...
-
-
-def title_words(title: str | None) -> list[str]:
-    text = unicodedata.normalize("NFKD", title or "")
-    text = "".join(ch for ch in text if not unicodedata.combining(ch)).lower()
-    return [ABBREVIATIONS.get(word, word) for word in re.findall(r"[a-z0-9]+", text)]
 
 
 def same_title(a: str, b: str) -> bool:

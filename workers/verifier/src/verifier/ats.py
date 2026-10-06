@@ -1,10 +1,13 @@
-"""Known applicant tracking systems: detection, and their public job-board APIs.
+"""Known applicant tracking systems: detection, their public job-board APIs, and whose board a board is.
 
 When a careers page is (or embeds) a Greenhouse, Lever, Ashby, or Workday
 board, the vendor's API returns the listings directly: cheaper and more exact
 than reading the rendered page, and for Workday the only way past its
 20-per-page pagination. Measured against real data this covers a minority of
 companies; the renderer carries the rest.
+
+A board's owner is read from where its page links, never from its name alone:
+resolution's guessed boards and the board search apply the same rule.
 """
 
 import re
@@ -37,6 +40,59 @@ WORKDAY_MAX_PAGES = 100  # a guard: 2,000 roles
 GUESSABLE_VENDORS = ("greenhouse", "lever", "ashby")
 
 _CORPORATE_SUFFIXES = {"inc", "llc", "ltd", "ltda", "limited", "corp", "corporation", "co", "gmbh", "sa", "plc"}
+
+
+# Sites a careers page links to that are never its own board.
+NOT_A_BOARD = (
+    "linkedin.com",
+    "indeed.com",
+    "glassdoor.com",
+    "facebook.com",
+    "instagram.com",
+    "x.com",
+    "twitter.com",
+    "youtube.com",
+    "wellfound.com",
+    "angel.co",
+    "builtin.com",
+    "google.com",
+)
+
+# Hosts a board page links to that say nothing about whose board it is: the
+# vendors themselves, social sites, and cookie or privacy services.
+NOT_AN_OWNER = (
+    *NOT_A_BOARD,
+    "lever.co",
+    "ashbyhq.com",
+    "greenhouse.io",
+    "greenhouse.com",
+    "myworkdayjobs.com",
+    "workday.com",
+    "smartrecruiters.com",
+    "workable.com",
+    "onetrust.com",
+    "cookielaw.org",
+    "cookiepedia.co.uk",
+    "trustarc.com",
+    "gstatic.com",
+    "apple.com",
+)
+
+
+def board_owner(links: list[str] | None, domain: str | None) -> tuple[str | None, str | None]:
+    """Whose board this is, from where its page links: ("confirmed" | "elsewhere" | None, the host)."""
+    site = (domain or "").lower().removeprefix("www.")
+    hosts = [
+        host
+        for host in (urlsplit(link).netloc.lower().removeprefix("www.") for link in links or [])
+        if host and not any(host == other or host.endswith("." + other) for other in NOT_AN_OWNER)
+    ]
+    own = next((host for host in hosts if site and (host == site or host.endswith("." + site))), None)
+    if own:
+        return "confirmed", own
+    if hosts:
+        return "elsewhere", max(set(hosts), key=hosts.count)
+    return None, None
 
 
 class IncompleteBoard(Exception):  # noqa: N818 -- a result, not an error
