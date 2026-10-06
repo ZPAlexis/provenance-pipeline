@@ -220,6 +220,8 @@ Boot the server:
 bin/rails server
 ```
 
+It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent verdict changes, API credit spent), the roles (tracked, suggested, dismissed), each role's history and the checks behind it, and the companies watched. It is local and single-user, with no login, so it is never deployed as it is.
+
 ## Note on data
 
 Source CSVs are **not committed** — they contain a live job-search target list. Keep exports outside the repo or in an ignored path. The verifier's run directories (`tmp/verifier/`) and database backups (`~/.local/share/provenance-pipeline/backups/`) hold the same list, so they stay out of the repo too.

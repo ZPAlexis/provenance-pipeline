@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rails",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": [
+        "-e",
+        "bash",
+        "-lc",
+        "eval \"$(~/.local/bin/mise activate bash)\" >/dev/null 2>&1; cd /mnt/m/PZLabs/_GitHub/provenance-pipeline && bin/rails server -b 127.0.0.1 -p 3000"
+      ],
+      "port": 3000
+    }
+  ]
+}

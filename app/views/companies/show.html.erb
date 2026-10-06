@@ -1,0 +1,100 @@
+<% content_for :title, "#{@company.name} · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1><%= @company.name %></h1>
+    <p class="sub"><%= @company.domain || "no domain" %></p>
+  </div>
+</div>
+
+<dl class="facts">
+  <dt>Careers page</dt>
+  <dd><%= @company.careers_page_url ? outside_link(@company.careers_page_url, label: @company.careers_page_url) : tag.span("none yet", class: "muted") %></dd>
+  <dt>How it was found</dt>
+  <dd>
+    <%= @company.resolution_status || "not attempted" %><%= [ @company.resolution_method, @company.resolution_confidence ].compact.map { |v| ", #{v}" }.join %><%= ", #{@company.resolution_failure}" if @company.resolution_failure %>
+  </dd>
+  <% if @company.resolution_candidate_url %>
+    <dt>Candidate to confirm</dt>
+    <dd><%= outside_link(@company.resolution_candidate_url, label: @company.resolution_candidate_url) %></dd>
+  <% end %>
+  <dt>Kind</dt>
+  <dd><%= @company.kind || tag.span("not set", class: "muted") %><%= " (suggested: #{@company.kind_suggestion})" if @company.kind_suggestion %></dd>
+  <% if @company.board_vendor %>
+    <dt>Free board</dt>
+    <dd>
+      <%= outside_link(Verifier::Resolution.board_url(@company.board_vendor, @company.board_token), label: "#{@company.board_vendor}/#{@company.board_token}") %>,
+      confirmed <%= ago(@company.board_confirmed_at) %>:
+      <%= @company.board_in_use ? "read in place of the page" : "the page is read again" %>
+      <div class="muted small"><%= @company.board_evidence %></div>
+    </dd>
+  <% end %>
+</dl>
+
+<h2>Roles</h2>
+<% if @roles.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Role</th><th>Location</th><th>Answer</th><th>Watch list</th><th>Checked</th><th>Own page</th></tr></thead>
+      <tbody>
+        <% @roles.each do |role| %>
+          <tr>
+            <td><%= link_to role.role_title, role_path(role) %></td>
+            <td class="muted"><%= role.location %></td>
+            <td><%= answer_badge(role.verification_state) %></td>
+            <td><%= tracking_badge(role.tracking) %></td>
+            <td><%= ago(role.last_checked_at) %></td>
+            <td><%= outside_link(role.job_url) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">No role tracked here.</p>
+<% end %>
+
+<h2>Recent checks</h2>
+<% if @checks.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Why</th><th>Page</th><th>Read</th><th>Outcome</th><th class="num">Roles</th></tr></thead>
+      <tbody>
+        <% @checks.each do |check| %>
+          <% flags = { "part of the list" => check.listings_incomplete, "one job's ad" => check.single_job_posting,
+                       "many employers" => check.many_employers }.select { |_, on| on }.keys %>
+          <tr>
+            <td><%= ago(check.checked_at) %></td>
+            <td class="muted"><%= [ check.purpose, check.step ].compact.join(" · ") %></td>
+            <td><%= outside_link(check.url) %></td>
+            <td class="muted"><%= read_via_label(check.read_via) %></td>
+            <td><%= check.outcome %><%= " (#{check.reason})" if check.reason %><%= tag.div(flags.join(", "), class: "muted small") if flags.any? %></td>
+            <td class="num"><%= check.listing_count %><%= " of #{check.stated_total}" if check.stated_total %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">Never checked.</p>
+<% end %>
+
+<h2>Recent changes</h2>
+<% if @events.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>By</th><th>Changed</th><th>Why</th></tr></thead>
+      <tbody>
+        <% @events.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= actor_label(event.actor) %></td>
+            <td class="muted"><%= event.changes_made.keys.join(", ") %></td>
+            <td class="reason"><%= event.reasoning.to_s.truncate(240) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">No changes recorded.</p>
+<% end %>

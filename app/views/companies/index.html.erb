@@ -1,0 +1,42 @@
+<% content_for :title, "Companies · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Companies</h1>
+    <p class="sub">The companies watched, and how each one's careers page is read.</p>
+  </div>
+</div>
+
+<nav class="tabs">
+  <% { "watched" => "Watched", "candidates" => "To confirm", "unresolved" => "No page yet", "all" => "All" }.each do |view, label| %>
+    <%= link_to companies_path(view: view), class: ("current" if view == @view) do %>
+      <%= label %> <span class="count"><%= @counts.fetch(view) %></span>
+    <% end %>
+  <% end %>
+</nav>
+
+<% if @companies.empty? %>
+  <p class="empty">None.</p>
+<% else %>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Company</th><th>Careers page</th><th>Read through</th><th>Kind</th><th class="num">Still listed</th><th class="num">Roles</th><th>Last checked</th></tr>
+      </thead>
+      <tbody>
+        <% @companies.each do |company| %>
+          <% live = @roles.fetch([ company.id, "verified_live" ], 0) %>
+          <% total = @roles.sum { |(id, _), count| id == company.id ? count : 0 } %>
+          <tr>
+            <td><%= link_to company.name, company_path(company) %></td>
+            <td><%= outside_link(company.careers_page_url || company.resolution_candidate_url) %></td>
+            <td class="muted"><%= read_through(company) %></td>
+            <td class="muted"><%= company.kind || "—" %></td>
+            <td class="num"><%= live %></td>
+            <td class="num"><%= total %></td>
+            <td><%= ago(@last_checked[company.id]) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>

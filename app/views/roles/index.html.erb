@@ -1,0 +1,31 @@
+<% content_for :title, "Roles · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Roles</h1>
+    <p class="sub">Every role is checked at the employer's own careers page. Only you track or dismiss one.</p>
+  </div>
+</div>
+
+<nav class="tabs">
+  <% RolesController::TABS.each do |tab| %>
+    <%= link_to roles_path(tab: tab), class: ("current" if tab == @tab) do %>
+      <%= tab.capitalize %> <span class="count"><%= @counts.fetch(tab, 0) %></span>
+    <% end %>
+  <% end %>
+</nav>
+
+<% if @roles.empty? %>
+  <p class="empty">
+    <%= { "suggested" => "Suggestions arrive with the search profile: roles on watched pages that fit what you are looking for.",
+          "dismissed" => "No role dismissed." }.fetch(@tab, "No role tracked.") %>
+  </p>
+<% elsif @tab == "tracked" %>
+  <% groups = @roles.group_by(&:verification_state) %>
+  <% RolesController::GROUPS.each do |state| %>
+    <% next unless groups[state] %>
+    <h2 id="<%= state %>"><%= answer_badge(state) %> <span class="muted"><%= groups[state].size %></span></h2>
+    <%= render "table", roles: groups[state] %>
+  <% end %>
+<% else %>
+  <%= render "table", roles: @roles %>
+<% end %>
