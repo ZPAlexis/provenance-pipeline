@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1.2 complete.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path. A repeat run pays the LLM only for pages whose roles may have changed. Next: manual capture (1.5). See [Build stages](#build-stages).
+> **Status: Stage 1.5 in progress.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. Any tracked role can be checked on its own ("is it still listed?"), and the first operator pages are up. Next: tracking and checking from those pages, then the search profile. See [Build stages](#build-stages).
 
 ---
 
@@ -49,7 +49,7 @@ That separates two jobs that browsing job sites does at once, badly:
 
 **Nothing in the code is specific to one kind of role.** Verification reads every role a careers page shows (a *listing*) and checks whether a tracked *posting* is among them, without knowing what anyone is looking for. The only place a target field enters is a search profile stored as data — titles and keywords, seniority, locations and work mode, exclusions — which decides which roles are suggested; the user picks the ones to track. Another field, or another person, is another profile.
 
-Two consequences shape the build. A company's careers page becomes a **watch target**, re-checked on a schedule for months — a higher bar than resolving a page once for a single check. And re-verification makes postings **stateful**: `verified_live` → `not_found` is a lifecycle transition, not a correction, and the audit log is what makes "when did this role close?" answerable.
+Two consequences shape the build. A company's careers page becomes a **watch target**, re-checked for months — a higher bar than resolving a page once for a single check. And re-verification makes postings **stateful**: `verified_live` → `not_found` is a lifecycle transition, not a correction, and the audit log is what makes "when did this role close?" answerable.
 
 ## Design principles
 
@@ -75,7 +75,7 @@ Two more came out of building the verifier against real pages:
 A role is marked closed only when the verifier read every role the page lists: through the ATS's own API, to the end of its pagination, or up to the total the page states. Anything less (page one of fifty, a page that showed no roles and didn't say it has none, one job's ad instead of a list) is *inconclusive*, and no verdict is written. The rule is enforced twice: by the worker, and again at the write path.
 
 **5. What the agent isn't sure of goes to a person, and the person's call is on the record too.**
-A low-confidence find is held as a candidate, never watched. The operator confirms, rejects, sets the right page, says what kind of company it is, records a check they made themselves, or undoes a verdict, and each of those is audited under the human's own identity with their reason. Imported research labels turned out to be wrong often enough that checks made at the source, by the verifier or a person, are the authority.
+A low-confidence find is held as a candidate, never watched. The operator confirms, rejects, sets the right page, says what kind of company it is, tracks or dismisses a role, records a check they made themselves, or undoes a verdict, and each of those is audited under the human's own identity with their reason. Imported research labels turned out to be wrong often enough that checks made at the source, by the verifier or a person, are the authority.
 
 ## The permission model
 
@@ -137,11 +137,11 @@ Notes on a few choices:
 A **check** is an observation at the employer's own careers page that produced a verdict: `verified_live`, `not_found`, or `inaccessible`. An upstream answer that maps to none of these is not a check: the posting stays `pending`, and the raw answer is kept in `enrichment`.
 
 - **`verification_state`** — the last check's verdict, or `pending` while there is no usable one.
-- **`last_checked_at`** — when that verdict was observed. It is present exactly when a posting has a verdict (enforced by validation), so `nil` means one thing: never checked.
+- **`last_checked_at`** — when that verdict was observed. It is present exactly when a posting has a verdict (enforced by validation), so `nil` means one thing: no check has produced a verdict yet (it may have been checked and found inconclusive).
 - **`roles_listed_count`** — roles visible on the page at that check, matched or not. This is the corroborating observable; `nil` means unknown, never a sentinel value.
 - **`work_mode`** — as observed at that check.
 
-Imported verdicts carry an operator-supplied check date. A bare date is day precision (stored at 12:00 UTC so the calendar day never shifts), and the posting's create event records where the date came from. The Stage 1.2 verifier becomes the main writer and records the exact time it looked. A verdict that changes is an audited update; a check that confirms the verdict only refreshes `last_checked_at` and what it observed, with the check's own record as its provenance; and a check that couldn't decide (it read only part of a list and found nothing) writes no verdict at all, so a role on page two is never marked closed.
+Imported verdicts carry an operator-supplied check date. A bare date is day precision (stored at 12:00 UTC so the calendar day never shifts), and the posting's create event records where the date came from. The Stage 1.2 verifier becomes the main writer and records the exact time it looked. A verdict that changes is an audited update; a check that confirms the verdict only refreshes `last_checked_at` and what it observed, with the check's own record as its provenance (a role found at a new address is the exception: its `job_url` changes, audited); and a check that couldn't decide (it read only part of a list and found nothing) writes no verdict at all, so a role on page two is never marked closed.
 
 ## Build stages
 
@@ -155,13 +155,18 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
   - **Cost pass** ✅ the LLM reads a page only when its role links changed (or every 14 days), and a company's own free ATS board is read in place of its page when it lists the same roles.
 - 1.3 — Scoped writes and provenance: short-lived, per-run agent credentials, checked at the single path every agent write goes through
 - 1.4 — Monitoring on demand, and what changed: re-verify one role, one company, or every watched company when the user asks — a re-run of 1.2 that catches both new roles and closures — then show what changed since the last check. A schedule the operator sets comes later, with a host.
-- 1.5 — Capture and watched roles: the first web UI. A search profile suggests roles from the watched pages, the user picks which to track, and each tracked role gets a "check now" button that answers *still listed* or *no longer listed*. Paste a careers link, a posting link, or a company domain to resolve, verify, and add it to the watch list.
+- **1.5 — Capture and watched roles** (in progress): the first web UI. A search profile suggests roles from the watched pages, the user picks which to track, and each tracked role gets a "check now" that answers *still listed* or *no longer listed*. Paste a careers link, a posting link, or a company domain to resolve, verify, and add it to the watch list. In five slices:
+  - **1.5a — Tracked roles and check now** ✅ a tracking state only the operator sets; each role's own page at the employer, matched before its title; `verifier:check`, the role's own page first, then its company's careers page.
+  - **1.5b — The operator's pages** (in progress): dashboard, roles, companies ✅; then track, dismiss, and check now from the pages.
+  - **1.5c — The search profile and suggestions.**
+  - **1.5d — Add by URL.**
+  - **1.5e — The review queue:** the operator's decisions (careers-page candidates, suggested kinds) behind buttons.
 
 **Build order is 1.2 → 1.5 → 1.3 → 1.4.** Capture needs only 1.2, so it ships first to make the tool usable early; because every agent write goes through one path, 1.3's credential check covers it without rework. Monitoring is human-triggered first, so nothing waits on a host or a scheduler.
 
 **Stage 2 — Pipeline system.** Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents.
 
-**Stage 3 — Governance completion.** Full audit views, human review queue, analytics.
+**Stage 3 — Governance completion.** Full audit views, a review queue for drafts, analytics.
 
 ## Stack
 
@@ -207,8 +212,8 @@ bin/rails "verifier:confirm[company_id]"         # or verifier:reject, verifier:
 bin/rails "verifier:status[company name or id]"  # one company: its page, checks, postings, history
 bin/rails verifier:verify                        # shows the plan and its cost; GO=1 runs it
 bin/rails verifier:find_boards                   # free boards listing the same roles as LLM-read pages (no API cost)
-bin/rails "verifier:check[posting_id]"          # is this role still listed? its own page first, then its company's
-bin/rails "verifier:track[posting_id]"          # or verifier:dismiss: your watch list, with NOTE="why"
+bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's
+bin/rails "verifier:track[posting_id]"           # or verifier:dismiss: your watch list, with NOTE="why"
 bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
 ```
 
