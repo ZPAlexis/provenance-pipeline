@@ -23,7 +23,7 @@ RSpec.describe Verifier::Tracking do
   end
 
   it "needs a reason, and writes nothing for a role already in that state" do
-    expect { described_class.dismiss!(posting, note: " ") }.to raise_error(ArgumentError, /NOTE=/)
+    expect { described_class.dismiss!(posting, note: " ") }.to raise_error(ArgumentError, /say why/)
     expect { described_class.track!(posting, note: "Again.") }.to raise_error(ArgumentError, "already tracked")
     expect(posting.audit_events).to be_empty
   end

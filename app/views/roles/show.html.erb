@@ -24,6 +24,16 @@
   <dd><%= outside_link(@role.company.careers_page_url, label: @role.company.careers_page_url) %></dd>
 </dl>
 
+<h2>Watch list</h2>
+<p class="muted small">
+  <%= { "tracked" => "You track this role: every check looks for it, and it is on your watch list.",
+        "suggested" => "Suggested from your search profile. Track it to watch it, or dismiss it.",
+        "dismissed" => "You dismissed this role: it is never checked or suggested again, unless you track it." }
+        .fetch(@role.tracking) %>
+  Your note becomes the reason on the record.
+</p>
+<%= render "roles/watch", role: @role %>
+
 <h2>History</h2>
 <p class="muted small">Every change to this role: who made it, and why. Checks that confirmed the answer change nothing and are listed below.</p>
 <div class="table-wrap">

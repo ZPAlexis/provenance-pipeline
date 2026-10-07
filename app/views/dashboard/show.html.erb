@@ -9,7 +9,7 @@
 <h2>Tracked roles</h2>
 <div class="tiles">
   <% [ [ "verified_live", "live" ], [ "not_found", "gone" ], [ "inaccessible", "unsure" ], [ "pending", "" ] ].each do |state, tone| %>
-    <%= link_to roles_path(anchor: state), class: [ "tile", tone ] do %>
+    <%= link_to roles_path(answer: state), class: [ "tile", tone ] do %>
       <div class="value"><%= @roles.fetch(state, 0) %></div>
       <div class="label"><%= answer_label(state) %></div>
     <% end %>

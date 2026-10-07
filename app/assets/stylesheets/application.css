@@ -150,6 +150,42 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 .tabs a:hover { text-decoration: none; color: var(--text); }
 .tabs .count { color: var(--muted); font-weight: 400; }
 
+/* Answer filters */
+
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.filter {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+.filter:hover { text-decoration: none; color: var(--text); border-color: var(--accent); }
+.filter .count { font-variant-numeric: tabular-nums; }
+.filter.current { color: var(--text); border-color: var(--text); font-weight: 600; }
+.filter.current.live { background: var(--live-bg); color: var(--live); border-color: var(--live); }
+.filter.current.gone { background: var(--gone-bg); color: var(--gone); border-color: var(--gone); }
+.filter.current.unsure { background: var(--unsure-bg); color: var(--unsure); border-color: var(--unsure); }
+.filter.current.idle { background: var(--idle-bg); color: var(--idle); border-color: var(--idle); }
+
+/* Watch list: track or dismiss, with a note */
+
+.watch { display: flex; gap: 6px; align-items: flex-start; }
+.watch details > summary { list-style: none; }
+.watch details > summary::-webkit-details-marker { display: none; }
+.watch details[open] > summary { border-color: var(--accent); }
+.watch-form { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
+.watch-form input[type="text"] {
+  width: 200px;
+  padding: 4px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
 /* Buttons */
 
 .btn {
@@ -164,5 +200,6 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 }
 .btn:hover { border-color: var(--accent); text-decoration: none; }
 .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn.small { padding: 2px 9px; font-size: 12px; }
 
 .empty { padding: 18px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; }

@@ -1,0 +1,15 @@
+<%# Track or dismiss a role, with a note: it becomes the reason on the audit record. %>
+<% actions = { "tracked" => %i[dismiss], "dismissed" => %i[track], "suggested" => %i[track dismiss] }.fetch(role.tracking, []) %>
+<div class="watch">
+  <% actions.each do |action| %>
+    <details>
+      <summary class="btn small"><%= action.to_s.capitalize %></summary>
+      <%= form_with url: (action == :track ? track_role_path(role) : dismiss_role_path(role)), method: :patch,
+                    class: "watch-form" do |form| %>
+        <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why",
+                                   placeholder: action == :track ? "Why track it?" : "Why dismiss it? (never checked again)" %>
+        <%= form.submit action.to_s.capitalize, class: [ "btn", "small", ("primary" if action == :track) ] %>
+      <% end %>
+    </details>
+  <% end %>
+</div>

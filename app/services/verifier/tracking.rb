@@ -15,7 +15,7 @@ module Verifier
     end
 
     def decide!(posting, tracking, mark, note, actor)
-      raise ArgumentError, "say why in NOTE=\"...\": it becomes the audit reasoning" if note.blank?
+      raise ArgumentError, "say why: the note becomes the audit reasoning" if note.blank?
       raise ArgumentError, "already #{tracking}" if posting.tracking == tracking
 
       ApplicationRecord.transaction do

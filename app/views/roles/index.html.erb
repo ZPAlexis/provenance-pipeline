@@ -14,18 +14,25 @@
   <% end %>
 </nav>
 
-<% if @roles.empty? %>
+<nav class="filters" aria-label="Filter by answer">
+  <%= link_to roles_path(tab: @tab), class: [ "filter", ("current" if @answer.nil?) ] do %>
+    All <span class="count"><%= @answer_counts.values.sum %></span>
+  <% end %>
+  <% RolesController::ANSWERS.each do |state| %>
+    <%= link_to roles_path(tab: @tab, answer: state),
+                class: [ "filter", ApplicationHelper::ANSWERS.dig(state, 1), ("current" if state == @answer) ] do %>
+      <%= answer_label(state) %> <span class="count"><%= @answer_counts.fetch(state, 0) %></span>
+    <% end %>
+  <% end %>
+</nav>
+
+<% if @roles.any? %>
+  <%= render "table", roles: @roles %>
+<% elsif @answer %>
+  <p class="empty">No <%= @tab %> role is <%= answer_label(@answer).downcase %>.</p>
+<% else %>
   <p class="empty">
     <%= { "suggested" => "Suggestions arrive with the search profile: roles on watched pages that fit what you are looking for.",
           "dismissed" => "No role dismissed." }.fetch(@tab, "No role tracked.") %>
   </p>
-<% elsif @tab == "tracked" %>
-  <% groups = @roles.group_by(&:verification_state) %>
-  <% RolesController::GROUPS.each do |state| %>
-    <% next unless groups[state] %>
-    <h2 id="<%= state %>"><%= answer_badge(state) %> <span class="muted"><%= groups[state].size %></span></h2>
-    <%= render "table", roles: groups[state] %>
-  <% end %>
-<% else %>
-  <%= render "table", roles: @roles %>
 <% end %>
