@@ -7,7 +7,12 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
   root "dashboard#show"
-  resources :roles, only: %i[index show]
+  resources :roles, only: %i[index show] do
+    member do
+      patch :track
+      patch :dismiss
+    end
+  end
   resources :companies, only: %i[index show]
   get "about", to: "pages#about"
 end

@@ -1,7 +1,7 @@
 <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th><th>Own page</th></tr>
+      <tr><th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th><th>Own page</th><th>Watch list</th></tr>
     </thead>
     <tbody>
       <% roles.each do |role| %>
@@ -11,7 +11,8 @@
           <td class="muted"><%= role.location %></td>
           <td><%= answer_badge(role.verification_state) %></td>
           <td><%= ago(role.last_checked_at) %></td>
-          <td><%= outside_link(role.job_url) %></td>
+          <td><%= outside_link(role.job_url, host_only: true) %></td>
+          <td><%= render "roles/watch", role: role %></td>
         </tr>
       <% end %>
     </tbody>

@@ -48,12 +48,13 @@ module ApplicationHelper
                                                class: "nowrap")
   end
 
-  # An outside address, shown short: its host and path, opened in a new tab.
-  def outside_link(url, label: nil)
+  # An outside address, shown short: its host and path (or its host alone), opened in a new tab.
+  def outside_link(url, label: nil, host_only: false)
     return tag.span("—", class: "muted") if url.blank?
 
     uri = URI.parse(url)
-    text = label || [ uri.host.to_s.delete_prefix("www."), uri.path.to_s.chomp("/") ].join.truncate(60)
+    host = uri.host.to_s.delete_prefix("www.")
+    text = label || (host_only ? host : [ host, uri.path.to_s.chomp("/") ].join.truncate(60))
     link_to(text, url, target: "_blank", rel: "noopener noreferrer", title: url)
   rescue URI::InvalidURIError
     url
