@@ -70,7 +70,26 @@ module Verifier
         raise Error, "the verification worker exited with status #{status.exitstatus}"
       end
 
-      Run.new(dir: @run_dir, results: read_results(results_path), stopped: STOPPED[status.exitstatus])
+      Run.new(dir: @run_dir, results: self.class.read_results(results_path), stopped: STOPPED[status.exitstatus])
+    end
+
+    # A results file, checked line by line against the result version this code
+    # reads. Every reader goes through here: a run just made, and a saved run
+    # re-scored or recorded later (RESULTS=). A result from another version fails
+    # loudly rather than being scored or written with what its fields used to mean.
+    def self.read_results(path)
+      path = Pathname.new(path)
+      return [] unless path.exist?
+
+      path.each_line.with_index(1).map do |line, number|
+        result = JSON.parse(line)
+        unless result["schema_version"] == RESULT_SCHEMA_VERSION
+          raise Error, "#{path}:#{number}: result schema version #{result['schema_version'].inspect}, but this " \
+                       "code reads version #{RESULT_SCHEMA_VERSION}: read it again, or score it with the code of its version"
+        end
+
+        result
+      end
     end
 
     private
@@ -97,19 +116,6 @@ module Verifier
         return value.strip.delete("\"'").presence if name == "ANTHROPIC_API_KEY" && value
       end
       nil
-    end
-
-    def read_results(path)
-      return [] unless path.exist?
-
-      path.each_line.map do |line|
-        result = JSON.parse(line)
-        unless result["schema_version"] == RESULT_SCHEMA_VERSION
-          raise Error, "unexpected result schema version #{result["schema_version"].inspect}"
-        end
-
-        result
-      end
     end
   end
 end
