@@ -31,4 +31,17 @@ RSpec.describe DatabaseBackup do
 
     expect { described_class.call(dir: dir, runner: failing) }.to raise_error(described_class::Error, /pg_dump/)
   end
+
+  describe ".daily" do
+    it "makes a backup when none was made in the last day, and reuses one that was" do
+      first = described_class.daily(dir: dir, runner: ->(_env, *command) { FileUtils.touch(command[command.index("--file") + 1]) })
+      expect(first).to exist
+
+      expect(described_class.daily(dir: dir, runner: ->(*) { raise "no new dump expected" })).to eq(first)
+      travel_to(2.days.from_now) do
+        expect(described_class.daily(dir: dir, runner: runner)).not_to eq(first)
+      end
+      expect(commands.size).to eq(1)
+    end
+  end
 end

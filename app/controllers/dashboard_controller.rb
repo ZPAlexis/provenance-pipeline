@@ -6,5 +6,7 @@ class DashboardController < ApplicationController
     @changes = Overview.recent_changes
     @companies = Overview.companies
     @spend = Overview.spend
+    CheckRun.abandon_stale!
+    @runs = Overview.recent_runs
   end
 end

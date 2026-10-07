@@ -51,6 +51,42 @@
   </div>
 </div>
 
+<h2>Recent checks you asked for</h2>
+<% if @runs.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Asked</th><th>What</th><th>Answer</th><th class="num">Cost</th></tr></thead>
+      <tbody>
+        <% @runs.each do |run| %>
+          <tr>
+            <td><%= ago(run.created_at) %></td>
+            <td>
+              <% if run.kind == "role" && run.posting %>
+                <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %></span>
+              <% else %>
+                <%= link_to run.company.name, company_path(run.company) %> <span class="muted">(its careers page)</span>
+              <% end %>
+            </td>
+            <td>
+              <% if run.active? %>
+                <span class="badge"><%= run.status == "queued" ? "Waiting" : "Checking…" %></span>
+              <% elsif run.status == "failed" %>
+                <span class="badge gone">Didn't finish</span> <span class="muted small"><%= run.error.to_s.truncate(90) %></span>
+              <% else %>
+                <%= run_answer(run) %>
+                <% if run.kind == "company" %><span class="muted small"><%= run.summary.to_s.truncate(90) %></span><% end %>
+              <% end %>
+            </td>
+            <td class="num"><%= cost(run.cost_usd) if run.status == "done" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">None yet: "Check now" on a role's or a company's page asks for one.</p>
+<% end %>
+
 <h2>Recent verdict changes</h2>
 <% if @changes.any? %>
   <div class="table-wrap">

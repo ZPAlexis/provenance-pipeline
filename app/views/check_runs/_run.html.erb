@@ -1,0 +1,25 @@
+<%# A check run's state, as a Turbo Frame. While it runs, the frame re-asks every few
+    seconds (poll); a reply to polling that finds it finished reloads the page once,
+    so the new answer shows in the badge and history too. Only the page's frame
+    carries the address it polls: Turbo refuses a reply whose frame points at itself. %>
+<%= turbo_frame_tag dom_id(run), src: (check_run_path(run, poll: 1) if run.active? && !poll) do %>
+  <div class="run <%= run.status %>"
+       data-controller="<%= run.active? ? 'poll' : ('refresh' if poll) %>">
+    <% if run.status == "queued" %>
+      <span class="spinner" aria-hidden="true"></span> Waiting for the check before it to finish…
+    <% elsif run.status == "running" %>
+      <span class="spinner" aria-hidden="true"></span> Checking<%= " #{run.posting.role_title}" if run.kind == "role" && run.posting %>,
+      started <%= ago(run.started_at) %>…
+    <% elsif run.status == "done" %>
+      <%= run_answer(run) %>
+      <span class="summary"><%= run.summary %></span>
+      <div class="muted small">
+        Finished <%= ago(run.finished_at) %> · cost <%= cost(run.cost_usd) %>
+        <%= " · #{run.tally.map { |what, count| "#{count} #{what}" }.join(', ')}" if run.kind == "company" && run.tally.present? %>
+      </div>
+    <% else %>
+      <span class="badge gone">Didn't finish</span> <span class="summary"><%= run.error %></span>
+      <div class="muted small">Finished <%= ago(run.finished_at) %>. Nothing was written unless the history says so.</div>
+    <% end %>
+  </div>
+<% end %>

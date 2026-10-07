@@ -186,6 +186,31 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
   border-radius: 6px;
 }
 
+/* Check now */
+
+.check-now { margin: 8px 0 4px; }
+.check-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+.run {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.run .summary { margin-left: 4px; }
+.run.queued, .run.running { color: var(--muted); }
+.spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  vertical-align: -1px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* Buttons */
 
 .btn {

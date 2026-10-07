@@ -24,6 +24,9 @@
   <dd><%= outside_link(@role.company.careers_page_url, label: @role.company.careers_page_url) %></dd>
 </dl>
 
+<h2>Is it still listed?</h2>
+<%= render "check_runs/panel", record: @role, run: @run %>
+
 <h2>Watch list</h2>
 <p class="muted small">
   <%= { "tracked" => "You track this role: every check looks for it, and it is on your watch list.",

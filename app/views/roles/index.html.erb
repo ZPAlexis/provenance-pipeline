@@ -20,7 +20,7 @@
   <% end %>
   <% RolesController::ANSWERS.each do |state| %>
     <%= link_to roles_path(tab: @tab, answer: state),
-                class: [ "filter", ApplicationHelper::ANSWERS.dig(state, 1), ("current" if state == @answer) ] do %>
+                class: [ "filter", answer_tone(state), ("current" if state == @answer) ] do %>
       <%= answer_label(state) %> <span class="count"><%= @answer_counts.fetch(state, 0) %></span>
     <% end %>
   <% end %>
