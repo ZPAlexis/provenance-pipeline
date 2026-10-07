@@ -219,6 +219,19 @@ bin/rails "verifier:hand_check[posting_id]"      # record a check you made yours
 
 The tests that decide whether a slice works run locally against the private target list: `verifier:test_a`, `verifier:test_resolution`, and `verifier:test_b` (`REPLAY=1` replays stored page reads at no API cost; `FRESH=1` reads the pages now).
 
+### Backups
+
+Every verifier batch that writes backs up first: `bin/rails db:backup` does the same by hand (checks started from the pages, at most once a day). Dumps go to `~/.local/share/provenance-pipeline/backups/` (owner-only), named with their UTC time. Each new dump prunes the folder to the 10 newest plus the newest of each week for a year. To keep a copy on another disk as well, name a folder in `~/.config/provenance-pipeline/backup_mirror` (one line); each new dump is copied and pruned there the same way, and a failed copy is reported without stopping the batch.
+
+A backup is proven by restoring it. Into a scratch database, then compare and drop it:
+
+```bash
+createdb provenance_pipeline_restore_check
+pg_restore --no-owner --exit-on-error --dbname=provenance_pipeline_restore_check ~/.local/share/provenance-pipeline/backups/<newest>.dump
+psql -d provenance_pipeline_restore_check -c "select count(*) from postings"
+dropdb provenance_pipeline_restore_check
+```
+
 Boot the server:
 
 ```bash
