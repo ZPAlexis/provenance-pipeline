@@ -14,5 +14,6 @@ Rails.application.routes.draw do
     end
   end
   resources :companies, only: %i[index show]
+  resources :check_runs, only: %i[create show]
   get "about", to: "pages#about"
 end

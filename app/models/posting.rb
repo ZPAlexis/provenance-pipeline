@@ -1,5 +1,7 @@
 class Posting < ApplicationRecord
   belongs_to :company
+  # A deleted posting leaves its check runs, which name the company too (the key nullifies).
+  has_many :check_runs, dependent: nil
   # No `dependent:` on purpose. The audit trail outlives the records it
   # describes: when a record is deleted its events keep target_type and
   # target_id, so its whole history stays queryable by id and no audit event is
@@ -52,6 +54,14 @@ class Posting < ApplicationRecord
 
   VERIFICATION_STATES = %w[pending verified_live not_found inaccessible].freeze
   VERDICTS = (VERIFICATION_STATES - %w[pending]).freeze
+  # What each state means to the person reading it: whether the role is still listed.
+  # "No answer yet": never checked, or every check so far was inconclusive.
+  ANSWER_LABELS = {
+    "verified_live" => "Still listed",
+    "not_found" => "No longer listed",
+    "inaccessible" => "Couldn't confirm",
+    "pending" => "No answer yet"
+  }.freeze
   WORK_MODES = %w[remote hybrid onsite unknown].freeze
 
   validates :role_title, presence: true

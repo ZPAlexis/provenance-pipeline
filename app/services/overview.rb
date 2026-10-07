@@ -2,6 +2,7 @@
 # the companies watched, and what reading pages has cost. Read-only.
 module Overview
   RECENT_CHANGES = 12
+  RECENT_RUNS = 8
   # A tracked role not checked for this long is worth a look: listings are read
   # in full every 14 days, so its answer may have gone stale.
   STALE_AFTER = 14.days
@@ -34,6 +35,11 @@ module Overview
       candidates: Company.resolution_candidates.count,
       unresolved: Company.where(resolution_status: [ nil, "failed" ]).count
     }
+  end
+
+  # The latest checks asked for from the pages, newest first.
+  def recent_runs(limit = RECENT_RUNS)
+    CheckRun.newest_first.limit(limit).includes(:company, :posting)
   end
 
   # API credit spent on LLM calls, from the record.

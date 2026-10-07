@@ -1,11 +1,6 @@
 module ApplicationHelper
-  # What a verdict means to the person reading it: whether the role is still listed.
-  ANSWERS = {
-    "verified_live" => [ "Still listed", "live" ],
-    "not_found" => [ "No longer listed", "gone" ],
-    "inaccessible" => [ "Couldn't confirm", "unsure" ],
-    "pending" => [ "No answer yet", "idle" ]
-  }.freeze
+  # Each answer's colour; the words are Posting::ANSWER_LABELS.
+  ANSWER_TONES = { "verified_live" => "live", "not_found" => "gone", "inaccessible" => "unsure", "pending" => "idle" }.freeze
 
   READ_VIA = {
     "render+llm" => "read by the LLM",
@@ -13,11 +8,17 @@ module ApplicationHelper
     "render" => "loaded, not read by the LLM"
   }.freeze
 
-  def answer_label(state) = ANSWERS.fetch(state, [ state.to_s.humanize ]).first
+  def answer_label(state) = Posting::ANSWER_LABELS.fetch(state, state.to_s.humanize)
 
-  def answer_badge(state)
-    label, tone = ANSWERS.fetch(state, [ state.to_s.humanize, "idle" ])
-    tag.span(label, class: [ "badge", tone ])
+  def answer_tone(state) = ANSWER_TONES.fetch(state, "idle")
+
+  def answer_badge(state) = tag.span(answer_label(state), class: [ "badge", answer_tone(state) ])
+
+  # A finished check run's answer: the role's verdict, or that a company was checked.
+  def run_answer(run)
+    return tag.span("Checked", class: "badge live") if run.kind == "company"
+
+    run.answer ? answer_badge(run.answer) : tag.span("Couldn't confirm", class: "badge unsure")
   end
 
   def tracking_badge(tracking)
@@ -69,6 +70,14 @@ module ApplicationHelper
   end
 
   def money(amount) = format("$%.2f", amount.to_f)
+
+  # A check's cost: fractions of a cent show, since most checks cost a cent or less.
+  def cost(amount)
+    amount = amount.to_f
+    return "$0" if amount.zero?
+
+    amount < 0.1 ? format("$%.3f", amount) : format("$%.2f", amount)
+  end
 
   # What an audit event changed, in words: a verdict, the watch list, or the fields it set.
   def change_summary(event)

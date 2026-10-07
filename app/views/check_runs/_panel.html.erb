@@ -1,0 +1,23 @@
+<%# "Check now" for a role or a company, with what it could cost, and its latest run. %>
+<% why_not = Verifier::CheckNow.refusal(record) %>
+<% role = record.is_a?(Posting) %>
+<section class="check-now">
+  <% if why_not %>
+    <p class="muted small"><%= why_not %></p>
+  <% elsif !run&.active? %>
+    <% ceiling = Verifier::CheckNow.ceiling(record) %>
+    <% confirm = ("This check may read the careers page with the LLM: at most #{cost(ceiling)}. Check now?" if ceiling.positive?) %>
+    <%= form_with url: check_runs_path, class: "check-form", data: { turbo_confirm: confirm } do |form| %>
+      <%= hidden_field_tag(role ? :posting_id : :company_id, record.id) %>
+      <%= form.submit "Check now", class: "btn primary" %>
+      <span class="muted small">
+        <% if role %>
+          Its own page first, free. <%= ceiling.positive? ? "At most #{cost(ceiling)} if its company's careers page must be read again." : "Its company's careers page is free to read too." %>
+        <% else %>
+          <%= ceiling.positive? ? "At most #{cost(ceiling)}, if its careers page changed since the last read; free if not." : "Free: read through its own board or an ATS." %>
+        <% end %>
+      </span>
+    <% end %>
+  <% end %>
+  <%= render "check_runs/run", run: run, poll: false if run %>
+</section>

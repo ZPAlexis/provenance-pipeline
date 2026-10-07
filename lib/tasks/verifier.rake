@@ -1,7 +1,7 @@
 namespace :verifier do
   # Each run keeps its targets, results, and report under tmp/ (gitignored):
   # results name real companies from the private target list.
-  run_dir = ->(name) { Rails.root.join("tmp/verifier/#{Time.current.utc.strftime('%Y%m%dT%H%M%SZ')}-#{name}") }
+  run_dir = ->(name) { Verifier::Worker.dir_for(name) }
 
   # A name for a new timestamped run directory, or a directory to use as is.
   build_worker = lambda do |name_or_dir|
@@ -463,30 +463,21 @@ namespace :verifier do
   task :check, [ :id ] => :environment do |_task, args|
     posting = Posting.includes(:company).find_by(id: args[:id]) or
       abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
-    company = posting.company
-    abort "#{posting.role_title} is dismissed: track it again first (verifier:track)." if posting.tracking == "dismissed"
-    abort "#{company.name} has no watched careers page (resolution: #{company.resolution_status || 'not attempted'})." \
-      unless company.resolution_status == "resolved"
-    abort "#{company.name} is an aggregator: its postings belong to other employers (postings:move)." \
-      if company.kind == "aggregator"
+    if (why = Verifier::CheckNow.refusal(posting))
+      abort why
+    end
 
-    puts "Checking #{company.name} / #{posting.role_title}: " \
+    puts "Checking #{posting.company.name} / #{posting.role_title}: " \
          "#{posting.job_url ? "its own page first, #{posting.job_url}" : 'no page of its own on record'}."
-    ceiling = Verifier::Targets.full_read_cost(company)
-    puts format("At most about $%.2f, if its careers page has changed and must be read again.", ceiling) if ceiling&.positive?
+    ceiling = Verifier::CheckNow.ceiling(posting)
+    puts format("At most about $%.2f, if its careers page has changed and must be read again.", ceiling) if ceiling.positive?
     puts "Backed up to #{DatabaseBackup.call}"
-    run = build_worker.call("check").run([ Verifier::Targets.check(posting) ], command: "check")
-    result = run.results.first or abort "The check left no result.#{" (#{run.stopped})" if run.stopped}"
-    Verifier::Ingest.new(run_id: run.id).verification(result)
+    outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check"))
 
-    verdict = Array(result["verdicts"]).first
-    answer = { "verified_live" => "STILL LISTED", "not_found" => "NO LONGER LISTED" }[verdict&.dig("verdict")] ||
-             "COULDN'T CONFIRM"
-    cost = Array(result["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } + result.dig("match_llm", "cost_usd").to_f
-    puts "\n#{posting.role_title}: #{answer}"
-    puts "  #{verdict ? verdict['reasoning'] : "The check failed (#{result['reason']}); nothing was written."}"
-    puts format("  Cost: est. $%.4f   (details: %s)", cost, run.dir)
-    report_stop.call(run)
+    answer = { "verified_live" => "STILL LISTED", "not_found" => "NO LONGER LISTED" }.fetch(outcome.answer, "COULDN'T CONFIRM")
+    puts "\n#{posting.role_title}: #{outcome.finished? ? answer : 'STOPPED'}"
+    puts "  #{outcome.summary}"
+    puts format("  Cost: est. $%.4f   (details: %s)", outcome.cost_usd, outcome.run_dir)
   rescue Verifier::Ingest::InvalidResult => e
     abort "NOT RECORDED, breaks the result contract: #{e.message}"
   end

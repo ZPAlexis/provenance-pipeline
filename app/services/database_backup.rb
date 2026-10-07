@@ -9,6 +9,16 @@ class DatabaseBackup
 
   class Error < StandardError; end
 
+  # For checks the operator starts from the pages: a backup at most once a day,
+  # so a day of one-role checks costs one dump, not one per click. Every verdict
+  # they write is audited and can be undone; a batch from rake backs up each time.
+  def self.daily(dir: DIR, runner: ->(env, *command) { system(env, *command) })
+    latest = Dir.glob(Pathname.new(dir).join("*.dump").to_s).max_by { |path| File.mtime(path) }
+    return Pathname.new(latest) if latest && File.mtime(latest) > 1.day.ago
+
+    call(dir: dir, runner: runner)
+  end
+
   def self.call(dir: DIR, runner: ->(env, *command) { system(env, *command) })
     config = ActiveRecord::Base.connection_db_config.configuration_hash
     database = config.fetch(:database)

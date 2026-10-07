@@ -16,6 +16,8 @@ module Verifier
   # history.
   class Ingest
     ACTOR = "agent:verifier".freeze
+    # The matches a role's own page is learned from: its link or own page, or its title, exactly or as a variant.
+    LINK_METHODS = %w[link posting_page exact variant].freeze
 
     class InvalidResult < StandardError; end
 
@@ -142,10 +144,14 @@ module Verifier
     end
 
     # The role's own page, from the listing a live verdict matched: how the next
-    # check finds the role first, and how "check now" starts.
+    # check finds the role first, and how "check now" starts. Learned only from a
+    # match on the title itself (or the link or page it already had), never from a
+    # near-miss the LLM judged: matched by link first, a wrong link would keep a
+    # closed role "still listed" for good.
     def learned_job_url(posting, verdict)
       url = verdict.dig("listing", "url")
-      verdict["verdict"] == "verified_live" && ResultContract.web_url?(url) ? url : posting.job_url
+      learn = verdict["verdict"] == "verified_live" && LINK_METHODS.include?(verdict["method"]) && ResultContract.web_url?(url)
+      learn ? url : posting.job_url
     end
 
     # As the matched listing states it; nil when it was not observed (Posting's contract).

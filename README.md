@@ -157,7 +157,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 - 1.4 — Monitoring on demand, and what changed: re-verify one role, one company, or every watched company when the user asks — a re-run of 1.2 that catches both new roles and closures — then show what changed since the last check. A schedule the operator sets comes later, with a host.
 - **1.5 — Capture and watched roles** (in progress): the first web UI. A search profile suggests roles from the watched pages, the user picks which to track, and each tracked role gets a "check now" that answers *still listed* or *no longer listed*. Paste a careers link, a posting link, or a company domain to resolve, verify, and add it to the watch list. In five slices:
   - **1.5a — Tracked roles and check now** ✅ a tracking state only the operator sets; each role's own page at the employer, matched before its title; `verifier:check`, the role's own page first, then its company's careers page.
-  - **1.5b — The operator's pages** (in progress): dashboard, roles, companies ✅; then track, dismiss, and check now from the pages.
+  - **1.5b — The operator's pages** ✅ dashboard, roles, companies; track, dismiss, and check now from them.
   - **1.5c — The search profile and suggestions.**
   - **1.5d — Add by URL.**
   - **1.5e — The review queue:** the operator's decisions (careers-page candidates, suggested kinds) behind buttons.
@@ -225,7 +225,7 @@ Boot the server:
 bin/rails server
 ```
 
-It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent verdict changes, API credit spent), the roles (tracked, suggested, dismissed), each role's history and the checks behind it, and the companies watched. It is local and single-user, with no login, so it is never deployed as it is.
+It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent checks and verdict changes, API credit spent), the roles (tracked, suggested, dismissed, filtered by answer), each role's history and the checks behind it, and the companies watched. From them the operator tracks or dismisses a role, with a note on the record, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
 
 ## Note on data
 

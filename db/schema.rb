@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_05_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_07_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -29,6 +29,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_000001) do
     t.index ["actor"], name: "index_audit_events_on_actor"
     t.index ["occurred_at"], name: "index_audit_events_on_occurred_at"
     t.index ["target_type", "target_id"], name: "index_audit_events_on_target"
+  end
+
+  create_table "check_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "kind", null: false
+    t.uuid "company_id", null: false
+    t.uuid "posting_id"
+    t.string "status", default: "queued", null: false
+    t.string "requested_by", null: false
+    t.decimal "ceiling_usd", precision: 10, scale: 6
+    t.string "answer"
+    t.text "summary"
+    t.jsonb "tally", default: {}, null: false
+    t.decimal "cost_usd", precision: 10, scale: 6
+    t.string "run_id"
+    t.text "error"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_check_runs_on_company_id"
+    t.index ["created_at"], name: "index_check_runs_on_created_at"
+    t.index ["posting_id"], name: "index_check_runs_on_posting_id"
+    t.index ["status"], name: "index_check_runs_on_status"
   end
 
   create_table "companies", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -139,6 +162,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_05_000001) do
     t.index ["verification_state"], name: "index_postings_on_verification_state"
   end
 
+  add_foreign_key "check_runs", "companies"
+  add_foreign_key "check_runs", "postings", on_delete: :nullify
   add_foreign_key "llm_calls", "page_checks"
   add_foreign_key "page_checks", "companies"
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify

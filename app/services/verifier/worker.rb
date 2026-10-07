@@ -32,6 +32,12 @@ module Verifier
       def id = dir.basename.to_s
     end
 
+    # A new run's directory: its targets, results, and report, under tmp/verifier/ (ignored:
+    # results name real companies from the private target list).
+    def self.dir_for(name)
+      Rails.root.join("tmp/verifier/#{Time.current.utc.strftime('%Y%m%dT%H%M%SZ')}-#{name}")
+    end
+
     def initialize(run_dir:, model: nil, credential_file: CREDENTIAL_FILE, process: Process)
       @run_dir = Pathname.new(run_dir)
       @model = model

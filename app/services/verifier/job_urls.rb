@@ -23,11 +23,18 @@ module Verifier
 
     # The listing a posting's latest live match pointed to, with the check that recorded it;
     # nil when there is none, or when it has no link.
+    #
+    # Only the latest word on the role counts, and only a match on its title: a
+    # role a later check found gone, or a near-miss the LLM judged, leaves no
+    # link. Matched by link first, a wrong link would keep calling a closed role
+    # "still listed" for good (Baker Hughes, 2026-10-07).
     def matched_listing(posting)
       check = posting.company.page_checks.where(purpose: "verification")
-                     .where("matches @> ?", [ { posting_id: posting.id, verdict: "verified_live" } ].to_json)
+                     .where("matches @> ?", [ { posting_id: posting.id } ].to_json)
                      .order(checked_at: :desc).first or return
       match = check.matches.find { |m| m["posting_id"] == posting.id }
+      return unless match["verdict"] == "verified_live" && Ingest::LINK_METHODS.include?(match["method"])
+
       listing = run_listings(check)[match["listing_index"].to_i] if match["listing_index"]
       # The reasoning names the listing it matched: a guard against reading the wrong one.
       return unless listing && listing["url"].present? && match["reasoning"].to_s.include?("\"#{listing['title']}\"")

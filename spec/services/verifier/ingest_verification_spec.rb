@@ -120,6 +120,12 @@ RSpec.describe Verifier::Ingest, "#verification" do
       expect { ingest.verification(result(live_at("https://acme.example/jobs/7"))) }.not_to change(AuditEvent, :count)
     end
 
+    it "is not learned from a near-miss the LLM judged: a wrong link would keep a closed role listed" do
+      ingest.verification(result(live_at("https://acme.example/jobs/7", method: "llm")))
+
+      expect(posting.reload).to have_attributes(verification_state: "verified_live", job_url: nil)
+    end
+
     it "is kept when a verdict matched no listing" do
       posting.update!(job_url: "https://acme.example/jobs/7")
 
