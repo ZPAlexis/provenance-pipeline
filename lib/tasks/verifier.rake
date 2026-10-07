@@ -256,7 +256,7 @@ namespace :verifier do
       # Each run's known-page checks sit in its "-known" sibling directory; KNOWN= names them for older runs.
       dirs = ENV["RESULTS"].split(",").map { |dir| Pathname.new(dir.strip) }
       known_dirs = ENV["KNOWN"].present? ? ENV["KNOWN"].split(",").map { |dir| Pathname.new(dir.strip) } : dirs.map { |dir| Pathname.new("#{dir}-known") }
-      read = ->(paths) { paths.map { |dir| dir.join("results.jsonl") }.select(&:exist?).flat_map { |file| file.readlines.map { |line| JSON.parse(line) } } }
+      read = ->(paths) { paths.flat_map { |dir| Verifier::Worker.read_results(dir.join("results.jsonl")) } }
       resolutions = read.call(dirs).index_by { |result| result["target_id"] }.values
       known = read.call(known_dirs).index_by { |result| result["target_id"] }.values
       abort "No results in #{dirs.join(', ')}." if resolutions.empty?
@@ -305,8 +305,7 @@ namespace :verifier do
     if rescore
       # Saved runs scored again, e.g. after recording hand checks: nothing is read, nothing is spent.
       dirs = ENV["RESULTS"].split(",").map { |dir| Pathname.new(dir.strip) }
-      results = dirs.map { |dir| dir.join("results.jsonl") }.select(&:exist?)
-                    .flat_map { |file| file.readlines.map { |line| JSON.parse(line) } }
+      results = dirs.flat_map { |dir| Verifier::Worker.read_results(dir.join("results.jsonl")) }
                     .index_by { |result| result["target_id"] }.values
       abort "No results in #{dirs.join(', ')}." if results.empty?
       mode = "re-scored"
@@ -377,7 +376,7 @@ namespace :verifier do
       ENV["RESULTS"].split(",").map { |dir| Pathname.new(dir.strip) }.each do |dir|
         file = dir.join("results.jsonl")
         abort "No results in #{dir}." unless file.exist?
-        file.readlines.map { |line| JSON.parse(line) }.each do |result|
+        Verifier::Worker.read_results(file).each do |result|
           next unless result["kind"] == "verification" && wanted.key?(result["target_id"])
 
           saved.reject! { |_, earlier| earlier["target_id"] == result["target_id"] } # a later run wins

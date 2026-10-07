@@ -98,6 +98,19 @@ RSpec.describe Verifier::Worker do
     expect { worker(process).run(targets) }.to raise_error(described_class::Error, /schema version 1/)
   end
 
+  # A saved run read again later (RESULTS=) passes the same check as a run just made.
+  it "checks a saved results file against the version this code reads, naming the line" do
+    saved = dir.join("results.jsonl")
+    saved.write("#{result.to_json}\n#{result('schema_version' => 3).to_json}\n")
+
+    expect { described_class.read_results(saved) }
+      .to raise_error(described_class::Error, %r{results\.jsonl:2: result schema version 3, but this code reads version 2})
+    expect(described_class.read_results(dir.join("missing.jsonl"))).to eq([])
+
+    saved.write("#{result.to_json}\n")
+    expect(described_class.read_results(saved.to_s)).to eq([ result ])
+  end
+
   it "runs resolution when asked, naming the run after its directory" do
     process = fake_process
 
