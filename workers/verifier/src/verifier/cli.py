@@ -224,8 +224,10 @@ def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, resu
         if result.outcome != "ok":
             return f"{target.label or target.id}: {result.outcome}, {result.reason} {timing}"
         suggested = sum(role.suggested for role in result.roles)
+        new = sum(role.suggested and not role.on_record for role in result.roles)
         ruled_out = len(result.roles) - suggested
-        return f"{target.label or target.id}: {suggested} suggested, {ruled_out} ruled out of {result.weighed} {timing}"
+        label = target.label or target.id
+        return f"{label}: {suggested} fit ({new} new), {ruled_out} ruled out of {result.weighed} {timing}"
     if isinstance(result, BoardResult):
         return f"{target.name or target.id}: {result.outcome}, {result.evidence or result.reason} {timing}"
     if isinstance(result, MatchResult | VerificationResult):

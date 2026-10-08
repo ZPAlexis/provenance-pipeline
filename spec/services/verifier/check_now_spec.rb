@@ -74,6 +74,27 @@ RSpec.describe Verifier::CheckNow do
       expect(worker.asked[:command]).to eq("verify")
       expect(outcome).to have_attributes(answer: nil, summary: "12 roles read, the whole list. Roles: 1 still listed.")
     end
+
+    it "brings the company's suggestions up to date after its check, and says so when they changed" do
+      refreshed = Verifier::Suggestions::Refresh.new(created: 2, updated: 0, withdrawn: 0, problems: [], run_id: "r1")
+      allow(Verifier::Suggestions).to receive(:refresh!).and_return(refreshed)
+      worker = worker_class.new([ verification(verdicts: [], complete: true, listing_count: 0) ])
+
+      outcome = described_class.company(company, worker: worker)
+
+      expect(Verifier::Suggestions).to have_received(:refresh!).with([ company ])
+      expect(outcome.summary).to end_with("Suggestions: 2 new.")
+    end
+
+    it "never fails a check over its suggestions, whose verdicts are already written" do
+      allow(Verifier::Suggestions).to receive(:refresh!).and_raise(Verifier::Worker::Error, "the verification worker exited with status 1")
+      worker = worker_class.new([ verification(verdicts: [], complete: true, listing_count: 0) ])
+
+      outcome = described_class.company(company, worker: worker)
+
+      expect(outcome).to be_finished
+      expect(outcome.summary).to end_with("Suggestions could not be brought up to date: the verification worker exited with status 1")
+    end
   end
 
   describe ".refusal" do

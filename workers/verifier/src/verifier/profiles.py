@@ -24,13 +24,25 @@ narrows: with every work mode sought, an unstated one changes nothing.
 
 Every role holding a profile title comes back, suggested or ruled out by the first
 rule it fails, so a profile can be tuned against what it leaves out. The rest are
-only counted.
+only counted. A role already on record (one the operator tracks, dismissed, or was
+suggested before) says which posting it is, matched as verification matches, so it
+is never suggested anew.
 """
 
 import time
 
 from verifier import places
-from verifier.contract import FitNote, Listing, RoleFit, RuledOut, SearchProfile, SuggestionResult, SuggestTarget
+from verifier.contract import (
+    FitNote,
+    Listing,
+    MatchTarget,
+    RoleFit,
+    RuledOut,
+    SearchProfile,
+    SuggestionResult,
+    SuggestTarget,
+)
+from verifier.match import Matcher
 from verifier.places import Place, Reading
 from verifier.titles import FILLER_WORDS, LEVELS, title_level, title_words
 
@@ -40,17 +52,38 @@ MODE_WORDS = {"remote": "remote", "remotely": "remote", "hybrid": "hybrid"}
 
 
 def suggest(target: SuggestTarget) -> SuggestionResult:
-    """One company's stored roles weighed against the profile."""
+    """One company's stored roles weighed against the profile, each saying whether it is already on record."""
     started = time.monotonic()
     profile = Profile(target.profile)
-    roles = [fit for index, listing in enumerate(target.listings) if (fit := profile.fit(index, listing))]
+    listed = on_record(target)
+    first_at = {index: posting_id for posting_id, index in reversed(listed.items())}
+    roles = [
+        fit.model_copy(update={"on_record": first_at.get(index)})
+        for index, listing in enumerate(target.listings)
+        if (fit := profile.fit(index, listing))
+    ]
     return SuggestionResult(
         target_id=target.id,
         page_check_id=target.page_check_id,
         weighed=len(target.listings),
         roles=roles,
+        listed=listed,
         duration_ms=int((time.monotonic() - started) * 1000),
     )
+
+
+def on_record(target: SuggestTarget) -> dict[str, int]:
+    """Which listing each posting on record is: posting id -> listing index.
+
+    Matched exactly as verification matches a posting to a page (match.py: its own
+    link, then the same title, then a variant), never by the LLM: a role the
+    operator tracks or dismissed is the same role here as when it is checked.
+    """
+    if not target.postings or not target.listings:
+        return {}
+    read = MatchTarget(id=target.id, complete=False, listings=target.listings, postings=target.postings)
+    live = [verdict for verdict in Matcher().match(read).verdicts if verdict.verdict == "verified_live"]
+    return {verdict.posting_id: verdict.listing_index for verdict in live if verdict.listing_index is not None}
 
 
 class Profile:

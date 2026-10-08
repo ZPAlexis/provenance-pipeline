@@ -93,6 +93,20 @@ RSpec.describe AuditEvent do
       expect(event.action).to eq("update")
       expect(event.changes_made).to eq("careers_page_url" => [ nil, "https://acme.example/careers" ])
     end
+  end
+
+  describe ".record_destroy!" do
+    it "keeps everything a record held before it is deleted, as [value, nil] pairs" do
+      posting = create(:posting, role_title: "Solutions Engineer", tracking: "suggested", fit: { "title" => "Solutions Engineer" })
+
+      event = described_class.record_destroy!(posting, actor: "agent:suggester", reasoning: "Withdrawn.")
+      posting.destroy!
+
+      expect(event).to have_attributes(action: "destroy", target_type: "Posting", target_id: posting.id, reasoning: "Withdrawn.")
+      expect(event.changes_made).to include("role_title" => [ "Solutions Engineer", nil ], "tracking" => [ "suggested", nil ],
+                                            "fit" => { "title" => [ "Solutions Engineer", nil ] })
+      expect(event.reload.target).to be_nil # the history outlives the record
+    end
 
     # An overwrite must never lose the previous value, and an event must never
     # carry the whole enrichment blob twice.

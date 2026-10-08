@@ -144,6 +144,17 @@ RSpec.describe Verifier::Targets do
       expect(target[:listings].pluck("title")).to eq([ "Solutions Engineer", "Designer", "Recruiter" ])
     end
 
+    it "sends every role of the company on record, dismissed ones too: none is suggested anew" do
+      read(listings: [ role("Solutions Engineer") ])
+      tracked = create(:posting, company: company, role_title: "Designer", job_url: "#{page}/designer")
+      dismissed = create(:posting, company: company, role_title: "Recruiter", location: "Remote", tracking: "dismissed")
+
+      expect(described_class.suggest(company, profile)[:postings]).to contain_exactly(
+        { id: tracked.id, title: "Designer", location: nil, url: "#{page}/designer" },
+        { id: dismissed.id, title: "Recruiter", location: "Remote", url: nil }
+      )
+    end
+
     # A check of one role reads its own page first, and may settle there, or on another board it links to.
     it "skips a role's own page and any check that never read the watched page" do
       list = read(run_id: "run-1", at: 3.days.ago, listings: [ role("Solutions Engineer") ])

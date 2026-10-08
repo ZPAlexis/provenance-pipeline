@@ -44,7 +44,7 @@ RSpec.describe "Roles", type: :request do
       expect(response.body).to include("Office Manager")
 
       get roles_path(tab: "suggested")
-      expect(response.body).to include("Suggestions arrive with the search profile")
+      expect(response.body).to include("No suggestions yet", "Find suggestions")
     end
   end
 

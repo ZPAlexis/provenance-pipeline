@@ -1,6 +1,6 @@
 import pytest
 
-from verifier.contract import Listing, SearchProfile, SuggestTarget
+from verifier.contract import Listing, SearchProfile, SuggestTarget, TrackedPosting
 from verifier.profiles import Profile, suggest
 
 EVERY_MODE = ["remote", "hybrid", "onsite"]
@@ -170,3 +170,27 @@ def test_suggest_returns_every_role_holding_a_title_and_counts_the_rest():
 
     assert (result.target_id, result.page_check_id, result.weighed) == ("c1", "pc1", 3)
     assert [(fit.listing_index, fit.suggested) for fit in result.roles] == [(0, True), (2, False)]
+
+
+def test_a_role_already_on_record_says_which_posting_it_is_matched_as_verification_matches():
+    listings = [
+        Listing(title="Solutions Engineer", location="São Paulo, Brazil", url="https://acme.example/jobs/1"),
+        Listing(title="Senior Solutions Engineer", location="Remote - Brazil", url="https://acme.example/jobs/2"),
+        Listing(title="Account Executive", location="Brazil", url="https://acme.example/jobs/3"),
+        Listing(title="Solutions Engineer, LATAM", location="Latin America", url="https://acme.example/jobs/4"),
+    ]
+    postings = [
+        TrackedPosting(id="by-link", title="SE (renamed since)", url="https://acme.example/jobs/1?utm_source=x"),
+        TrackedPosting(id="by-title", title="Sr. Solutions Engineer"),
+        TrackedPosting(id="not-a-fit", title="Account Executive"),
+        TrackedPosting(id="gone", title="Data Engineer"),
+    ]
+    target = SuggestTarget(
+        id="c1", listings=listings, postings=postings, profile=SearchProfile(titles=["Solutions Engineer"])
+    )
+
+    result = suggest(target)
+
+    assert [(fit.listing_index, fit.on_record) for fit in result.roles] == [(0, "by-link"), (1, "by-title"), (3, None)]
+    # Every posting found, fitting or not; one not in this read is missing, never guessed.
+    assert result.listed == {"by-link": 0, "by-title": 1, "not-a-fit": 2}

@@ -14,7 +14,11 @@ class ProfilesController < ApplicationController
       @profile.save!
       AuditEvent.record_write!(@profile, actor: AuditEvent::OPERATOR, reasoning: "Saved on the Profile page.")
     end
-    redirect_to profile_path, notice: "Profile saved.", status: :see_other
+    # What the saved profile suggests now: the suggestions follow it.
+    redirect_to profile_path, notice: "Profile saved. #{Verifier::Suggestions.refresh!(profile: @profile).summary}",
+                              status: :see_other
+  rescue Verifier::Worker::Error => e
+    redirect_to profile_path, alert: "Profile saved, but suggestions could not be found: #{e.message}", status: :see_other
   end
 
   def preview

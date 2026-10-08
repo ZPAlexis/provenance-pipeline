@@ -29,7 +29,7 @@ from verifier.config import (
     estimate_cost,
 )
 from verifier.contract import EmploymentType, LlmUsage, WorkMode
-from verifier.errors import CreditExhausted, LlmConfigError
+from verifier.errors import CreditExhausted, ExtractionFailed, LlmConfigError
 from verifier.render import RenderedPage
 
 SYSTEM_PROMPT = """You read the rendered text of a company's careers page and list the job openings it shows.
@@ -146,15 +146,6 @@ class MatchDecisions(BaseModel):
 
 MATCH_SCHEMA = anthropic.transform_schema(TypeAdapter(MatchDecisions).json_schema())
 MATCH_PROMPT_VERSION = prompt_version(MATCH_SYSTEM_PROMPT, MATCH_SCHEMA)
-
-
-class ExtractionFailed(Exception):
-    """This page could not be extracted; the run continues with the next one."""
-
-    def __init__(self, reason: str, usage: LlmUsage | None = None):
-        super().__init__(reason)
-        self.reason = reason
-        self.usage = usage  # tokens already billed, if a response came back
 
 
 class Extractor(Protocol):

@@ -294,6 +294,9 @@ class SuggestTarget(BaseModel):
     page_check_id: str | None = None  # the stored read the listings came from
     listings: list[Listing]
     profile: SearchProfile
+    # The company's roles already on record, whatever the operator made of them (tracked,
+    # suggested, dismissed): a listing that is one of them is never suggested anew.
+    postings: list[TrackedPosting] = Field(default_factory=list)
 
 
 # excluded: its title holds an excluded word; level, place, work_mode: one it states is not sought.
@@ -315,6 +318,7 @@ class RoleFit(BaseModel):
     ruled_out: RuledOut | None = None
     notes: list[FitNote] = Field(default_factory=list)
     reasoning: str
+    on_record: str | None = None  # the posting this listing already is, matched as verification matches
 
 
 class SuggestionResult(BaseModel):
@@ -326,6 +330,9 @@ class SuggestionResult(BaseModel):
     reason: str | None = None
     weighed: int = 0  # roles weighed
     roles: list[RoleFit] = Field(default_factory=list)  # every role holding a profile title; the rest are not listed
+    # Each posting on record found among the listings, fitting or not: posting id -> listing index.
+    # A posting missing here was not in this read, which may be only part of the list.
+    listed: dict[str, int] = Field(default_factory=dict)
     duration_ms: int = 0
 
 

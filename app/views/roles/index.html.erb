@@ -4,6 +4,11 @@
     <h1>Roles</h1>
     <p class="sub">Every role is checked at the employer's own careers page. Only you track or dismiss one.</p>
   </div>
+  <% if @tab == "suggested" %>
+    <%= button_to "Find suggestions", suggestions_path, class: "btn",
+                  title: "Weigh every watched company's latest list against your search profile. Costs nothing.",
+                  data: { turbo_submits_with: "Weighing roles…" } %>
+  <% end %>
 </div>
 
 <nav class="tabs">
@@ -27,12 +32,12 @@
 </nav>
 
 <% if @roles.any? %>
-  <%= render "table", roles: @roles %>
+  <%= render "table", roles: @roles, fit: @tab == "suggested" %>
 <% elsif @answer %>
   <p class="empty">No <%= @tab %> role is <%= answer_label(@answer).downcase %>.</p>
 <% else %>
   <p class="empty">
-    <%= { "suggested" => "Suggestions arrive with the search profile: roles on watched pages that fit what you are looking for.",
+    <%= { "suggested" => "No suggestions yet. Save your search profile, or press Find suggestions: roles on watched pages that fit it land here.",
           "dismissed" => "No role dismissed." }.fetch(@tab, "No role tracked.") %>
   </p>
 <% end %>

@@ -131,6 +131,10 @@ module Verifier
       errors << "target_id is missing" if result["target_id"].blank?
       errors << "unknown outcome #{result['outcome'].inspect}" unless %w[ok error].include?(result["outcome"])
       errors << "weighed must be a count" unless count?(result["weighed"])
+      listed = result["listed"]
+      unless listed.is_a?(Hash) && listed.all? { |posting_id, index| posting_id.present? && count?(index) }
+        errors << "listed must map posting ids to listing indexes"
+      end
       roles = result["roles"]
       return errors << "roles must be a list" unless roles.is_a?(Array)
 
@@ -146,6 +150,7 @@ module Verifier
       errors << "listing must have a title" unless role["listing"].is_a?(Hash) && role.dig("listing", "title").is_a?(String)
       errors << "title is missing" if role["title"].blank?
       errors << "reasoning is missing" if role["reasoning"].blank?
+      errors << "on_record must name a posting" unless role["on_record"].nil? || (role["on_record"].is_a?(String) && role["on_record"].present?)
       errors << "unknown level #{role['level'].inspect}" unless role["level"].nil? || SearchProfile::LEVELS.include?(role["level"])
       errors << "unknown work mode #{role['work_mode'].inspect}" unless WORK_MODES.include?(role["work_mode"])
       errors << "unknown notes #{role['notes'].inspect}" unless role["notes"].is_a?(Array) && (role["notes"] - FIT_NOTES).empty?

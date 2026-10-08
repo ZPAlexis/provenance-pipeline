@@ -15,7 +15,7 @@ class RolesController < ApplicationController
   end
 
   def show
-    @role = Posting.includes(:company).find(params[:id])
+    @role = Posting.includes(:company).find_by(id: params[:id]) or return withdrawn
     CheckRun.abandon_stale!
     @run = @role.check_runs.newest_first.first
     @history = @role.audit_events.order(occurred_at: :desc)
@@ -31,6 +31,14 @@ class RolesController < ApplicationController
   def dismiss = decide(:dismiss!, "dismissed")
 
   private
+
+  # A suggestion withdrawn since its page was opened (a check found it gone, or the
+  # profile changed): its audit record says why.
+  def withdrawn
+    event = AuditEvent.find_by!(target_type: "Posting", target_id: params[:id], action: "destroy")
+    title = event.changes_made.dig("role_title", 0)
+    redirect_to roles_path(tab: "suggested"), alert: "#{title} is no longer suggested. #{event.reasoning}", status: :see_other
+  end
 
   def decide(change, done)
     role = Posting.includes(:company).find(params[:id])
