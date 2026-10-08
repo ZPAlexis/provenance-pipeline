@@ -262,6 +262,73 @@ class BoardResult(BaseModel):
     duration_ms: int = 0
 
 
+# --- Search profiles: which stored roles fit what the operator is looking for ---
+#
+# Nothing is fetched and the LLM is never called: the roles were read before, and
+# stored. What a role does not state is never held against it: it fits, marked.
+Level = Literal["entry", "senior", "lead", "director", "executive"]  # titles.LEVELS
+SoughtWorkMode = Literal["remote", "hybrid", "onsite"]
+
+
+class SearchProfile(BaseModel):
+    """What the operator is looking for.
+
+    A role fits when its title holds every word of one of `titles`, in any order,
+    and every word of none of `excluded`; it is open to one of `places`, where the
+    operator can work (places.py); and its work mode and level are among those
+    sought. An empty `places`, `work_modes`, or `levels` accepts any.
+    """
+
+    titles: list[str]
+    excluded: list[str] = Field(default_factory=list)
+    places: list[str] = Field(default_factory=list)  # where the operator can work: countries, regions, cities
+    work_modes: list[SoughtWorkMode] = Field(default_factory=list)
+    levels: list[Level] = Field(default_factory=list)
+
+
+class SuggestTarget(BaseModel):
+    """A company's roles as its watched page last listed them, weighed against a profile."""
+
+    id: str  # the company
+    label: str | None = None
+    page_check_id: str | None = None  # the stored read the listings came from
+    listings: list[Listing]
+    profile: SearchProfile
+
+
+# excluded: its title holds an excluded word; level, place, work_mode: one it states is not sought.
+RuledOut = Literal["excluded", "level", "place", "work_mode"]
+# What the role does not state, so could not be weighed: it fits, marked.
+FitNote = Literal["work_mode_not_stated", "place_not_stated", "level_not_stated"]
+
+
+class RoleFit(BaseModel):
+    """A role whose title holds a profile title: suggested, or ruled out and why."""
+
+    listing_index: int  # 0-based, into the target's listings
+    listing: Listing
+    title: str  # the profile title it holds every word of
+    level: Level | None = None  # as its title states it
+    place: str | None = None  # the profile place, as entered, that its location (or else its title) is open to
+    work_mode: WorkMode = "unknown"  # as the listing states it, or else as its location does
+    suggested: bool
+    ruled_out: RuledOut | None = None
+    notes: list[FitNote] = Field(default_factory=list)
+    reasoning: str
+
+
+class SuggestionResult(BaseModel):
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["suggestion"] = "suggestion"
+    target_id: str
+    page_check_id: str | None = None
+    outcome: Literal["ok", "error"] = "ok"
+    reason: str | None = None
+    weighed: int = 0  # roles weighed
+    roles: list[RoleFit] = Field(default_factory=list)  # every role holding a profile title; the rest are not listed
+    duration_ms: int = 0
+
+
 class VerificationResult(BaseModel):
     """A company's page read in full (every page of it that could be), and a verdict per posting.
 

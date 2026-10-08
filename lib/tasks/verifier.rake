@@ -89,14 +89,6 @@ namespace :verifier do
     ENV["LIMIT"].present? ? scope.limit(Integer(ENV["LIMIT"])) : scope
   end
 
-  # Companies whose watched page is verified. An aggregator's postings belong to other employers:
-  # its own page says nothing about them.
-  watched = lambda do
-    Company.where(resolution_status: "resolved").where.not(kind: "aggregator").or(
-      Company.where(resolution_status: "resolved", kind: nil)
-    )
-  end
-
   money = ->(results) { results.sum { |r| Array(r["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } } }
 
   desc "Find careers pages for companies not yet attempted, and record them. Backs up first. [PAGE=on_record|none] " \
@@ -364,7 +356,7 @@ namespace :verifier do
        "estimated cost; runs only with GO=1, backing up first. RESULTS=dir records a passing Test B run's reads " \
        "instead of reading those pages again. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
   task verify: :environment do
-    companies = select_companies.call(watched.call.where(id: Posting.not_dismissed.select(:company_id))).to_a
+    companies = select_companies.call(Company.watched.where(id: Posting.not_dismissed.select(:company_id))).to_a
     abort "No resolved company has postings to verify." if companies.empty?
 
     targets = companies.map { |company| Verifier::Targets.verify(company) }
@@ -437,7 +429,7 @@ namespace :verifier do
   desc "Look for a free ATS board listing the same roles as each page the LLM had to read, and read through it from " \
        "then on. Never calls the LLM; backs up first. [COMPANY=name] [LIMIT=n]"
   task find_boards: :environment do
-    targets = select_companies.call(watched.call).filter_map { |company| Verifier::Targets.board(company) }
+    targets = select_companies.call(Company.watched).filter_map { |company| Verifier::Targets.board(company) }
     abort "No company's page was read by the LLM since its board was last looked for." if targets.empty?
 
     puts "Looking for boards for #{targets.size} companies whose pages the LLM read (no API cost)."

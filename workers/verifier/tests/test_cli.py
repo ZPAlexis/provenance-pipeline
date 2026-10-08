@@ -1,7 +1,7 @@
 import io
 import json
 
-from verifier import cli
+from verifier import cli, pipeline
 from verifier.cli import run, run_boards, run_resolve
 from verifier.contract import (
     AtsBoard,
@@ -12,9 +12,11 @@ from verifier.contract import (
     PageResult,
     ResolutionResult,
     ResolveTarget,
+    SuggestionResult,
     Target,
 )
-from verifier.extract import CreditExhausted, ExtractionFailed
+from verifier.errors import CreditExhausted
+from verifier.extract import ExtractionFailed
 from verifier.resolve import Resolver, ServicesReader
 
 
@@ -99,14 +101,14 @@ def test_keeps_going_through_page_specific_llm_failures(services, site, tmp_path
 
 
 def test_one_unexpected_failure_does_not_lose_the_run(services, site, tmp_path, monkeypatch):
-    real = cli.verify_page
+    real = pipeline.verify_page
 
     def flaky(target, services):
         if target.id == "t1":
             raise RuntimeError("boom")
         return real(target, services)
 
-    monkeypatch.setattr(cli, "verify_page", flaky)
+    monkeypatch.setattr(pipeline, "verify_page", flaky)
     out = tmp_path / "results.jsonl"
 
     run(targets(site, "static.html", "empty.html"), out, services, log=io.StringIO())
@@ -162,7 +164,9 @@ def test_resolve_stops_cleanly_when_credit_runs_out(tmp_path):
 
 
 def test_match_replays_stored_listings_without_a_browser_and_counts_verdicts(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli, "sync_playwright", lambda: (_ for _ in ()).throw(AssertionError("no browser")))
+    monkeypatch.setattr(
+        "playwright.sync_api.sync_playwright", lambda: (_ for _ in ()).throw(AssertionError("no browser"))
+    )
     targets = tmp_path / "targets.json"
     targets.write_text(
         json.dumps(
@@ -233,3 +237,41 @@ def test_boards_writes_one_result_per_company_and_tallies_what_was_adopted(tmp_p
     results = [BoardResult.model_validate_json(line) for line in out.read_text().splitlines()]
     assert [(result.target_id, result.outcome) for result in results] == [("c1", "adopted"), ("c2", "none")]
     assert (summary.outcomes, summary.pages, summary.cost_usd) == ({"adopted": 1, "none": 1}, 0, 0.0)
+
+
+def test_suggest_weighs_stored_roles_without_a_browser_and_counts_what_fits(tmp_path, monkeypatch, capfd):
+    monkeypatch.setattr(
+        "playwright.sync_api.sync_playwright", lambda: (_ for _ in ()).throw(AssertionError("no browser"))
+    )
+    profile = {"titles": ["Solutions Engineer"], "places": ["Brazil"], "work_modes": ["remote"]}
+    targets = tmp_path / "targets.json"
+    targets.write_text(
+        json.dumps(
+            {
+                "targets": [
+                    {
+                        "id": "c1",
+                        "label": "Acme",
+                        "page_check_id": "pc1",
+                        "listings": [
+                            {"title": "Solutions Engineer", "location": "Remote - Brazil", "work_mode": "remote"},
+                            {"title": "Solutions Engineer", "location": "New York", "work_mode": "onsite"},
+                            {"title": "Recruiter", "location": "Remote - Brazil"},
+                        ],
+                        "profile": profile,
+                    },
+                    {"id": "c2", "listings": [], "profile": profile},
+                ]
+            }
+        )
+    )
+    out = tmp_path / "suggestions.jsonl"
+
+    assert cli.main(["suggest", "--targets", str(targets), "--out", str(out)]) == cli.EXIT_OK
+
+    results = [SuggestionResult.model_validate_json(line) for line in out.read_text().splitlines()]
+    assert [(r.target_id, r.weighed, [fit.suggested for fit in r.roles]) for r in results] == [
+        ("c1", 3, [True, False]),
+        ("c2", 0, []),
+    ]
+    assert "2/2 companies, 1 suggested" in capfd.readouterr().err

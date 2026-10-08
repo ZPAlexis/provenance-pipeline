@@ -1,0 +1,73 @@
+<% content_for :title, "Profile · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Search profile</h1>
+    <p class="sub">
+      What you are looking for. Roles on watched pages that fit it will be suggested; only you track one.
+      <% if @profile.persisted? %>Saved <%= ago(@profile.updated_at) %>.<% end %>
+    </p>
+  </div>
+</div>
+
+<%= form_with model: @profile, url: profile_path, method: :patch, class: "profile-form" do |f| %>
+  <%= render "errors", profile: @profile %>
+
+  <div class="field">
+    <%= f.label :titles_text, "Titles" %>
+    <p class="hint">
+      One per line. A role fits when its title holds every word of one, in any order:
+      "Solutions Engineer" fits "Senior Engineer, Solutions". A single word fits any title holding it.
+    </p>
+    <%= f.text_area :titles_text, rows: 6, placeholder: "Product Designer\nData Analyst\nAnalytics" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :excluded_words_text, "Excluded words" %>
+    <p class="hint">One per line. A title holding every word of one is ruled out.</p>
+    <%= f.text_area :excluded_words_text, rows: 3, placeholder: "Intern\nVice President" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :places_text, "Places" %>
+    <p class="hint">
+      Where you can work, one per line. A country takes roles in it by any of its names, codes, cities, or states
+      (Brazil: Brasil, BRA, São Paulo, Minas Gerais), and remote roles open to a region containing it (Latin America,
+      Americas) or to anywhere. A region takes roles open to it, not every role inside it. A location naming no place
+      ("Remote" alone) fits, marked. A place the app does not know is matched by its words.
+    </p>
+    <%= f.text_area :places_text, rows: 4, placeholder: "Brazil" %>
+  </div>
+
+  <fieldset class="field">
+    <legend>Work modes</legend>
+    <div class="choices">
+      <%= f.collection_check_boxes :work_modes, work_mode_options, :first, :last do |box| %>
+        <%= box.label { box.check_box + " " + box.text } %>
+      <% end %>
+    </div>
+    <p class="hint">None ticked: any. A role whose page does not state its mode fits, marked.</p>
+  </fieldset>
+
+  <fieldset class="field">
+    <legend>Levels</legend>
+    <div class="choices">
+      <%= f.collection_check_boxes :levels, level_options, :first, :last do |box| %>
+        <%= box.label { box.check_box + " " + box.text } %>
+      <% end %>
+    </div>
+    <p class="hint">As the title states it. None ticked: any. A title stating no level ("Product Designer") fits, marked.</p>
+  </fieldset>
+
+  <div class="actions">
+    <%= f.button "Preview", type: "submit", formaction: preview_profile_path, class: "btn",
+                            data: { turbo_frame: "profile-preview", turbo_submits_with: "Weighing roles…" } %>
+    <%= f.button "Save", type: "submit", class: "btn primary" %>
+  </div>
+<% end %>
+
+<%= turbo_frame_tag "profile-preview" do %>
+  <p class="muted">
+    Preview weighs the profile above, saved or not, against every watched company's roles as its page last listed them.
+    It costs nothing and writes nothing.
+  </p>
+<% end %>

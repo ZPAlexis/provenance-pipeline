@@ -84,6 +84,14 @@ RSpec.describe Company do
       expect(described_class.with_careers_page).to contain_exactly(with_page)
       expect(described_class.needing_careers_page).to contain_exactly(without_page)
     end
+
+    it "watches resolved pages, never an aggregator's" do
+      employer = create(:company, :resolved, kind: "employer")
+      unconfirmed = create(:company, :resolved)
+      create(:company, :resolved, kind: "aggregator")
+
+      expect(described_class.watched).to contain_exactly(employer, unconfirmed)
+    end
   end
 
   # Returns an unsaved record when nothing matches, so the caller can set every

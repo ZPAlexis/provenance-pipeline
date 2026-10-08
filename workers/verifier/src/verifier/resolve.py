@@ -47,7 +47,8 @@ from verifier.contract import (
     ResolveTarget,
     Target,
 )
-from verifier.extract import CreditExhausted, ExtractionFailed, LinkChoice, LlmConfigError, link_url
+from verifier.errors import CreditExhausted, LlmConfigError
+from verifier.extract import ExtractionFailed, LinkChoice, link_url
 from verifier.pipeline import Services, check_page, fetch_board, read_homepage
 from verifier.render import RenderedPage, RenderError, render
 

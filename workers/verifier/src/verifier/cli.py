@@ -1,4 +1,4 @@
-"""`verifier extract|resolve|match|verify|check|boards --targets targets.json --out results.jsonl`
+"""`verifier extract|resolve|match|verify|check|boards|suggest --targets targets.json --out results.jsonl`
 
 extract  checks each careers page and extracts its listings: one PageResult per target.
 resolve  finds each company's careers page: one ResolutionResult per target,
@@ -12,6 +12,8 @@ check    checks one tracked role per target: its own page first, then its
          For match, verify, and check, `--no-llm` leaves near-misses undecided.
 boards   looks for a free board listing the same roles as a page the LLM had to
          read: one BoardResult per company. Never calls the LLM.
+suggest  weighs a company's stored roles against a search profile: one
+         SuggestionResult per company. Nothing is fetched; never calls the LLM.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -19,7 +21,14 @@ every finished result behind. Progress goes to stderr.
 
 Exit codes: 0 finished; 2 bad input; 3 stopped, API credit exhausted;
 4 stopped, API credential missing or rejected; 5 stopped, LLM service failing.
+
+The browser, the HTTP client, and the LLM client are imported by the commands
+that use them, not here: the LLM client alone takes seconds to import (15s from
+a checkout under /mnt in WSL), and `suggest`, which the Profile page's Preview
+waits on, uses none of them.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -29,12 +38,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import httpx2
-from playwright.sync_api import sync_playwright
-
-from verifier.boards import find_board
-from verifier.check import check_posting
 from verifier.config import DEFAULT_MODEL, DOMAIN_DELAY_SECONDS, MODEL_SETTINGS
 from verifier.contract import (
     BoardResult,
@@ -44,17 +49,19 @@ from verifier.contract import (
     PageResult,
     ResolutionResult,
     ResolveTarget,
+    SuggestionResult,
+    SuggestTarget,
     Target,
     VerificationResult,
     VerifyTarget,
 )
-from verifier.extract import CreditExhausted, LlmConfigError, LlmExtractor, LlmLinkPicker, LlmMatcher
-from verifier.match import Matcher
-from verifier.pipeline import Services, verify_page
-from verifier.politeness import HostThrottle
-from verifier.resolve import Resolver, ServicesReader
-from verifier.robots import RobotsPolicy
-from verifier.verify import verify_company
+from verifier.errors import CreditExhausted, LlmConfigError
+from verifier.profiles import suggest
+
+if TYPE_CHECKING:
+    from verifier.match import Matcher
+    from verifier.pipeline import Services
+    from verifier.resolve import Resolver, ServicesReader
 
 EXIT_OK, EXIT_BAD_INPUT, EXIT_CREDIT, EXIT_CREDENTIAL, EXIT_LLM_UNAVAILABLE = 0, 2, 3, 4, 5
 
@@ -63,7 +70,7 @@ EXIT_OK, EXIT_BAD_INPUT, EXIT_CREDIT, EXIT_CREDENTIAL, EXIT_LLM_UNAVAILABLE = 0,
 _OUTAGE = re.compile(r"^llm_(http_5\d\d|connection_error|rate_limited)$")
 OUTAGE_LIMIT = 3
 
-Result = PageResult | ResolutionResult | MatchResult | VerificationResult | BoardResult
+Result = PageResult | ResolutionResult | MatchResult | VerificationResult | BoardResult | SuggestionResult
 
 
 @dataclass
@@ -73,6 +80,7 @@ class RunSummary:
     outcomes: dict[str, int] = field(default_factory=dict)
     listings: int = 0
     verdicts: dict[str, int] = field(default_factory=dict)  # when matching; "inconclusive" for no verdict
+    suggested: int = 0  # roles fitting a search profile, when suggesting
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
@@ -88,6 +96,8 @@ class RunSummary:
             for verdict in result.verdicts:
                 key = verdict.verdict or "inconclusive"
                 self.verdicts[key] = self.verdicts.get(key, 0) + 1
+        if isinstance(result, SuggestionResult):
+            self.suggested += sum(role.suggested for role in result.roles)
         for usage in _usages(result):
             self.input_tokens += usage.input_tokens
             self.output_tokens += usage.output_tokens
@@ -95,6 +105,8 @@ class RunSummary:
 
 
 def run(targets: list[Target], out_path: Path, services: Services, log=sys.stderr) -> RunSummary:
+    from verifier.pipeline import verify_page
+
     def failed(target: Target, reason: str) -> PageResult:
         checked_at = datetime.now(UTC).isoformat(timespec="seconds")
         return PageResult(target_id=target.id, url=target.url, checked_at=checked_at, outcome="error", reason=reason)
@@ -110,6 +122,8 @@ def run_resolve(targets: list[ResolveTarget], out_path: Path, resolver: Resolver
 
 
 def run_verify(targets: list[VerifyTarget], out_path: Path, services: Services, matcher: Matcher, log=sys.stderr):
+    from verifier.verify import verify_company
+
     def failed(target: VerifyTarget, reason: str) -> VerificationResult:
         return VerificationResult(target_id=target.id, url=target.url, outcome="error", reason=reason)
 
@@ -117,6 +131,8 @@ def run_verify(targets: list[VerifyTarget], out_path: Path, services: Services, 
 
 
 def run_check(targets: list[VerifyTarget], out_path: Path, services: Services, matcher: Matcher, log=sys.stderr):
+    from verifier.check import check_posting
+
     def failed(target: VerifyTarget, reason: str) -> VerificationResult:
         return VerificationResult(target_id=target.id, url=target.url, outcome="error", reason=reason)
 
@@ -137,10 +153,19 @@ def run_match(targets: list[MatchTarget], out_path: Path, matcher: Matcher, log=
 
 
 def run_boards(targets: list[BoardTarget], out_path: Path, reader: ServicesReader, log=sys.stderr) -> RunSummary:
+    from verifier.boards import find_board
+
     def failed(target: BoardTarget, reason: str) -> BoardResult:
         return BoardResult(target_id=target.id, outcome="error", reason=reason)
 
     return _run(targets, out_path, lambda target: find_board(target, reader), failed, log)
+
+
+def run_suggest(targets: list[SuggestTarget], out_path: Path, log=sys.stderr) -> RunSummary:
+    def failed(target: SuggestTarget, reason: str) -> SuggestionResult:
+        return SuggestionResult(target_id=target.id, page_check_id=target.page_check_id, outcome="error", reason=reason)
+
+    return _run(targets, out_path, suggest, failed, log)
 
 
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
@@ -176,7 +201,7 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 
 
 def _pages(result: Result) -> list[PageResult]:
-    if isinstance(result, MatchResult | BoardResult):
+    if isinstance(result, MatchResult | BoardResult | SuggestionResult):
         return []
     return result.checks if isinstance(result, ResolutionResult | VerificationResult) else [result]
 
@@ -192,9 +217,15 @@ def _reasons(result: Result) -> list[str | None]:
     return [page.reason for page in _pages(result)] + own
 
 
-def _describe(target: Target | ResolveTarget | BoardTarget, result: Result) -> str:
+def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, result: Result) -> str:
     cost = sum(usage.cost_usd for usage in _usages(result))
     timing = f"({result.duration_ms / 1000:.1f}s{f', ${cost:.4f}' if cost else ''})"
+    if isinstance(result, SuggestionResult):
+        if result.outcome != "ok":
+            return f"{target.label or target.id}: {result.outcome}, {result.reason} {timing}"
+        suggested = sum(role.suggested for role in result.roles)
+        ruled_out = len(result.roles) - suggested
+        return f"{target.label or target.id}: {suggested} suggested, {ruled_out} ruled out of {result.weighed} {timing}"
     if isinstance(result, BoardResult):
         return f"{target.name or target.id}: {result.outcome}, {result.evidence or result.reason} {timing}"
     if isinstance(result, MatchResult | VerificationResult):
@@ -234,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     for command in (match, verify, check):
         command.add_argument("--no-llm", action="store_true", help="leave near-misses undecided")
     commands.add_parser("boards", parents=[common], help="find free boards listing the same roles as LLM-read pages")
+    commands.add_parser("suggest", parents=[common], help="weigh stored roles against a search profile")
     args = parser.parse_args(argv)
 
     model = {
@@ -242,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         "verify": VerifyTarget,
         "check": VerifyTarget,
         "boards": BoardTarget,
+        "suggest": SuggestTarget,
     }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
@@ -251,6 +284,15 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f"could not read targets from {args.targets}: {error}", file=sys.stderr)
         return EXIT_BAD_INPUT
+
+    if args.command == "suggest":
+        # Nothing is fetched and nothing is paid for: the roles were read before, and stored.
+        summary = run_suggest(targets, args.out)
+        print(f"\n{summary.targets}/{len(targets)} companies, {summary.suggested} suggested", file=sys.stderr)
+        return _exit_code(summary)
+
+    from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher
+    from verifier.match import Matcher
 
     if args.command == "match":
         # Nothing is fetched: the listings were read before, and stored.
@@ -262,6 +304,14 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return _exit_code(summary)
+
+    import httpx2
+    from playwright.sync_api import sync_playwright
+
+    from verifier.pipeline import Services
+    from verifier.politeness import HostThrottle
+    from verifier.resolve import Resolver, ServicesReader
+    from verifier.robots import RobotsPolicy
 
     with sync_playwright() as playwright, httpx2.Client(timeout=20.0) as http:
         browser = playwright.chromium.launch()

@@ -1,0 +1,18 @@
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Role</th><th>Company</th><th>Location</th><th>Work mode</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      <% fits.each do |fit| %>
+        <tr>
+          <td><%= fit.listing["url"].present? ? outside_link(fit.listing["url"], label: fit.listing["title"]) : fit.listing["title"] %></td>
+          <td><%= link_to fit.company.name, company_path(fit.company) %></td>
+          <td class="muted"><%= fit.listing["location"] %></td>
+          <td class="nowrap"><%= work_mode_label(fit.work_mode) %></td>
+          <td class="reason"><%= fit.reasoning %> <%= fit_notes(fit.notes) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

@@ -43,11 +43,16 @@ module Verifier
     end
 
     # Every listing a verification read, in the order the worker matched against
-    # them (workers/verifier pipeline.read_all): the first page whole, then each
-    # next page's listings not seen before, up to a page with none. Pages are
-    # taken in the order the result listed them, which is the order they were stored.
+    # them (workers/verifier pipeline.read_all). Pages are taken in the order the
+    # result listed them, which is the order they were stored.
     def run_listings(check)
-      first, *rest = check.company.page_checks.where(run_id: check.run_id, purpose: "verification").order(:created_at, :id)
+      listed(check.company.page_checks.where(run_id: check.run_id, purpose: "verification").order(:created_at, :id))
+    end
+
+    # The listings of a list read page by page: the first page whole, then each
+    # next page's listings not seen before, up to a page with none.
+    def listed(pages)
+      first, *rest = pages
       listings = first.listings.dup
       seen = listings.to_set { |listing| listing_key(listing) }
       rest.each do |page|

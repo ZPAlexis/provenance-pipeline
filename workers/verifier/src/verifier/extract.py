@@ -29,6 +29,7 @@ from verifier.config import (
     estimate_cost,
 )
 from verifier.contract import EmploymentType, LlmUsage, WorkMode
+from verifier.errors import CreditExhausted, LlmConfigError
 from verifier.render import RenderedPage
 
 SYSTEM_PROMPT = """You read the rendered text of a company's careers page and list the job openings it shows.
@@ -145,14 +146,6 @@ class MatchDecisions(BaseModel):
 
 MATCH_SCHEMA = anthropic.transform_schema(TypeAdapter(MatchDecisions).json_schema())
 MATCH_PROMPT_VERSION = prompt_version(MATCH_SYSTEM_PROMPT, MATCH_SCHEMA)
-
-
-class CreditExhausted(Exception):
-    """The API account is out of prepaid credit: the whole run stops, cleanly."""
-
-
-class LlmConfigError(Exception):
-    """The API credential is missing or rejected: the whole run stops."""
 
 
 class ExtractionFailed(Exception):

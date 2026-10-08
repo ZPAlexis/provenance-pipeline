@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_07_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_08_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -160,6 +160,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_07_000001) do
     t.index ["source_slice"], name: "index_postings_on_source_slice"
     t.index ["tracking"], name: "index_postings_on_tracking"
     t.index ["verification_state"], name: "index_postings_on_verification_state"
+  end
+
+  create_table "search_profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "name", null: false
+    t.string "titles", default: [], null: false, array: true
+    t.string "excluded_words", default: [], null: false, array: true
+    t.string "places", default: [], null: false, array: true
+    t.string "work_modes", default: [], null: false, array: true
+    t.string "levels", default: [], null: false, array: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
   end
 
   add_foreign_key "check_runs", "companies"
