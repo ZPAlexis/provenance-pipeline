@@ -68,6 +68,9 @@ class Company < ApplicationRecord
   scope :needing_careers_page, -> { where(careers_page_url: nil) }
   scope :unresolved, -> { where(resolution_status: nil) }
   scope :resolution_candidates, -> { where(resolution_status: "candidate") }
+  # Companies whose page is watched for roles. An aggregator's listings belong to
+  # other employers: its own page says nothing about them.
+  scope :watched, -> { where(resolution_status: "resolved", kind: [ nil, *KINDS - [ "aggregator" ] ]) }
 
   # Domain is the dedup key; fall back to a normalized name only when absent.
   #

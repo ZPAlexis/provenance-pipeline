@@ -127,4 +127,35 @@ RSpec.describe Verifier::ResultContract do
         .to include(/unknown verdict "closed"/, /unknown method "guess"/)
     end
   end
+
+  describe ".suggestion_errors" do
+    def fit(**overrides)
+      { "listing_index" => 0, "listing" => { "title" => "Solutions Engineer" }, "title" => "Solutions Engineer",
+        "level" => nil, "place" => "Brazil", "work_mode" => "remote", "suggested" => true, "ruled_out" => nil, "notes" => [],
+        "reasoning" => "Its title holds every word of \"Solutions Engineer\"." }.merge(overrides.transform_keys(&:to_s))
+    end
+
+    def suggestion(roles) = { "kind" => "suggestion", "target_id" => "c1", "outcome" => "ok", "weighed" => 3, "roles" => roles }
+
+    it "accepts roles suggested, or ruled out by one rule" do
+      expect(described_class.suggestion_errors(suggestion([ fit, fit(suggested: false, ruled_out: "place") ]))).to be_empty
+    end
+
+    it "refuses a role both suggested and ruled out, or neither, and names it" do
+      result = suggestion([ fit, fit(ruled_out: "place"), fit(suggested: false), fit(suggested: "yes") ])
+
+      expect(described_class.suggestion_errors(result)).to eq(
+        [ "role 2: a suggested role cannot be ruled out", "role 3: unknown rule nil", "role 4: suggested must be true or false" ]
+      )
+    end
+
+    it "refuses levels, notes, and roles it does not know" do
+      result = suggestion([ fit(level: "mid", work_mode: "anywhere", notes: [ "salary_not_stated" ], listing: { "title" => nil }, reasoning: "") ])
+
+      expect(described_class.suggestion_errors(result)).to include(
+        /unknown level "mid"/, /unknown work mode "anywhere"/, /unknown notes/, /listing must have a title/, /reasoning is missing/
+      )
+      expect(described_class.suggestion_errors(suggestion(nil).merge("kind" => "board"))).to include("kind must be suggestion", "roles must be a list")
+    end
+  end
 end

@@ -6,6 +6,7 @@ import httpx2
 import pytest
 
 from verifier.config import MAX_LINKS, MAX_TEXT_CHARS
+from verifier.errors import CreditExhausted, LlmConfigError
 from verifier.extract import (
     EXTRACT_PROMPT_VERSION,
     LINK_PROMPT_VERSION,
@@ -13,11 +14,9 @@ from verifier.extract import (
     LINK_SYSTEM_PROMPT,
     OUTPUT_SCHEMA,
     SYSTEM_PROMPT,
-    CreditExhausted,
     ExtractedListing,
     ExtractionFailed,
     LinkChoice,
-    LlmConfigError,
     LlmExtractor,
     LlmLinkPicker,
     PageExtraction,

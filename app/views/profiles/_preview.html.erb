@@ -1,0 +1,49 @@
+<% suggested, ruled_out = preview.suggested, preview.ruled_out %>
+<% first_read, last_read = preview.read_between %>
+<h2>
+  Would suggest <%= pluralize(suggested.size, "role") %>
+  <% if suggested.any? %>at <%= pluralize(suggested.map(&:company).uniq.size, "company") %><% end %>
+</h2>
+<p class="muted">
+  Weighed <%= number_with_delimiter(preview.weighed) %> roles at <%= pluralize(preview.companies, "watched company") %>,
+  as their pages last listed them<% if first_read %>
+  (read <%= [ first_read, last_read ].map { |time| time.to_date.to_fs(:short) }.uniq.join(" to ") %>)<% end %>.
+  <% if preview.unread.positive? %>
+    <%= pluralize(preview.unread, "watched company") %> had no read to weigh yet.
+  <% end %>
+  Nothing was written. Roles already on your list are not set apart until suggestions are written.
+</p>
+
+<% if preview.problems.any? %>
+  <div class="form-errors" role="alert">
+    <p>Not weighed:</p>
+    <ul><% preview.problems.each do |problem| %><li><%= problem %></li><% end %></ul>
+  </div>
+<% end %>
+
+<% if suggested.any? %>
+  <% marked = suggested.flat_map(&:notes).tally %>
+  <% if marked.any? %>
+    <p class="small">
+      Marked for you to weigh:
+      <%= safe_join(marked.map { |note, count| "#{fit_note_label(note)}: #{count}" }, " · ") %>
+    </p>
+  <% end %>
+  <%= render "fits", fits: suggested %>
+<% else %>
+  <p class="empty">No role fits the profile as it stands.</p>
+<% end %>
+
+<% if ruled_out.any? %>
+  <h2>Ruled out: <%= ruled_out.size %></h2>
+  <p class="muted">
+    Roles holding one of the titles that a later rule left out, by the first rule each failed.
+    A place spelled another way, or a region you would take, shows up here.
+  </p>
+  <% ruled_out.group_by(&:ruled_out).sort_by { |rule, _| ruled_out_order(rule) }.each do |rule, fits| %>
+    <details class="ruled-out">
+      <summary><%= ruled_out_label(rule) %> <span class="count"><%= fits.size %></span></summary>
+      <%= render "fits", fits: fits %>
+    </details>
+  <% end %>
+<% end %>

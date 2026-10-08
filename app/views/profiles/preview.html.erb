@@ -1,0 +1,7 @@
+<%= turbo_frame_tag "profile-preview" do %>
+  <% if @preview %>
+    <%= render "preview", preview: @preview %>
+  <% else %>
+    <%= render "errors", profile: @profile %>
+  <% end %>
+<% end %>

@@ -118,6 +118,48 @@ module Verifier
       errors
     end
 
+    RULED_OUT = %w[excluded level place work_mode].freeze
+    FIT_NOTES = %w[work_mode_not_stated place_not_stated level_not_stated].freeze
+    WORK_MODES = [ *SearchProfile::WORK_MODES, "unknown" ].freeze
+
+    # The roles holding a profile title, each suggested or ruled out by one rule, with why.
+    def suggestion_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be suggestion" unless result["kind"] == "suggestion"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "unknown outcome #{result['outcome'].inspect}" unless %w[ok error].include?(result["outcome"])
+      errors << "weighed must be a count" unless count?(result["weighed"])
+      roles = result["roles"]
+      return errors << "roles must be a list" unless roles.is_a?(Array)
+
+      roles.each_with_index { |role, index| errors.concat(fit_errors(role).map { |error| "role #{index + 1}: #{error}" }) }
+      errors
+    end
+
+    def fit_errors(role)
+      return [ "not an object" ] unless role.is_a?(Hash)
+
+      errors = []
+      errors << "listing_index must be a count" unless count?(role["listing_index"])
+      errors << "listing must have a title" unless role["listing"].is_a?(Hash) && role.dig("listing", "title").is_a?(String)
+      errors << "title is missing" if role["title"].blank?
+      errors << "reasoning is missing" if role["reasoning"].blank?
+      errors << "unknown level #{role['level'].inspect}" unless role["level"].nil? || SearchProfile::LEVELS.include?(role["level"])
+      errors << "unknown work mode #{role['work_mode'].inspect}" unless WORK_MODES.include?(role["work_mode"])
+      errors << "unknown notes #{role['notes'].inspect}" unless role["notes"].is_a?(Array) && (role["notes"] - FIT_NOTES).empty?
+      # Suggested, or ruled out by exactly one rule: never both, never neither.
+      if role["suggested"] == true
+        errors << "a suggested role cannot be ruled out" unless role["ruled_out"].nil?
+      elsif role["suggested"] == false
+        errors << "unknown rule #{role['ruled_out'].inspect}" unless RULED_OUT.include?(role["ruled_out"])
+      else
+        errors << "suggested must be true or false"
+      end
+      errors
+    end
+
     def page_errors(check)
       return [ "not an object" ] unless check.is_a?(Hash)
 

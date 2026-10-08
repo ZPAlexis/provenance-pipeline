@@ -66,7 +66,8 @@ code { font: 12px var(--mono); }
 
 .site-nav {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 6px 18px;
   align-items: center;
   padding: 10px 24px;
   background: var(--surface);
@@ -77,6 +78,11 @@ code { font: 12px var(--mono); }
 .site-nav .spacer { flex: 1; }
 
 main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 48px; }
+
+@media (max-width: 600px) {
+  .site-nav { padding: 10px 16px; }
+  main { padding: 16px 16px 40px; }
+}
 
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
 .page-head .sub { color: var(--muted); }
@@ -228,3 +234,31 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 .btn.small { padding: 2px 9px; font-size: 12px; }
 
 .empty { padding: 18px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; }
+
+/* Search profile */
+
+.profile-form { max-width: 720px; margin-bottom: 8px; }
+.profile-form .field { margin: 0 0 16px; padding: 0; border: none; min-width: 0; }
+.profile-form label, .profile-form legend { font-weight: 600; padding: 0; }
+.profile-form .hint { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+.profile-form textarea {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  font: 13px/1.5 var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  resize: vertical;
+}
+.profile-form .choices { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0 2px; }
+.profile-form .choices label { font-weight: 400; white-space: nowrap; }
+.profile-form .actions { display: flex; gap: 8px; }
+.btn:disabled { opacity: 0.6; cursor: progress; }
+.form-errors { margin: 0 0 14px; padding: 10px 14px; border-radius: 6px; background: var(--gone-bg); color: var(--gone); }
+.form-errors ul { margin: 4px 0 0; padding-left: 18px; }
+#profile-preview[aria-busy="true"] { opacity: 0.5; }
+details.ruled-out { margin: 8px 0; }
+details.ruled-out > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+details.ruled-out .count { color: var(--muted); font-weight: 400; }

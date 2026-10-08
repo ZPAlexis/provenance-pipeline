@@ -54,6 +54,9 @@ module ApplicationHelper
     return tag.span("—", class: "muted") if url.blank?
 
     uri = URI.parse(url)
+    # Addresses come from the pages read: only a web address is ever a link.
+    return url unless uri.is_a?(URI::HTTP) && uri.host.present?
+
     host = uri.host.to_s.delete_prefix("www.")
     text = label || (host_only ? host : [ host, uri.path.to_s.chomp("/") ].join.truncate(60))
     link_to(text, url, target: "_blank", rel: "noopener noreferrer", title: url)

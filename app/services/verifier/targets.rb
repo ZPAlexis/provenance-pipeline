@@ -57,6 +57,25 @@ module Verifier
         job_urls: listings.pluck("url").compact.uniq.first(JOB_URLS) }
     end
 
+    # A company's roles as its watched page last listed them, to weigh against a
+    # search profile; nil when its page has not been read since it was set.
+    def suggest(company, profile)
+      check, listings = latest_list(company)
+      return unless check
+
+      { id: company.id, label: company.name, page_check_id: check.id, listings: listings, profile: profile.to_worker }
+    end
+
+    # The latest read of a company's watched page, with every page of its list:
+    # [check, listings], or nil. A check of one role that settled on the role's
+    # own page, or on another board it links to, did not read the list.
+    def latest_list(company)
+      check = company.page_checks.where(purpose: "verification", outcome: "ok", url: company.careers_page_url)
+                     .order(checked_at: :desc).first or return
+      pages = company.page_checks.where(run_id: check.run_id, purpose: "verification").order(:created_at, :id)
+      [ check, JobUrls.listed(pages.drop_while { |page| page.id != check.id }) ]
+    end
+
     # What reading a company's watched page in full cost the last time: the LLM
     # calls behind every page of its latest verification, counting a reused page
     # at what the read it reused cost. Nil when it has never been verified.

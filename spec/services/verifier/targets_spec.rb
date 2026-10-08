@@ -127,4 +127,42 @@ RSpec.describe Verifier::Targets do
       expect(target[:postings].pluck(:id)).to eq([ role.id ])
     end
   end
+
+  describe ".suggest" do
+    let(:profile) { SearchProfile.new(titles: [ "Solutions Engineer" ]) }
+
+    def role(title) = { "title" => title, "url" => "#{page}/#{title.parameterize}" }
+
+    it "sends the roles every page of the latest read of the watched page listed, and the profile" do
+      read(at: 5.days.ago, listings: [ role("Old Role") ])
+      first = read(run_id: "run-2", at: 1.day.ago, listings: [ role("Solutions Engineer"), role("Designer") ])
+      read(run_id: "run-2", url: "#{page}?page=2", at: 1.day.ago, listings: [ role("Designer"), role("Recruiter") ])
+
+      target = described_class.suggest(company, profile)
+
+      expect(target).to include(id: company.id, label: "Acme", page_check_id: first.id, profile: profile.to_worker)
+      expect(target[:listings].pluck("title")).to eq([ "Solutions Engineer", "Designer", "Recruiter" ])
+    end
+
+    # A check of one role reads its own page first, and may settle there, or on another board it links to.
+    it "skips a role's own page and any check that never read the watched page" do
+      list = read(run_id: "run-1", at: 3.days.ago, listings: [ role("Solutions Engineer") ])
+      read(run_id: "run-2", url: "https://boards.example/acme/jobs/1", at: 1.day.ago, listings: [ role("Other") ])
+      create(:page_check, company: company, run_id: "run-3", purpose: "verification", step: nil,
+                          url: "https://acme.example/jobs/9", checked_at: 1.hour.ago, listings: [])
+      watched = create(:page_check, company: company, run_id: "run-3", purpose: "verification", step: nil,
+                                    url: page, checked_at: 1.hour.ago, listings: [ role("Designer") ])
+
+      expect(described_class.suggest(company, profile)).to include(page_check_id: watched.id, listings: [ role("Designer") ])
+
+      watched.destroy!
+      expect(described_class.suggest(company, profile)[:page_check_id]).to eq(list.id)
+    end
+
+    it "is nil when the watched page has not been read" do
+      read(url: "https://acme.example/old-careers")
+
+      expect(described_class.suggest(company, profile)).to be_nil
+    end
+  end
 end
