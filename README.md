@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1.5 in progress.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. Any tracked role can be checked on its own ("is it still listed?"), and the first operator pages are up. Next: tracking and checking from those pages, then the search profile. See [Build stages](#build-stages).
+> **Status: Stage 1.5 in progress.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. Next: adding a company or a role by URL, then the review queue. See [Build stages](#build-stages).
 
 ---
 
@@ -47,7 +47,7 @@ That separates two jobs that browsing job sites does at once, badly:
 
 **The tradeoff, stated plainly: roles at companies outside the list are missed.** There is no crawl, so the list only grows by judgment. That is deliberate. Search-then-filter optimizes for recall; watching a curated list optimizes for precision and fit, which is what this system is for.
 
-**Nothing in the code is specific to one kind of role.** Verification reads every role a careers page shows (a *listing*) and checks whether a tracked *posting* is among them, without knowing what anyone is looking for. The only place a target field enters is a search profile stored as data — titles and keywords, seniority, locations and work mode, exclusions — which decides which roles are suggested; the user picks the ones to track. Another field, or another person, is another profile.
+**Nothing in the code is specific to one kind of role.** Verification reads every role a careers page shows (a *listing*) and checks whether a tracked *posting* is among them, without knowing what anyone is looking for. The only place a target field enters is a search profile stored as data — titles and keywords, exclusions, the places the user can work, work modes, and seniority as a title states it — which decides which roles are suggested; the user picks the ones to track. Another field, or another person, is another profile.
 
 Two consequences shape the build. A company's careers page becomes a **watch target**, re-checked for months — a higher bar than resolving a page once for a single check. And re-verification makes postings **stateful**: `verified_live` → `not_found` is a lifecycle transition, not a correction, and the audit log is what makes "when did this role close?" answerable.
 
@@ -85,6 +85,7 @@ A low-confidence find is held as a candidate, never watched. The operator confir
 |---|---|---|
 | Research / job-finder | `companies:read`, `companies:enrich`, `postings:write` | Touch applications or stages |
 | Activity logger | `activities:write`, `applications:read` | Change stage |
+| Suggester | `postings:suggest` (propose a role, refresh or withdraw its own proposals) | Track or dismiss a role, or touch one the operator decided on |
 | Draft agent | `drafts:write` | Send anything, or finalize a draft |
 | **— no agent —** | `applications:advance_stage` | **Human-only by design** |
 
@@ -103,7 +104,11 @@ companies     name, domain (dedup key), careers_page_url, ats_type,
 postings      company_id, role_title, location, posting_url, job_url, posted_on,
               source_slice, tracking (suggested | tracked | dismissed),
               verification_state, roles_listed_count, work_mode,
-              last_checked_at, enrichment (jsonb)
+              last_checked_at, fit (jsonb: why it was suggested),
+              enrichment (jsonb)
+
+search_profiles  name, titles, excluded_words, places, work_modes, levels
+                 (what the operator is looking for: lists, edited on a page)
 
 page_checks   company_id, run_id, purpose (resolution | verification), step,
               url, final_url, outcome, reason, read_via, ats_vendor, ats_board,
@@ -129,7 +134,7 @@ Notes on a few choices:
 - **Page checks are evidence, not changes.** Every page read, whatever its outcome, is a `page_checks` row with a snapshot of every listing it saw, unfiltered, so a later search profile can be applied to past checks. Changes to companies and postings go through `audit_events`.
 - **`llm_calls` answers "what did this cost, and what produced it"** without the run directory: one row per model call, with the model the API reports having served, its settings, and a `prompt_version` hash over the prompt, output schema, and limits.
 - **A repeat read is paid for only when the roles may have changed.** A page that links to exactly the role pages it did last time reuses that read's listings, and its check names the read it reused (`reused_from_id`); listings are read in full again once 14 days old (`listings_read_at`). A company whose free ATS board lists at least 90% of its page's roles has that board recorded beside the page (`board_*`, with the evidence) and read in its place for 30 days; the page stays the one on record.
-- **Only the operator tracks a role.** A posting is `suggested` (proposed by the agent), `tracked` (on the operator's watch list), or `dismissed` (declined for good, never checked again); the agent may suggest, never track. `job_url` is the role's own page at the employer, learned from the listing it matched, so the next check finds the role by its link before its title; `posting_url` stays where it was found.
+- **Only the operator tracks a role.** A posting is `suggested` (proposed by the suggester, with why in `fit`), `tracked` (on the operator's watch list), or `dismissed` (declined for good: never checked or suggested again); the agent may suggest, never track. A suggestion the operator never acted on is withdrawn when it no longer fits the profile or its check found it gone: deleted, with its whole record kept in its last audit event. `job_url` is the role's own page at the employer, learned from the listing it matched, so the next check finds the role by its link before its title; `posting_url` stays where it was found.
 - **Careers-page resolution is recorded beside the page:** how it was found, how sure we are (`high`, `medium`, `low`, or `confirmed` by a person), a held candidate, or why it failed. A low-confidence find waits in `resolution_candidate_url` and is never watched until a person confirms it.
 
 ### Verification fields
@@ -158,7 +163,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 - **1.5 — Capture and watched roles** (in progress): the first web UI. A search profile suggests roles from the watched pages, the user picks which to track, and each tracked role gets a "check now" that answers *still listed* or *no longer listed*. Paste a careers link, a posting link, or a company domain to resolve, verify, and add it to the watch list. In five slices:
   - **1.5a — Tracked roles and check now** ✅ a tracking state only the operator sets; each role's own page at the employer, matched before its title; `verifier:check`, the role's own page first, then its company's careers page.
   - **1.5b — The operator's pages** ✅ dashboard, roles, companies; track, dismiss, and check now from them.
-  - **1.5c — The search profile and suggestions.**
+  - **1.5c — The search profile and suggestions** ✅ a profile edited on its own page; the worker weighs every watched page's latest roles against it at no cost, and an agent of its own suggests the ones that fit, each with why, never one already on record. Refreshed when the profile is saved, on demand, and after every check.
   - **1.5d — Add by URL.**
   - **1.5e — The review queue:** the operator's decisions (careers-page candidates, suggested kinds) behind buttons.
 
@@ -214,8 +219,15 @@ bin/rails verifier:verify                        # shows the plan and its cost; 
 bin/rails verifier:find_boards                   # free boards listing the same roles as LLM-read pages (no API cost)
 bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's
 bin/rails "verifier:track[posting_id]"           # or verifier:dismiss: your watch list, with NOTE="why"
+bin/rails verifier:suggest                       # suggestions from the search profile (no API cost); PREVIEW=1 writes nothing
 bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
 ```
+
+### Suggestions
+
+A search profile (the Profile page) says what the operator is looking for: titles, excluded words, the places they can work, work modes, and levels. The worker's `suggest` command weighs every watched company's roles, as its page last listed them, against it: no page is fetched and the LLM is never called. A role fits when its title holds every word of one of the profile's titles, in any order, and none of an excluded one; when it is open to one of the places (a role in São Paulo, or open to Latin America, is open to Brazil; a region on the profile takes roles open to it, never every role inside it); and when its work mode and the level its title states are among those sought. What a role does not state (no place, no work mode, no level) still fits, marked. Each role comes back with its reasoning; Preview shows it all, the roles left out included, and writes nothing.
+
+The suggester (`agent:suggester`) then writes each fitting role that is not already on record as a suggestion, matched against every role on record the way verification matches (its link, then its title), so a role the operator tracks or dismissed is never proposed again. It refreshes when the profile is saved, from **Find suggestions** on the Roles page, after every check now, and after `verifier:verify`. A suggestion the operator never acted on is withdrawn when it stops fitting, or when its check finds it gone from the whole list; one missing from a read that may be partial stays.
 
 The tests that decide whether a slice works run locally against the private target list: `verifier:test_a`, `verifier:test_resolution`, and `verifier:test_b` (`REPLAY=1` replays stored page reads at no API cost; `FRESH=1` reads the pages now).
 
@@ -238,7 +250,7 @@ Boot the server:
 bin/rails server
 ```
 
-It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent checks and verdict changes, API credit spent), the roles (tracked, suggested, dismissed, filtered by answer), each role's history and the checks behind it, and the companies watched. From them the operator tracks or dismisses a role, with a note on the record, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
+It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent checks and verdict changes, API credit spent), the roles (tracked, suggested with why, dismissed, filtered by answer), each role's history and the checks behind it, the companies watched, and the search profile with a preview of what it would suggest. From them the operator tracks or dismisses a role, with a note on the record, finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
 
 ## Note on data
 

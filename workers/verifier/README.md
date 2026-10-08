@@ -69,6 +69,18 @@ Verification never guesses: it reads the watched page resolution decided, or the
 
 The answer is *still listed*, *no longer listed*, or *couldn't confirm*, with why. Whether a role was filled is never claimed: a page rarely says.
 
+## Weighing roles against a search profile
+
+`suggest` takes one company per target: the roles its watched page last listed (stored, never fetched again), the search profile, and the company's roles already on record. It never calls the LLM. Each role is weighed by these rules in order, and the first one it fails rules it out:
+
+1. **Title**: it holds every word of one of the profile's titles, in any order, plurals folded and filler words aside ("Engineer, Solutions" holds "Solutions Engineer"). A one-word title is a keyword.
+2. **Excluded words**: it holds every word of none of them.
+3. **Level**: the level its title states (`titles.title_level`: entry, senior, lead, director, executive; the highest stated wins; "Manager" states none) is one sought.
+4. **Place**: it is open to one of the places, which mean where someone can work (`places`). A country takes roles that name it by any name or code, or name a city or state in it, and roles open to a region containing it; a region takes roles open to it, never every role inside it; "Global", "Worldwide", or "Anywhere" opens a role to every place unless the location names something narrower. When the location names no place ("Remote"), a place the title names stands in. A place the vocabulary does not know is matched by its words.
+5. **Work mode**: as the listing states it, or as its location says ("Remote").
+
+What a role does not state is never held against it: it fits, with a note (`place_not_stated`, `work_mode_not_stated`, `level_not_stated`), noted only where the profile narrows. Every role holding a profile title comes back with its reasoning, fitting or ruled out; the rest are only counted. A fitting role that is already on record names the posting it is (`on_record`), matched by `match.Matcher` exactly as verification matches, without the LLM; `listed` says where every posting on record was found in the read.
+
 ## Paying for a read only when something may have changed
 
 Claude's reading of rendered pages is nearly all of a run's cost, so verification avoids it in two ways, both decided by free signals:

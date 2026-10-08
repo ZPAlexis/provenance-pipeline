@@ -80,7 +80,8 @@ class RunSummary:
     outcomes: dict[str, int] = field(default_factory=dict)
     listings: int = 0
     verdicts: dict[str, int] = field(default_factory=dict)  # when matching; "inconclusive" for no verdict
-    suggested: int = 0  # roles fitting a search profile, when suggesting
+    fits: int = 0  # roles fitting a search profile, when suggesting
+    new: int = 0  # of those, roles not yet on record
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
@@ -97,7 +98,8 @@ class RunSummary:
                 key = verdict.verdict or "inconclusive"
                 self.verdicts[key] = self.verdicts.get(key, 0) + 1
         if isinstance(result, SuggestionResult):
-            self.suggested += sum(role.suggested for role in result.roles)
+            self.fits += sum(role.suggested for role in result.roles)
+            self.new += sum(role.suggested and not role.on_record for role in result.roles)
         for usage in _usages(result):
             self.input_tokens += usage.input_tokens
             self.output_tokens += usage.output_tokens
@@ -290,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "suggest":
         # Nothing is fetched and nothing is paid for: the roles were read before, and stored.
         summary = run_suggest(targets, args.out)
-        print(f"\n{summary.targets}/{len(targets)} companies, {summary.suggested} suggested", file=sys.stderr)
+        print(f"\n{summary.targets}/{len(targets)} companies, {summary.fits} fit ({summary.new} new)", file=sys.stderr)
         return _exit_code(summary)
 
     from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher
