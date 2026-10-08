@@ -6,7 +6,10 @@
     <tbody>
       <% fits.each do |fit| %>
         <tr>
-          <td><%= fit.listing["url"].present? ? outside_link(fit.listing["url"], label: fit.listing["title"]) : fit.listing["title"] %></td>
+          <td>
+            <%= fit.listing["url"].present? ? outside_link(fit.listing["url"], label: fit.listing["title"]) : fit.listing["title"] %>
+            <% if fit.on_record %><%= link_to tracking_badge(fit.on_record.tracking), role_path(fit.on_record) %><% end %>
+          </td>
           <td><%= link_to fit.company.name, company_path(fit.company) %></td>
           <td class="muted"><%= fit.listing["location"] %></td>
           <td class="nowrap"><%= work_mode_label(fit.work_mode) %></td>

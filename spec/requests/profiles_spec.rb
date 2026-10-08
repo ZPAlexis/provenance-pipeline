@@ -49,7 +49,7 @@ RSpec.describe "Profile", type: :request do
       company = create(:company, :resolved, name: "Acme")
       fit = Verifier::Suggestions::Fit.new(
         company: company, listing: { "title" => "Solutions Engineer", "location" => "Remote", "url" => "javascript:alert(1)" },
-        title: "Solutions Engineer", level: nil, place: nil, work_mode: "unknown", suggested: true, ruled_out: nil,
+        title: "Solutions Engineer", level: nil, place: nil, work_mode: "unknown", suggested: true, ruled_out: nil, on_record: nil,
         notes: [ "place_not_stated" ], reasoning: "Its title holds every word of \"Solutions Engineer\"."
       )
       preview = Verifier::Suggestions::Preview.new(companies: 1, unread: 0, weighed: 12, read_between: [ 1.day.ago, 1.day.ago ],
@@ -60,7 +60,7 @@ RSpec.describe "Profile", type: :request do
         .not_to change { [ SearchProfile.count, AuditEvent.count ] }
 
       expect(Verifier::Suggestions).to have_received(:preview).with(have_attributes(titles: [ "Solutions Engineer", "RevOps" ]))
-      expect(response.body).to include("Would suggest 1 role", "Weighed 12 roles", "Acme", "No place stated: 1")
+      expect(response.body).to include("Would suggest 1 new role", "Weighed 12 roles", "Acme", "No place stated: 1")
       expect(response.body).not_to include('href="javascript:') # a page's address is a link only when it is a web address
     end
 

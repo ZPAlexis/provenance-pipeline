@@ -15,6 +15,7 @@ Rails.application.routes.draw do
   end
   resources :companies, only: %i[index show]
   resources :check_runs, only: %i[create show]
+  resources :suggestions, only: :create
   resource :profile, only: %i[show update] do
     patch :preview
   end

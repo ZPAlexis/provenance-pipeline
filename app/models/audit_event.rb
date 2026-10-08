@@ -53,6 +53,19 @@ class AuditEvent < ApplicationRecord
     )
   end
 
+  # Records `record` as it is about to be deleted: every attribute it held, as
+  # [value, nil], so its whole history stays readable once the row is gone.
+  def self.record_destroy!(record, actor:, reasoning: nil, model_version: nil)
+    record!(
+      actor: actor,
+      action: "destroy",
+      target: record,
+      changes_made: diff(record.attributes.transform_values { |value| [ value, nil ] }),
+      model_version: model_version,
+      reasoning: reasoning
+    )
+  end
+
   def self.diff(changes)
     changes.except(*UNTRACKED_ATTRIBUTES).each_with_object({}) do |(attribute, (before, after)), acc|
       next if before == after

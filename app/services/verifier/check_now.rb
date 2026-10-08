@@ -61,8 +61,20 @@ module Verifier
       tally = Ingest.new(run_id: run.id).verification(result)
       verdicts = Array(result["verdicts"])
       answer, summary = yield(result, verdicts)
+      summary = [ summary, suggestions_after(result["target_id"]) ].compact.join(" ")
       Outcome.new(answer: answer, summary: summary, tally: tally.to_h, cost_usd: cost(result), run_id: run.id,
                   run_dir: run.dir, stopped: run.stopped)
+    end
+
+    # A check may read the company's list anew: its suggestions are brought up to
+    # date, at no cost. Said only when something changed; a failure here never
+    # fails the check, whose verdicts are already written.
+    def suggestions_after(company_id)
+      company = Company.find_by(id: company_id) or return
+      refresh = Suggestions.refresh!([ company ])
+      refresh.summary if (refresh.created + refresh.updated + refresh.withdrawn).positive?
+    rescue Worker::Error, ActiveRecord::ActiveRecordError => e
+      "Suggestions could not be brought up to date: #{e.message}"
     end
 
     def cost(result)

@@ -58,12 +58,14 @@ module Verifier
     end
 
     # A company's roles as its watched page last listed them, to weigh against a
-    # search profile; nil when its page has not been read since it was set.
+    # search profile, with every role of it already on record, dismissed ones too:
+    # none is suggested anew. Nil when its page has not been read since it was set.
     def suggest(company, profile)
       check, listings = latest_list(company)
       return unless check
 
-      { id: company.id, label: company.name, page_check_id: check.id, listings: listings, profile: profile.to_worker }
+      { id: company.id, label: company.name, page_check_id: check.id, listings: listings, profile: profile.to_worker,
+        postings: company.postings.map { |p| { id: p.id, title: p.role_title, location: p.location, url: p.job_url } } }
     end
 
     # The latest read of a company's watched page, with every page of its list:

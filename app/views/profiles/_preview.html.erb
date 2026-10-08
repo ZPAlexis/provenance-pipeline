@@ -1,8 +1,8 @@
-<% suggested, ruled_out = preview.suggested, preview.ruled_out %>
+<% fresh, ruled_out, known = preview.new_roles, preview.ruled_out, preview.on_record %>
 <% first_read, last_read = preview.read_between %>
 <h2>
-  Would suggest <%= pluralize(suggested.size, "role") %>
-  <% if suggested.any? %>at <%= pluralize(suggested.map(&:company).uniq.size, "company") %><% end %>
+  Would suggest <%= pluralize(fresh.size, "new role") %>
+  <% if fresh.any? %>at <%= pluralize(fresh.map(&:company).uniq.size, "company") %><% end %>
 </h2>
 <p class="muted">
   Weighed <%= number_with_delimiter(preview.weighed) %> roles at <%= pluralize(preview.companies, "watched company") %>,
@@ -11,7 +11,13 @@
   <% if preview.unread.positive? %>
     <%= pluralize(preview.unread, "watched company") %> had no read to weigh yet.
   <% end %>
-  Nothing was written. Roles already on your list are not set apart until suggestions are written.
+  Nothing was written: saving the profile, or Find suggestions on the Roles page, writes them.
+  <% if known.any? %>
+    <%= pluralize(known.size, "more role") %> <%= known.one? ? "fits" : "fit" %> but
+    <%= known.one? ? "is" : "are" %> already on record
+    (<%= known.map { |fit| fit.on_record.tracking }.tally.map { |tracking, count| "#{count} #{tracking}" }.join(", ") %>):
+    never suggested anew.
+  <% end %>
 </p>
 
 <% if preview.problems.any? %>
@@ -21,17 +27,24 @@
   </div>
 <% end %>
 
-<% if suggested.any? %>
-  <% marked = suggested.flat_map(&:notes).tally %>
+<% if fresh.any? %>
+  <% marked = fresh.flat_map(&:notes).tally %>
   <% if marked.any? %>
     <p class="small">
       Marked for you to weigh:
       <%= safe_join(marked.map { |note, count| "#{fit_note_label(note)}: #{count}" }, " · ") %>
     </p>
   <% end %>
-  <%= render "fits", fits: suggested %>
+  <%= render "fits", fits: fresh %>
 <% else %>
-  <p class="empty">No role fits the profile as it stands.</p>
+  <p class="empty">No new role fits the profile as it stands.</p>
+<% end %>
+
+<% if known.any? %>
+  <details class="ruled-out">
+    <summary>Fit, already on record <span class="count"><%= known.size %></span></summary>
+    <%= render "fits", fits: known %>
+  </details>
 <% end %>
 
 <% if ruled_out.any? %>

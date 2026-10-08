@@ -22,5 +22,12 @@ module ProfilesHelper
   # In the order the worker weighs the rules.
   def ruled_out_order(rule) = RULED_OUT_LABELS.keys.index(rule) || RULED_OUT_LABELS.size
 
+  # Why the suggester proposed a role, as last weighed, with what it does not state.
+  def fit_reasons(posting)
+    return tag.span("—", class: "muted") unless posting.fit
+
+    safe_join([ posting.fit["reasoning"], fit_notes(Array(posting.fit["notes"])) ], " ")
+  end
+
   def work_mode_label(mode) = WORK_MODE_LABELS.fetch(mode) { tag.span("Not stated", class: "muted") }
 end

@@ -424,6 +424,13 @@ namespace :verifier do
     end
     puts "Cost of the pages read now: est. $#{format('%.4f', cost)}#{"   (details: #{run.dir})" if run}"
     report_stop.call(run) if run
+
+    # The lists just read, weighed against the search profile: suggestions brought up to date, at no cost.
+    if SearchProfile.current
+      refresh = Verifier::Suggestions.refresh!(companies)
+      puts refresh.summary
+      refresh.problems.each { |problem| puts "  #{problem}" }
+    end
   end
 
   desc "Look for a free ATS board listing the same roles as each page the LLM had to read, and read through it from " \

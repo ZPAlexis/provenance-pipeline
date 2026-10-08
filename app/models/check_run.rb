@@ -36,6 +36,6 @@ class CheckRun < ApplicationRecord
   def active? = ACTIVE.include?(status)
 
   def target_name
-    kind == "role" ? "#{posting&.role_title} at #{company.name}" : company.name
+    kind == "role" ? "#{posting&.role_title || 'a withdrawn role'} at #{company.name}" : company.name
   end
 end

@@ -20,21 +20,26 @@ the whole list was read; otherwise inconclusive (no verdict), so a role on page
 two is never marked closed.
 """
 
+from __future__ import annotations
+
 import time
 from collections.abc import Callable
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from verifier.contract import Listing, LlmUsage, MatchResult, MatchTarget, PostingVerdict, TrackedPosting
-from verifier.extract import ExtractionFailed, MatchDecisions
+from verifier.errors import ExtractionFailed
 from verifier.links import link_key
 from verifier.titles import FILLER_WORDS, LEVEL_WORDS, REGION_WORDS, SENIORITY_WORDS, title_words
+
+if TYPE_CHECKING:  # the LLM's answer, read here; extract.py imports the LLM client, which matching alone never needs
+    from verifier.extract import MatchDecisions
 
 NEAR_MISS = 0.5  # share of words in common, out of the longer title's
 MAX_CANDIDATES = 8  # near-miss listings shown to the LLM per posting
 
 
 class Adjudicator(Protocol):
-    def decide(self, cases: list["Case"], listings: list[Listing]) -> tuple[MatchDecisions, LlmUsage]: ...
+    def decide(self, cases: list[Case], listings: list[Listing]) -> tuple[MatchDecisions, LlmUsage]: ...
 
 
 def same_title(a: str, b: str) -> bool:

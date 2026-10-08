@@ -43,7 +43,9 @@ class Posting < ApplicationRecord
   # --- Tracking: the operator's watch list ----------------------------------
   #
   # suggested  proposed by the agent (from a search profile, 1.5c); checked with
-  #            its company, for free, but not watched.
+  #            its company, for free, but not watched. `fit` says why. One the
+  #            operator never acted on is withdrawn (deleted, audited) when it no
+  #            longer fits or is no longer listed (Verifier::Suggestions).
   # tracked    chosen by the operator: watched, and checked on demand.
   # dismissed  declined by the operator for good: never checked or suggested again.
   # Only the operator tracks or dismisses (Verifier::Tracking).
@@ -79,6 +81,7 @@ class Posting < ApplicationRecord
 
   scope :pending, -> { where(verification_state: "pending") }
   scope :tracked, -> { where(tracking: "tracked") }
+  scope :suggested, -> { where(tracking: "suggested") }
   scope :not_dismissed, -> { where.not(tracking: "dismissed") }
   scope :live, -> { where(verification_state: "verified_live") }
   scope :remote, -> { where(work_mode: "remote") }

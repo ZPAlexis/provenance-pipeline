@@ -85,12 +85,18 @@ module ApplicationHelper
   # What an audit event changed, in words: a verdict, the watch list, or the fields it set.
   def change_summary(event)
     changes = event.changes_made
-    if (state = changes["verification_state"])
+    if event.action == "destroy"
+      changes.dig("tracking", 0) == "suggested" ? "withdrawn" : "deleted"
+    elsif event.action == "create" && changes.dig("tracking", 1) == "suggested"
+      "suggested"
+    elsif (state = changes["verification_state"])
       "#{answer_label(state.first || 'pending')} → #{answer_label(state.last)}"
     elsif (tracking = changes["tracking"])
       "#{tracking.first || 'new'} → #{tracking.last}"
     elsif (url = changes["job_url"])
       url.first ? "own page moved" : "own page learned"
+    elsif changes.key?("fit")
+      "reasons updated"
     else
       event.action == "create" ? "created" : changes.keys.join(", ")
     end

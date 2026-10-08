@@ -135,10 +135,19 @@ RSpec.describe Verifier::ResultContract do
         "reasoning" => "Its title holds every word of \"Solutions Engineer\"." }.merge(overrides.transform_keys(&:to_s))
     end
 
-    def suggestion(roles) = { "kind" => "suggestion", "target_id" => "c1", "outcome" => "ok", "weighed" => 3, "roles" => roles }
+    def suggestion(roles, listed: {}) = { "kind" => "suggestion", "target_id" => "c1", "outcome" => "ok", "weighed" => 3, "roles" => roles, "listed" => listed }
 
     it "accepts roles suggested, or ruled out by one rule" do
       expect(described_class.suggestion_errors(suggestion([ fit, fit(suggested: false, ruled_out: "place") ]))).to be_empty
+    end
+
+    it "accepts a role naming the posting it already is, and refuses a listing of postings that is not one" do
+      on_record = suggestion([ fit(on_record: "p1") ], listed: { "p1" => 0, "p2" => 4 })
+      expect(described_class.suggestion_errors(on_record)).to be_empty
+
+      odd = suggestion([ fit(on_record: "") ], listed: { "p1" => -1 })
+      expect(described_class.suggestion_errors(odd)).to include("listed must map posting ids to listing indexes",
+                                                                "role 1: on_record must name a posting")
     end
 
     it "refuses a role both suggested and ruled out, or neither, and names it" do
