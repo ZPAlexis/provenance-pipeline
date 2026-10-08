@@ -274,4 +274,4 @@ def test_suggest_weighs_stored_roles_without_a_browser_and_counts_what_fits(tmp_
         ("c1", 3, [True, False]),
         ("c2", 0, []),
     ]
-    assert "2/2 companies, 1 suggested" in capfd.readouterr().err
+    assert "2/2 companies, 1 fit (1 new)" in capfd.readouterr().err

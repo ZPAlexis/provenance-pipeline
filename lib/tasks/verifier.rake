@@ -512,6 +512,28 @@ namespace :verifier do
          "(never matched live, or the listing they matched had no link)."
   end
 
+  desc "Bring suggestions up to date: each watched company's latest list weighed against the saved search profile, " \
+       "written as agent:suggester. No API cost; backs up first (at most once a day). PREVIEW=1 shows what it " \
+       "would suggest and writes nothing. [COMPANY=name] [LIMIT=n]"
+  task suggest: :environment do
+    profile = SearchProfile.current or abort "No search profile is saved yet: save one on the Profile page."
+    puts "Profile: #{profile.titles.join(', ')}#{" in #{profile.places.join(', ')}" if profile.places.any?}"
+
+    if ENV["PREVIEW"].present?
+      preview = Verifier::Suggestions.preview(profile)
+      preview.new_roles.each { |fit| puts "  + #{fit.company.name} / #{fit.listing['title']} (#{fit.listing['location']})" }
+      puts "Would suggest #{preview.new_roles.size} new roles from #{preview.weighed} weighed at #{preview.companies} " \
+           "companies; #{preview.on_record.size} more fit but are on record, #{preview.ruled_out.size} ruled out. Nothing written."
+      preview.problems.each { |problem| puts "  Not weighed: #{problem}" }
+      next
+    end
+
+    refresh = Verifier::Suggestions.refresh!(select_companies.call(Company.watched), profile: profile,
+                                             worker: Verifier::Worker.new(run_dir: run_dir.call("suggest")))
+    puts refresh.summary
+    puts "   (details: tmp/verifier/#{refresh.run_id})" if refresh.run_id
+  end
+
   desc "Record a check you made yourself at the employer's page as a posting's verdict, audited as you. " \
        "Usage: VERDICT=not_found NOTE=\"what you saw\" [ROLES=n] [WORK_MODE=remote] " \
        "bin/rails \"verifier:hand_check[posting_id]\""
