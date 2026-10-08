@@ -30,7 +30,9 @@ RSpec.describe "Profile", type: :request do
 
       patch profile_path, params: { search_profile: fields.merge(places_text: "Brazil") }
       expect(SearchProfile.count).to eq(1)
-      expect(AuditEvent.where(target: profile).last.changes_made).to eq("places" => [ %w[Brazil LATAM], [ "Brazil" ] ])
+      # Audit ids are random UUIDs: the update is asked for by its action, never by order.
+      update = AuditEvent.find_by!(target: profile, action: "update")
+      expect(update.changes_made).to eq("places" => [ %w[Brazil LATAM], [ "Brazil" ] ])
     end
 
     it "says what is wrong, and saves nothing" do
