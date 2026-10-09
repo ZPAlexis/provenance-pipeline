@@ -351,3 +351,79 @@ def test_a_workday_board_that_fails_on_its_first_page_fails():
 
     with pytest.raises(httpx2.HTTPError):
         ats.fetch_listings(AtsBoard(vendor="workday", board="acme.wd1/Careers"), client)
+
+
+# --- Oracle Cloud HCM ----------------------------------------------------------------
+
+ORACLE_PAGE = (
+    "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/pt-BR/sites/CX_4001/jobs"
+    "?location=Brasil&locationId=300000000314829&locationLevel=country&mode=job-location"
+)
+
+
+def test_detects_an_oracle_cloud_site_with_the_place_its_page_is_filtered_to():
+    assert ats.detect([ORACLE_PAGE]) == AtsBoard(vendor="oracle", board="emfg.fa.em4/CX_4001/300000000314829")
+    # A role's own page names the site alone: its whole list.
+    job = "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/pt-BR/sites/CX_4001/job/41966"
+    assert ats.detect([job]) == AtsBoard(vendor="oracle", board="emfg.fa.em4/CX_4001")
+    assert ats.on_company_host(AtsBoard(vendor="oracle", board="emfg.fa.em4/CX_4001"))
+    assert ats.board_url(AtsBoard(vendor="oracle", board="emfg.fa.em4/CX_4001/300000000314829")) == (
+        "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_4001/jobs?locationId=300000000314829"
+    )
+
+
+def oracle_handler(total, finders, roles=None):
+    def handler(request):
+        finder = request.url.params["finder"]
+        finders.append(finder)
+        offset = int(next(part for part in finder.split(",") if part.startswith("offset=")).split("=")[1])
+        jobs = roles or [
+            {"Id": str(40000 + offset + i), "Title": f"Role {offset + i}", "PrimaryLocation": "Contagem, MG, Brazil",
+             "WorkplaceType": "", "secondaryLocations": []}
+            for i in range(min(ats.ORACLE_PAGE_SIZE, total - offset))
+        ]  # fmt: skip
+        return httpx2.Response(200, json={"items": [{"TotalJobsCount": total, "requisitionList": jobs}]})
+
+    return handler
+
+
+def test_reads_every_page_of_an_oracle_site_with_its_pages_filter():
+    finders, pauses = [], []
+    client = httpx2.Client(transport=httpx2.MockTransport(oracle_handler(115, finders)))
+    board = AtsBoard(vendor="oracle", board="emfg.fa.em4/CX_4001/300000000314829")
+
+    listings = ats.fetch_listings(board, client, pause=lambda: pauses.append(1))
+
+    assert len(listings) == 115 and len(pauses) == 1
+    assert finders[0] == (
+        "findReqs;siteNumber=CX_4001,limit=100,offset=0,sortBy=POSTING_DATES_DESC,locationId=300000000314829"
+    )
+    assert "offset=100" in finders[1]
+    assert listings[0].url == "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_4001/job/40000"
+
+
+def test_an_oracle_role_keeps_every_place_it_is_listed_for_and_its_stated_work_mode():
+    role = {
+        "Id": "41712",
+        "Title": "Arquiteto de Soluções Especialista",
+        "PrimaryLocation": "Belo Horizonte, MG, Brazil",
+        "WorkplaceType": "Hybrid",
+        "JobSchedule": "Full time",
+        "secondaryLocations": [{"Name": "Barra Mansa, RJ, Brazil"}, {"Name": "Belo Horizonte, MG, Brazil"}],
+    }
+    client = httpx2.Client(transport=httpx2.MockTransport(oracle_handler(1, [], roles=[role])))
+
+    (listing,) = ats.fetch_listings(AtsBoard(vendor="oracle", board="emfg.fa.em4/CX_4001"), client)
+
+    assert listing.location == "Belo Horizonte, MG, Brazil; Barra Mansa, RJ, Brazil"
+    assert (listing.work_mode, listing.employment_type) == ("hybrid", "full_time")
+
+
+def test_an_oracle_site_larger_than_the_guard_comes_back_as_a_part(monkeypatch):
+    monkeypatch.setattr(ats, "ORACLE_MAX_PAGES", 1)
+    client = httpx2.Client(transport=httpx2.MockTransport(oracle_handler(115, [])))
+
+    with pytest.raises(ats.IncompleteBoard) as cut:
+        ats.fetch_listings(AtsBoard(vendor="oracle", board="emfg.fa.em4/CX_4001"), client)
+
+    assert (len(cut.value.listings), cut.value.total) == (100, 115)

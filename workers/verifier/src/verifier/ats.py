@@ -1,9 +1,9 @@
 """Known applicant tracking systems: detection, their public job-board APIs, and whose board a board is.
 
-When a careers page is (or embeds) a Greenhouse, Lever, Ashby, or Workday
-board, the vendor's API returns the listings directly: cheaper and more exact
-than reading the rendered page, and for Workday the only way past its
-20-per-page pagination. Measured against real data this covers a minority of
+When a careers page is (or embeds) a Greenhouse, Lever, Ashby, Workday, or
+Oracle Cloud board, the vendor's API returns the listings directly: cheaper and
+more exact than reading the rendered page, and for Workday and Oracle the only
+way past their pagination. Measured against real data this covers a minority of
 companies; the renderer carries the rest.
 
 A board's owner is read from where its page links, never from its name alone:
@@ -34,6 +34,15 @@ _WORKDAY = re.compile(r"^https?://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]
 
 WORKDAY_PAGE_SIZE = 20  # the most its jobs API returns per request
 WORKDAY_MAX_PAGES = 100  # a guard: 2,000 roles
+
+# Oracle Cloud HCM's candidate experience: https://{pod}.fa.{region}.oraclecloud.com/hcmUI/CandidateExperience/
+# {language}/sites/{site}/... A page filtered to a place (?locationId=) is read with the same filter: the board
+# is "{pod}.fa.{region}/{site}", and "/{locationId}" when the page has one.
+_ORACLE = re.compile(
+    r"^https?://([\w-]+)\.fa\.([\w-]+)\.oraclecloud\.com/hcmUI/CandidateExperience/[\w-]+/sites/([\w-]+)"
+)
+ORACLE_PAGE_SIZE = 100
+ORACLE_MAX_PAGES = 20  # a guard: 2,000 roles
 
 # Vendors whose board names can be guessed from a company's name, for when the
 # careers page itself cannot be read. Workday also needs a tenant and a site.
@@ -114,6 +123,10 @@ def detect(urls: list[str]) -> AtsBoard | None:
         if match := _WORKDAY.match(url):
             tenant, instance, site = match.groups()
             return AtsBoard(vendor="workday", board=f"{tenant}.{instance}/{site}")
+        if match := _ORACLE.match(url):
+            pod, region, site = match.groups()
+            location = parse_qs(urlsplit(url).query).get("locationId", [None])[0]
+            return AtsBoard(vendor="oracle", board=f"{pod}.fa.{region}/{site}" + (f"/{location}" if location else ""))
         for vendor, pattern in _PATTERNS:
             if match := pattern.match(url):
                 return AtsBoard(vendor=vendor, board=match.group(1))
@@ -127,6 +140,9 @@ def api_url(board: AtsBoard) -> str:
         return f"https://api.lever.co/v0/postings/{board.board}"
     if board.vendor == "ashby":
         return f"https://api.ashbyhq.com/posting-api/job-board/{board.board}"
+    if board.vendor == "oracle":
+        host, _site, _location = _oracle_parts(board)
+        return f"https://{host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions"
     tenant_instance, site = board.board.split("/", 1)
     tenant = tenant_instance.split(".", 1)[0]
     return f"https://{tenant_instance}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
@@ -140,6 +156,11 @@ def board_url(board: AtsBoard) -> str:
         return f"https://jobs.lever.co/{board.board}"
     if board.vendor == "ashby":
         return f"https://jobs.ashbyhq.com/{board.board}"
+    if board.vendor == "oracle":
+        host, site, location = _oracle_parts(board)
+        return f"https://{host}/hcmUI/CandidateExperience/en/sites/{site}/jobs" + (
+            f"?locationId={location}" if location else ""
+        )
     tenant_instance, site = board.board.split("/", 1)
     return f"https://{tenant_instance}.myworkdayjobs.com/{site}"
 
@@ -182,10 +203,10 @@ def on_company_host(board: AtsBoard) -> bool:
     """Whether the API sits on the company's own careers host, and so answers to its robots.txt.
 
     Greenhouse, Lever, and Ashby publish documented job-board APIs on their own
-    hosts for exactly this use; Workday's jobs endpoint is the one the company's
-    careers site itself calls.
+    hosts for exactly this use; Workday's and Oracle's jobs endpoints are the ones
+    the company's careers site itself calls.
     """
-    return board.vendor == "workday"
+    return board.vendor in ("workday", "oracle")
 
 
 def fetch_listings(board: AtsBoard, client: httpx2.Client, pause: Callable[[], None] = lambda: None) -> list[Listing]:
@@ -193,6 +214,8 @@ def fetch_listings(board: AtsBoard, client: httpx2.Client, pause: Callable[[], N
     was read, when the board is larger than the reader's guard. `pause` spaces out paged requests."""
     if board.vendor == "workday":
         return _workday(board, client, pause)
+    if board.vendor == "oracle":
+        return _oracle(board, client, pause)
     return {"greenhouse": _greenhouse, "lever": _lever, "ashby": _ashby}[board.vendor](board, client)
 
 
@@ -346,6 +369,74 @@ def _workday_page(client: httpx2.Client, url: str, offset: int, pause: Callable[
             if attempt:
                 raise
     raise AssertionError("unreachable")
+
+
+def _oracle_parts(board: AtsBoard) -> tuple[str, str, str | None]:
+    """An Oracle board's host, site, and the place its list is filtered to, if any."""
+    host, site, *location = board.board.split("/")
+    return f"{host}.oraclecloud.com", site, (location[0] if location else None)
+
+
+def _oracle(board: AtsBoard, client: httpx2.Client, pause: Callable[[], None]) -> list[Listing]:
+    """Every role an Oracle Cloud careers site lists (filtered as its page is), through the API the site calls."""
+    host, site, location = _oracle_parts(board)
+    listings: list[Listing] = []
+    total = None
+    for page in range(ORACLE_MAX_PAGES):
+        if page:
+            pause()
+        finder = f"findReqs;siteNumber={site},limit={ORACLE_PAGE_SIZE},offset={len(listings)},sortBy=POSTING_DATES_DESC"
+        if location:
+            finder += f",locationId={location}"
+        # Built by hand: the finder's ; , and = are its own syntax, which query encoding would escape.
+        url = f"{api_url(board)}?onlyData=true&expand=requisitionList.secondaryLocations&finder={finder}"
+        try:
+            item = (_oracle_page(client, url, pause).get("items") or [{}])[0]
+        except httpx2.HTTPError:
+            if listings:  # what was read before the failure stands, as a part that says so
+                raise IncompleteBoard(listings, total) from None
+            raise
+        if total is None:
+            total = item.get("TotalJobsCount") or 0
+        jobs = item.get("requisitionList") or []
+        listings += [_oracle_listing(job, host, site) for job in jobs]
+        if not jobs or len(listings) >= total:
+            break
+    if len(listings) < total:
+        raise IncompleteBoard(listings, total)  # cut short by the guard: never the whole list
+    return listings
+
+
+def _oracle_page(client: httpx2.Client, url: str, pause: Callable[[], None]) -> dict:
+    """One page of an Oracle board, asked for again once, after a pause, if the request fails."""
+    for attempt in range(2):
+        if attempt:
+            pause()
+        try:
+            response = client.get(
+                url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}, follow_redirects=True
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx2.HTTPError:
+            if attempt:
+                raise
+    raise AssertionError("unreachable")
+
+
+def _oracle_listing(job: dict, host: str, site: str) -> Listing:
+    places = [job.get("PrimaryLocation")] + [place.get("Name") for place in job.get("secondaryLocations") or []]
+    location = "; ".join(dict.fromkeys(place for place in places if place)) or None
+    mode = _normalize_mode(job.get("WorkplaceType"))
+    return Listing(
+        title=job["Title"],
+        location=location,
+        # Its own page, in English: links name a role whatever language the page is in (links.link_key).
+        url=f"https://{host}/hcmUI/CandidateExperience/en/sites/{site}/job/{job['Id']}",
+        work_mode=mode if mode != "unknown" else _mode_from_location(location),
+        department=job.get("Department") or job.get("JobFamily"),
+        employment_type=_employment_type(job.get("JobSchedule") or job.get("ContractType")),
+    )
 
 
 def _normalize_mode(value: str | None) -> WorkMode:

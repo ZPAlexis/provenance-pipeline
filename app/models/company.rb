@@ -5,7 +5,7 @@ class Company < ApplicationRecord
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 
-  ATS_TYPES = %w[greenhouse lever ashby workday workable own_site other unknown].freeze
+  ATS_TYPES = %w[greenhouse lever ashby workday oracle workable own_site other unknown].freeze
 
   # --- Careers-page resolution: the contract ---------------------------------
   #
@@ -40,7 +40,7 @@ class Company < ApplicationRecord
   # (board_overlap of them, by title): verification reads its API in place of
   # the page while the finding is fresh. careers_page_url stays the page on
   # record; a different page voids the board, which was matched against this one.
-  BOARD_VENDORS = %w[greenhouse lever ashby workday].freeze
+  BOARD_VENDORS = %w[greenhouse lever ashby workday oracle].freeze
   BOARD_MAX_AGE = 30.days
 
   validates :name, presence: true
