@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1.5 in progress.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. Next: adding a company or a role by URL, then the review queue. See [Build stages](#build-stages).
+> **Status: Stage 1.5 in progress.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. Next: related titles proposed for the profile, a free reader for Oracle Cloud careers sites, then the review queue. See [Build stages](#build-stages).
 
 ---
 
@@ -43,7 +43,7 @@ That separates two jobs that browsing job sites does at once, badly:
 **Two inputs feed the watch list:**
 
 1. **An imported base of companies.** The seed data came from job-board exports, and many of those postings turned out to be stale. That matters less than it sounds: postings are perishable, but the companies behind them are durable, and every posting is re-verified at the source, so a stale listing corrects itself on its first check. The listings were just how the companies were found.
-2. **Manual capture.** Paste a posting URL or a company domain; the system resolves the company's careers page and ATS, verifies, and adds the company to the watch list for good. Job boards and ordinary browsing keep feeding the system — a find gets captured instead of living in a notes file.
+2. **Manual capture.** Paste a company's domain, careers page, or ATS board, or a role's own page; the system finds the company's careers page and ATS, reads it, and adds the company to the watch list for good, and a pasted role is tracked. Job boards and ordinary browsing keep feeding the system — a find gets captured instead of living in a notes file. A job board's own link (LinkedIn, Indeed) is never read: it is kept beside the role as where it was found, and finds the role again if it is already on record.
 
 **The tradeoff, stated plainly: roles at companies outside the list are missed.** There is no crawl, so the list only grows by judgment. That is deliberate. Search-then-filter optimizes for recall; watching a curated list optimizes for precision and fit, which is what this system is for.
 
@@ -164,7 +164,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
   - **1.5a — Tracked roles and check now** ✅ a tracking state only the operator sets; each role's own page at the employer, matched before its title; `verifier:check`, the role's own page first, then its company's careers page.
   - **1.5b — The operator's pages** ✅ dashboard, roles, companies; track, dismiss, and check now from them.
   - **1.5c — The search profile and suggestions** ✅ a profile edited on its own page; the worker weighs every watched page's latest roles against it at no cost, and an agent of its own suggests the ones that fit, each with why, never one already on record. Refreshed when the profile is saved, on demand, and after every check.
-  - **1.5d — Add by URL.**
+  - **1.5d — Add by URL** ✅ a company by its domain, careers page, or ATS board, and a role by its own page, from the Companies and Roles pages: never added twice, read right away (its careers page found first), what that could cost asked first. A role's title is optional: its page names it. A careers page found at low confidence is confirmed, rejected, or set right on the company's page.
   - **1.5e — The review queue:** the operator's decisions (careers-page candidates, suggested kinds) behind buttons.
 
 **Build order is 1.2 → 1.5 → 1.3 → 1.4.** Capture needs only 1.2, so it ships first to make the tool usable early; because every agent write goes through one path, 1.3's credential check covers it without rework. Monitoring is human-triggered first, so nothing waits on a host or a scheduler.
@@ -220,6 +220,8 @@ bin/rails verifier:find_boards                   # free boards listing the same 
 bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's
 bin/rails "verifier:track[posting_id]"           # or verifier:dismiss: your watch list, with NOTE="why"
 bin/rails verifier:suggest                       # suggestions from the search profile (no API cost); PREVIEW=1 writes nothing
+URL="acme.com" bin/rails verifier:add            # add a company by its domain, careers page, or ATS board, and read it
+URL="https://..." bin/rails verifier:add_role    # add a role by its own page, tracked, and check it (TITLE, SOURCE optional)
 bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
 ```
 
@@ -250,7 +252,7 @@ Boot the server:
 bin/rails server
 ```
 
-It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent checks and verdict changes, API credit spent), the roles (tracked, suggested with why, dismissed, filtered by answer), each role's history and the checks behind it, the companies watched, and the search profile with a preview of what it would suggest. From them the operator tracks or dismisses a role, with a note on the record, finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
+It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent checks and verdict changes, API credit spent), the roles (tracked, suggested with why, dismissed, filtered by answer), each role's history and the checks behind it, the companies watched, and the search profile with a preview of what it would suggest. From them the operator adds a company or a role by its link, confirms or sets a company's careers page, tracks or dismisses a role with a note on the record, finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
 
 ## Note on data
 

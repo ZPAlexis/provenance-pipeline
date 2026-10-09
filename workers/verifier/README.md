@@ -69,6 +69,8 @@ Verification never guesses: it reads the watched page resolution decided, or the
 
 The answer is *still listed*, *no longer listed*, or *couldn't confirm*, with why. Whether a role was filled is never claimed: a page rarely says.
 
+A role added without a title (`title_from_page`) is named by what the check reads: on an ATS, the board's own listing for its link, free; on the company's own site, the page's heading when it plainly names a role (`titles.heading_title`: the company's name and words like "Careers" set aside), and one LLM read of the page only when it does not. Links are compared as `links.link_key` compares them, so a link pasted from a browser names the same role as the board's API gives: tracking parameters, "www.", a trailing slash, a Workday page's language, and Greenhouse's older host aside.
+
 ## Weighing roles against a search profile
 
 `suggest` takes one company per target: the roles its watched page last listed (stored, never fetched again), the search profile, and the company's roles already on record. It never calls the LLM. Each role is weighed by these rules in order, and the first one it fails rules it out:

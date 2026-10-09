@@ -212,6 +212,72 @@ namespace :verifier do
     abort e.message
   end
 
+  # What a check now did, after adding by URL: the answer for a role, and what was read.
+  report_check = lambda do |outcome, title|
+    answer = { "verified_live" => "STILL LISTED", "not_found" => "NO LONGER LISTED" }.fetch(outcome.answer, nil)
+    puts "\n#{title}#{": #{answer}" if answer}#{' (stopped)' unless outcome.finished?}"
+    puts "  #{outcome.summary}"
+    puts format("  Cost: est. $%.4f   (details: %s)", outcome.cost_usd, outcome.run_dir)
+  end
+
+  desc "Add a company by its domain, careers page, or ATS board, then find its careers page and read it. " \
+       "Audited as you; backs up first. Usage: URL=\"acme.com\" bin/rails verifier:add [NAME=\"Acme\"]"
+  task add: :environment do
+    url = ENV["URL"].presence or abort "Give its domain, careers page, or ATS board in URL=\"...\"."
+    Verifier::Capture.parse(url) # a link refused is refused before anything is backed up or written
+    puts "Backed up to #{DatabaseBackup.call}"
+    added = Verifier::Capture.company!(url, name: ENV["NAME"])
+    company = added.company
+    puts added.note
+    next if company.resolution_status == "resolved"
+    if (why = Verifier::CheckNow.refusal(company))
+      abort why
+    end
+
+    puts format("Finding its careers page and reading it: at most about $%.2f.", Verifier::CheckNow.ceiling(company))
+    outcome = Verifier::CheckNow.company(company, worker: build_worker.call("verify"), finder: build_worker.call("resolve"))
+    report_check.call(outcome, company.name)
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message
+  end
+
+  desc "Add a role by its own page at the employer (or its ATS posting), tracked, then check it. Without TITLE its " \
+       "page names it. Audited as you; backs up first. Usage: URL=\"https://...\" bin/rails verifier:add_role " \
+       "[TITLE=\"...\"] [LOCATION=\"...\"] [SOURCE=\"where you found it\"] [COMPANY=\"name, if new\"]"
+  task add_role: :environment do
+    url = ENV["URL"].presence or abort "Give the role's own page in URL=\"...\"."
+    Verifier::Capture.parse(url, role: true)
+    puts "Backed up to #{DatabaseBackup.call}"
+    placed = Verifier::Capture.role!(link: url, title: ENV["TITLE"], location: ENV["LOCATION"], source: ENV["SOURCE"],
+                                     company_name: ENV["COMPANY"])
+    posting = placed.posting
+    puts placed.note
+    if (why = Verifier::CheckNow.refusal(posting))
+      abort why
+    end
+
+    ceiling = Verifier::CheckNow.ceiling(posting)
+    puts format("Checking it: its own page first; at most about $%.2f.", ceiling) if ceiling.positive?
+    outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check"), finder: build_worker.call("resolve"))
+    report_check.call(outcome, "#{posting.company.name} / #{posting.reload.role_title}")
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message
+  end
+
+  desc "Rename a company. Audited as you. Usage: NAME=\"ArcelorMittal Brasil\" bin/rails \"verifier:rename[company_id]\""
+  task :rename, [ :id ] => :environment do |_task, args|
+    company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}."
+    name = ENV["NAME"].to_s.strip.presence or abort "Give the name in NAME=\"...\"."
+    before = company.name
+    ApplicationRecord.transaction do
+      company.update!(name: name)
+      AuditEvent.record_write!(company, actor: AuditEvent::OPERATOR, reasoning: "Renamed by hand.")
+    end
+    puts "#{before} is now #{company.name}."
+  rescue ActiveRecord::RecordInvalid => e
+    abort e.message
+  end
+
   print_resolution_report = lambda do |report, dir|
     puts format("\n%-28s %-10s %-14s %-7s %s", "company", "outcome", "method", "conf", "result")
     report.cases.each do |c|
