@@ -61,8 +61,9 @@ class LlmUsage(BaseModel):
 
 
 class AtsBoard(BaseModel):
-    vendor: Literal["greenhouse", "lever", "ashby", "workday"]
-    board: str  # the board's name; for Workday, "{tenant}.{wdN}/{site}"
+    vendor: Literal["greenhouse", "lever", "ashby", "workday", "oracle"]
+    # The board's name; for Workday "{tenant}.{wdN}/{site}"; for Oracle "{pod}.fa.{region}/{site}[/{locationId}]".
+    board: str
 
 
 class PageResult(BaseModel):

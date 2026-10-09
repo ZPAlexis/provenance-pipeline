@@ -46,6 +46,7 @@ module Verifier
       "lever" => /(?:\A|\.)lever\.co\z/,
       "ashby" => /(?:\A|\.)ashbyhq\.com\z/,
       "workday" => /\.myworkdayjobs\.com\z/,
+      "oracle" => /\.oraclecloud\.com\z/,
       "workable" => /(?:\A|\.)workable\.com\z/
     }.freeze
 
@@ -59,6 +60,9 @@ module Verifier
       when "workday"
         tenant_instance, site = board.to_s.split("/", 2)
         "https://#{tenant_instance}.myworkdayjobs.com/#{site}"
+      when "oracle"
+        host, site, location = board.to_s.split("/", 3)
+        "https://#{host}.oraclecloud.com/hcmUI/CandidateExperience/en/sites/#{site}/jobs#{"?locationId=#{location}" if location}"
       end
     end
 

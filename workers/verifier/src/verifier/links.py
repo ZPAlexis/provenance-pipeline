@@ -18,6 +18,8 @@ SAME_HOSTS = {
 }
 # A Workday page in a chosen language (/en-US/acme/job/...) is the page its API names without it (/acme/job/...).
 _WORKDAY_LOCALE = re.compile(r"^/[a-z]{2}-[A-Z]{2}(?=/)")
+# An Oracle Cloud page's language (/CandidateExperience/pt-BR/sites/...) names the same role in any language.
+_ORACLE_LANGUAGE = re.compile(r"(?<=/CandidateExperience/)[\w-]+(?=/sites/)")
 
 
 def link_key(url: str) -> str:
@@ -33,6 +35,8 @@ def link_key(url: str) -> str:
     path = parts.path.rstrip("/")
     if host.endswith(".myworkdayjobs.com"):
         path = _WORKDAY_LOCALE.sub("", path)
+    if host.endswith(".oraclecloud.com"):
+        path = _ORACLE_LANGUAGE.sub("-", path)
     query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith(TRACKING)])
     route = parts.fragment.rstrip("/") if parts.fragment.startswith(("/", "!/")) else ""
     return urlunsplit((parts.scheme.lower(), host, path, query, route))

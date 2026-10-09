@@ -358,3 +358,10 @@ def test_a_link_pasted_from_a_browser_names_the_role_its_board_api_gives():
     )
     # A language in front matters only on Workday, whose links carry one or not.
     assert link_key("https://acme.example/en-US/jobs/1") != link_key("https://acme.example/jobs/1")
+
+
+def test_an_oracle_role_link_names_the_role_whatever_language_its_page_is_in():
+    english = "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_4001/job/41966"
+    assert link_key("https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/pt-BR/sites/CX_4001/job/41966/") == (
+        link_key(english)
+    )

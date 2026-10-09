@@ -28,6 +28,14 @@ RSpec.describe Verifier::Capture do
       )
     end
 
+    it "reads an Oracle Cloud careers link as its site, with the place its page is filtered to" do
+      page = "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/pt-BR/sites/CX_4001/jobs?location=Brasil&locationId=300000000314829"
+      expect(parsed(page)).to include(board: [ "oracle", "emfg.fa.em4/CX_4001/300000000314829" ], domain: nil,
+                                      page: "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_4001/jobs?locationId=300000000314829")
+      job = "https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/pt-BR/sites/CX_4001/job/41966"
+      expect(described_class.link_key(job)).to eq(described_class.link_key(job.sub("/pt-BR/", "/en/")))
+    end
+
     it "never takes a hosted careers site's domain for the company's" do
       expect(parsed("https://acme.gupy.io/")).to eq(page: "https://acme.gupy.io/", domain: nil, board: nil, name: "Acme")
       expect(parsed("https://apply.workable.com/acme-labs/")).to include(domain: nil, name: "Acme Labs")

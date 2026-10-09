@@ -22,12 +22,14 @@ module Verifier
     }.freeze
     GREENHOUSE_EMBED = %r{\Ahttps?://(?:boards|job-boards)(?:\.eu)?\.greenhouse\.io/embed/job_board}
     WORKDAY = %r{\Ahttps?://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?(?!wday/)([\w-]+)}
+    # An Oracle Cloud careers site, with the place its page is filtered to (?locationId=), as ats.py reads it.
+    ORACLE = %r{\Ahttps?://([\w-]+)\.fa\.([\w-]+)\.oraclecloud\.com/hcmUI/CandidateExperience/[\w-]+/sites/([\w-]+)}
 
     # Careers sites hosted for many companies: the host names the vendor, never the company.
     HOSTED = /(?:\A|\.)(?:gupy\.io|recruitee\.com|teamtailor\.com|bamboohr\.com|breezy\.hr|workable\.com|
               smartrecruiters\.com|personio\.(?:de|com)|jobvite\.com|icims\.com|taleo\.net|successfactors\.(?:com|eu)|
               pinpointhq\.com|applytojob\.com|comeet\.com|freshteam\.com|zohorecruit\.com|rippling\.com|
-              myworkdayjobs\.com|greenhouse\.io|lever\.co|ashbyhq\.com)\z/x
+              myworkdayjobs\.com|oraclecloud\.com|greenhouse\.io|lever\.co|ashbyhq\.com)\z/x
     # Leading labels that name a careers site, not the company: careers.acme.com is acme.com.
     SITE_LABELS = %w[www careers career jobs job work apply join talent boards job-boards].freeze
 
@@ -104,6 +106,11 @@ module Verifier
       if (match = url.match(WORKDAY))
         tenant, instance, site = match.captures
         return [ "workday", "#{tenant}.#{instance}/#{site}" ]
+      end
+      if (match = url.match(ORACLE))
+        pod, region, site = match.captures
+        location = Rack::Utils.parse_query(URI.parse(url).query)["locationId"]
+        return [ "oracle", [ "#{pod}.fa.#{region}", site, location.presence ].compact.join("/") ]
       end
       BOARDS.each { |vendor, pattern| (match = url.match(pattern)) and return [ vendor, match[1] ] }
       nil
@@ -215,6 +222,7 @@ module Verifier
       host = SAME_HOSTS.fetch(host, host)
       path = uri.path.to_s.chomp("/")
       path = path.sub(%r{\A/[a-z]{2}-[A-Z]{2}(?=/)}, "") if host.end_with?(".myworkdayjobs.com")
+      path = path.sub(%r{(?<=/CandidateExperience/)[\w-]+(?=/sites/)}, "-") if host.end_with?(".oraclecloud.com")
       query = URI.decode_www_form(uri.query.to_s).reject { |name, _| name.downcase.start_with?(*TRACKING) }
       route = uri.fragment.to_s.start_with?("/", "!/") ? uri.fragment.chomp("/") : ""
       [ uri.scheme.to_s.downcase, host, path, URI.encode_www_form(query), route ].join("|")
