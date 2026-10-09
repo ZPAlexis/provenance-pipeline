@@ -262,3 +262,23 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 details.ruled-out { margin: 8px 0; }
 details.ruled-out > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 details.ruled-out .count { color: var(--muted); font-weight: 400; }
+
+/* Adding by hand, and deciding a careers page */
+
+details.add { margin: 4px 0 16px; }
+details.add > summary { list-style: none; cursor: pointer; display: inline-block; }
+details.add > summary::-webkit-details-marker { display: none; }
+.add-form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 10px; max-width: 900px; }
+.add-form label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 13px; }
+.add-form input[type="text"], .add-form input[type="url"] {
+  width: 300px;
+  max-width: 100%;
+  padding: 5px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.add-form p { flex-basis: 100%; margin: 0; }
+.decide { display: flex; gap: 8px; margin: 6px 0 12px; }

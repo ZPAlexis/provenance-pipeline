@@ -8,8 +8,7 @@ class CheckRunsController < ApplicationController
       return redirect_to back, alert: why, status: :see_other
     end
 
-    CheckRun.abandon_stale!
-    active_run(record) || start(record)
+    CheckRun.start_for!(record)
     redirect_to back, status: :see_other
   end
 
@@ -18,24 +17,5 @@ class CheckRunsController < ApplicationController
   def show
     run = CheckRun.find(params[:id])
     render partial: "check_runs/run", locals: { run: run, poll: params[:poll].present? }
-  end
-
-  private
-
-  def active_run(record)
-    runs = record.is_a?(Posting) ? CheckRun.where(posting: record) : CheckRun.where(company: record, kind: "company")
-    runs.active.first
-  end
-
-  def start(record)
-    run = CheckRun.create!(
-      kind: record.is_a?(Posting) ? "role" : "company",
-      company: record.is_a?(Posting) ? record.company : record,
-      posting: (record if record.is_a?(Posting)),
-      requested_by: AuditEvent::OPERATOR,
-      ceiling_usd: Verifier::CheckNow.ceiling(record)
-    )
-    CheckNowJob.perform_later(run)
-    run
   end
 end
