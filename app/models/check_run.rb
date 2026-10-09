@@ -33,6 +33,18 @@ class CheckRun < ApplicationRecord
 
   def self.in_process_queue? = CheckNowJob.queue_adapter.is_a?(ActiveJob::QueueAdapters::AsyncAdapter)
 
+  # The check of a role or a company already under way, or a new one queued, with
+  # what it could cost: one at a time per role and per company.
+  def self.start_for!(record, requested_by: AuditEvent::OPERATOR)
+    abandon_stale!
+    role = record.is_a?(Posting)
+    runs = role ? where(posting: record) : where(company: record, kind: "company")
+    runs.active.first || create!(
+      kind: role ? "role" : "company", company: role ? record.company : record, posting: (record if role),
+      requested_by: requested_by, ceiling_usd: Verifier::CheckNow.ceiling(record)
+    ).tap { |run| CheckNowJob.perform_later(run) }
+  end
+
   def active? = ACTIVE.include?(status)
 
   def target_name

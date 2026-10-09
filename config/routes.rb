@@ -13,7 +13,14 @@ Rails.application.routes.draw do
       patch :dismiss
     end
   end
-  resources :companies, only: %i[index show]
+  resources :companies, only: %i[index show create] do
+    member do
+      patch :confirm_page
+      patch :reject_page
+      patch :set_page
+      patch :rename
+    end
+  end
   resources :check_runs, only: %i[create show]
   resources :suggestions, only: :create
   resource :profile, only: %i[show update] do

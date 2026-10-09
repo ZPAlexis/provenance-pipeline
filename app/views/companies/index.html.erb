@@ -6,6 +6,27 @@
   </div>
 </div>
 
+<details class="add" <%= "open" if flash[:alert] %>>
+  <summary class="btn">Add a company</summary>
+  <% ceiling = Verifier::CheckNow.ceiling(Company.new) %>
+  <%= form_with url: companies_path, class: "add-form",
+                data: { turbo_confirm: "Adding it reads its careers page right away: at most #{cost(ceiling)}, free on an ATS board. Add it?" } do |form| %>
+    <label>
+      Its domain, careers page, or ATS board
+      <%= form.text_field :link, required: true, placeholder: "acme.com, acme.com/careers, or jobs.lever.co/acme" %>
+    </label>
+    <label>
+      <span>Name <span class="muted">(optional)</span></span>
+      <%= form.text_field :name, placeholder: "Acme" %>
+    </label>
+    <%= form.submit "Add and read", class: "btn primary" %>
+    <p class="muted small">
+      Its careers page is found first: the link you give is tried first, and a page found only at low confidence
+      waits for you to confirm. A job board's link (LinkedIn, Indeed) is never read: give the employer's own.
+    </p>
+  <% end %>
+</details>
+
 <nav class="tabs">
   <% { "watched" => "Watched", "candidates" => "To confirm", "unresolved" => "No page yet", "all" => "All" }.each do |view, label| %>
     <%= link_to companies_path(view: view), class: ("current" if view == @view) do %>

@@ -30,8 +30,37 @@
   <% end %>
 </dl>
 
+<% if @company.resolution_status == "candidate" %>
+  <h2>Is this its careers page?</h2>
+  <p class="muted small">
+    Found at low confidence (<%= @company.resolution_method %>): never watched until you say so.
+    <%= "Its pages list many employers' roles: it may be a #{@company.kind_suggestion}. #{@company.kind_evidence}" if @company.kind_suggestion %>
+  </p>
+  <div class="decide">
+    <%= button_to "Confirm it", confirm_page_company_path(@company), method: :patch, class: "btn primary" %>
+    <%= button_to "Reject it", reject_page_company_path(@company), method: :patch, class: "btn" %>
+  </div>
+<% end %>
+
 <h2>Check its careers page now</h2>
 <%= render "check_runs/panel", record: @company, run: @run %>
+
+<details class="add">
+  <summary class="muted small">Rename it</summary>
+  <%= form_with url: rename_company_path(@company), method: :patch, class: "add-form" do |form| %>
+    <label>Name <%= form.text_field :name, value: @company.name, required: true %></label>
+    <%= form.submit "Rename", class: "btn" %>
+  <% end %>
+</details>
+
+<details class="add" <%= "open" if @company.resolution_status.in?([ nil, "failed" ]) %>>
+  <summary class="muted small">Set its careers page by hand</summary>
+  <%= form_with url: set_page_company_path(@company), method: :patch, class: "add-form" do |form| %>
+    <label>Careers page <%= form.url_field :url, required: true, placeholder: "https://acme.com/careers" %></label>
+    <label>How you know <%= form.text_field :note, required: true, placeholder: "Linked from its homepage" %></label>
+    <%= form.submit "Set as its careers page", class: "btn" %>
+  <% end %>
+</details>
 
 <h2>Roles</h2>
 <% if @roles.any? %>

@@ -13,6 +13,8 @@
       <span class="muted small">
         <% if role %>
           Its own page first, free. <%= ceiling.positive? ? "At most #{cost(ceiling)} if its company's careers page must be read again." : "Its company's careers page is free to read too." %>
+        <% elsif record.resolution_status != "resolved" %>
+          Finds its careers page first<%= ", trying #{record.careers_page_url}" if record.careers_page_url %>, then reads its roles: at most <%= cost(ceiling) %>.
         <% else %>
           <%= ceiling.positive? ? "At most #{cost(ceiling)}, if its careers page changed since the last read; free if not." : "Free: read through its own board or an ATS." %>
         <% end %>
