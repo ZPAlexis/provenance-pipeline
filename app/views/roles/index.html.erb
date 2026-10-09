@@ -11,6 +11,39 @@
   <% end %>
 </div>
 
+<details class="add" <%= "open" if params[:add] %>>
+  <summary class="btn">Add a role</summary>
+  <% ceiling = Verifier::CheckNow.ceiling(Company.new) + Verifier::CheckNow.average_read %>
+  <%= form_with url: roles_path, class: "add-form",
+                data: { turbo_confirm: "Adding it checks the role right away: its own page first, free on an ATS; at most " \
+                                       "#{cost(ceiling)} when its title must be read by the AI or its company is new. Add it?" } do |form| %>
+    <label>Its own page <%= form.text_field :link, required: true, placeholder: "acme.com/careers/jobs/123, or its ATS posting" %></label>
+    <label>
+      <span>Title <span class="muted">(optional: read from its page)</span></span>
+      <%= form.text_field :title, placeholder: "Solutions Engineer" %>
+    </label>
+    <label>
+      <span>Location <span class="muted">(optional)</span></span>
+      <%= form.text_field :location, placeholder: "São Paulo, Brazil" %>
+    </label>
+    <label>
+      <span>Where you found it <span class="muted">(optional)</span></span>
+      <%= form.text_field :source, placeholder: "linkedin.com/jobs/view/…" %>
+    </label>
+    <label>
+      <span>Company <span class="muted">(optional, if new)</span></span>
+      <%= form.text_field :company_name, placeholder: "Acme" %>
+    </label>
+    <%= form.submit "Add and check", class: "btn primary" %>
+    <p class="muted small">
+      Tracked: pasting a role is choosing it, even one you dismissed. Its own page is checked first; its company's
+      careers page is found first if it has none. Left blank, its title (and location) come from what is read: free
+      on an ATS; elsewhere its page's heading, and one AI read only when that is unclear. A job board's link (LinkedIn, Indeed) is never read: keep it in
+      "Where you found it", where it also finds a role already on record.
+    </p>
+  <% end %>
+</details>
+
 <nav class="tabs">
   <% RolesController::TABS.each do |tab| %>
     <%= link_to roles_path(tab: tab), class: ("current" if tab == @tab) do %>

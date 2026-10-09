@@ -128,11 +128,13 @@ module Verifier
         last_checked_at: checked_at,
         job_url: learned_job_url(posting, verdict)
       )
-      # Only a verdict that changes, or a role found at a new address, is a change
-      # worth an audit event. The rest of what a check observed (counts drift from
-      # check to check) is refreshed with it, and the page check is the provenance.
+      name_from_page(posting, verdict)
+      # Only a verdict that changes, a role found at a new address, or a role named
+      # by its page, is a change worth an audit event. The rest of what a check
+      # observed (counts drift from check to check) is refreshed with it, and the
+      # page check is the provenance.
       changed = posting.verification_state_changed?
-      unless changed || posting.job_url_changed?
+      unless changed || posting.job_url_changed? || posting.role_title_changed?
         posting.save!
         return :unchanged
       end
@@ -152,6 +154,16 @@ module Verifier
       url = verdict.dig("listing", "url")
       learn = verdict["verdict"] == "verified_live" && LINK_METHODS.include?(verdict["method"]) && ResultContract.web_url?(url)
       learn ? url : posting.job_url
+    end
+
+    # A role added without a title takes the one the listing its own link or page matched
+    # names (and its location, when it had none); never a near-miss's.
+    def name_from_page(posting, verdict)
+      return unless posting.title_pending? && verdict["verdict"] == "verified_live" && LINK_METHODS.include?(verdict["method"])
+
+      listing = verdict["listing"] || {}
+      posting.role_title = listing["title"].to_s.squish.presence || posting.role_title
+      posting.location ||= listing["location"].to_s.squish.presence
     end
 
     # As the matched listing states it; nil when it was not observed (Posting's contract).

@@ -346,3 +346,15 @@ def test_a_known_boards_address_read_only_in_part_is_not_a_whole_list(services, 
     checks, listings, complete = read_all(Target(id="c1", url="https://acme.wd1.myworkdayjobs.com/Careers"), services)
 
     assert (len(listings), checks[0].stated_total, complete) == (40, 45, False)
+
+
+def test_a_link_pasted_from_a_browser_names_the_role_its_board_api_gives():
+    api = "https://zendesk.wd1.myworkdayjobs.com/zendesk/job/So-Paulo-Brazil/Sales-Engineer_R35148"
+    assert link_key(
+        "https://zendesk.wd1.myworkdayjobs.com/en-US/zendesk/job/So-Paulo-Brazil/Sales-Engineer_R35148"
+    ) == link_key(api)
+    assert link_key("https://boards.greenhouse.io/acme/jobs/4012345") == link_key(
+        "https://job-boards.greenhouse.io/acme/jobs/4012345"
+    )
+    # A language in front matters only on Workday, whose links carry one or not.
+    assert link_key("https://acme.example/en-US/jobs/1") != link_key("https://acme.example/jobs/1")

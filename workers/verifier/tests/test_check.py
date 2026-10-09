@@ -147,3 +147,28 @@ def test_a_role_whose_address_redirects_but_keeps_its_id_is_answered_by_its_own_
 
     assert (only(result).verdict, only(result).method) == ("verified_live", "posting_page")
     assert services.extractor.calls == []
+
+
+# A role added without a title: its own page names it, and the verdict carries the name.
+def test_a_role_added_without_a_title_is_named_by_its_pages_heading_for_free(services, site):
+    target = role(site, "(title pending)", "jobs/open-role.html", title_from_page=True)
+
+    result = check_posting(target, services, Matcher())
+
+    verdict = only(result)
+    assert (verdict.verdict, verdict.listing.title) == ("verified_live", "Solutions Engineer")
+    assert verdict.reasoning.startswith('Its own page is up and names the role "Solutions Engineer", as its heading')
+    assert services.extractor.calls == []  # nothing read by the LLM
+
+
+def test_a_role_whose_heading_names_only_the_company_is_named_by_one_llm_read(services, site):
+    target = role(site, "(title pending)", "jobs/untitled-role.html", title_from_page=True)
+    target = target.model_copy(update={"name": "Example Co"})
+
+    result = check_posting(target, services, Matcher())
+
+    verdict = only(result)
+    assert (verdict.verdict, verdict.listing.title) == ("verified_live", "Data Analyst")
+    assert "as the LLM read it" in verdict.reasoning
+    assert len(services.extractor.calls) == 1
+    assert result.checks[0].method == "render+llm" and result.checks[0].llm is not None

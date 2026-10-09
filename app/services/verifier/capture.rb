@@ -1,13 +1,15 @@
 module Verifier
   # Adding to the watch list by hand (1.5d): a company from its domain, its
-  # careers page, or its ATS board. Only the operator adds, and each addition is
-  # audited as theirs. Nothing is fetched here: the first read is a check now,
-  # which finds the careers page first when there is none, trying the link given.
+  # careers page, or its ATS board; a role from its own page at the employer,
+  # its title as the operator reads it, and where they found it. Only the
+  # operator adds, and each addition is audited as theirs. Nothing is fetched
+  # here: the first read is a check now, which finds the company's careers page
+  # first when there is none, trying the page the link gave.
   module Capture
     ACTOR = AuditEvent::OPERATOR
 
-    # Job boards list other companies' roles, and are never fetched: never a careers page.
-    # A job board's link can sit beside a role the operator adds, as where it was found.
+    # Job boards list other companies' roles, and are never fetched: never a careers page,
+    # nor a role's own page. A job board's link sits beside a role, as where it was found.
     JOB_BOARDS = /(?:\A|\.)(?:linkedin\.com|indeed\.com|glassdoor\.com|ziprecruiter\.com|wellfound\.com|angel\.co|
                   monster\.com|simplyhired\.com|jooble\.org|talent\.com|builtin\.com|remoteok\.com|
                   weworkremotely\.com|remotive\.com)\z/x
@@ -29,47 +31,68 @@ module Verifier
     # Leading labels that name a careers site, not the company: careers.acme.com is acme.com.
     SITE_LABELS = %w[www careers career jobs job work apply join talent boards job-boards].freeze
 
+    # A LinkedIn job's id, in whatever link to it: /jobs/view/<slug>-<id>, /jobs/view/<id>, ?currentJobId=<id>.
+    LINKEDIN_JOB = %r{(?:/jobs/view/(?:[^/?#]*-)?|[?&]currentJobId=)(\d{6,})}
+    # Mirrors workers/verifier/src/verifier/links.py TRACKING: query parameters that track a visit, not a role.
+    TRACKING = %w[utm_ gh_src trk].freeze
+    SAME_HOSTS = { "boards.greenhouse.io" => "job-boards.greenhouse.io", "boards.eu.greenhouse.io" => "job-boards.eu.greenhouse.io" }.freeze
+
     # What a pasted link or domain says: where the company's roles may be listed, and who it is.
     Link = Data.define(:url, :page, :domain, :board, :name)
     Added = Data.define(:company, :created, :note)
+    Placed = Data.define(:posting, :created, :note)
 
     module_function
 
     # The company the operator pasted, found or added. A page given (a careers page, an ATS
     # board) is kept as the one to try first while the company has no watched page.
     def company!(input, name: nil, actor: ACTOR)
-      link = parse(input)
-      company = existing(link, name)
-      return create!(link, name, actor) unless company
-
-      if company.resolution_status == "resolved"
-        Added.new(company: company, created: false, note: "#{company.name} is already watched.")
-      elsif company.resolution_status == "candidate"
-        Added.new(company: company, created: false, note: "#{company.name} has a careers page waiting for you to confirm.")
-      else
-        try_first!(company, link, actor)
-        Added.new(company: company, created: false, note: "#{company.name} was on record without a careers page.")
-      end
+      company_from(parse(input), name, actor)
     end
 
-    def parse(input)
+    # The role the operator pasted, tracked: pasting it is choosing it. Found on record by
+    # where it was found (its LinkedIn job), its own link, or its title at the company when
+    # that has no link yet; a suggested or dismissed role is tracked, its missing links filled in.
+    # Without a title, a new role waits for its first check to read one from its own page.
+    def role!(link:, title: nil, location: nil, source: nil, company_name: nil, actor: ACTOR)
+      title = title.to_s.squish
+
+      own = parse(link, role: true)
+      source = source_link(source)
+      known = by_source(source)
+      added = company_from(own, company_name, actor) unless known
+      company = known&.company || added.company
+      known ||= by_link(company, own.url) || (by_title(company, title) if title.present?)
+      placed = known ? choose!(known, own, source, actor) : create_role!(company, own, title.presence, location, source, actor)
+      added&.created ? placed.with(note: "#{added.note} #{placed.note}") : placed
+    end
+
+    def parse(input, role: false)
       text = input.to_s.strip
-      raise ArgumentError, "paste a company's domain, careers page, or ATS board" if text.empty?
+      raise ArgumentError, role ? "paste the link to the role's own page" : "paste a company's domain, careers page, or ATS board" if text.empty?
 
-      url = text.match?(%r{\Ahttps?://}i) ? text : "https://#{text}"
-      raise ArgumentError, "#{text.inspect} is not a web address or a domain" unless ResultContract.web_url?(url) && host(url).include?(".")
-
+      url = web(text)
       if host(url).match?(JOB_BOARDS)
-        raise ArgumentError, "#{host(url)} is a job board: its links are never read. Paste the employer's domain " \
-                             "or careers page instead."
+        instead = role ? "the role's own page at the employer, or on its ATS; the job board's link can go in where you found it" :
+                         "the employer's domain or careers page"
+        raise ArgumentError, "#{host(url)} is a job board: its links are never read. Paste #{instead} instead."
       end
 
       board = board(url)
       hosted = host(url).match?(HOSTED)
-      # A board is watched at its own page, whichever of its pages was pasted; a bare domain names no page.
-      page = board ? Resolution.board_url(*board) : (url if hosted || URI.parse(url).path.to_s.delete_suffix("/").present?)
       domain = (company_domain(host(url)) unless hosted)
-      Link.new(url: url, page: page, domain: domain, board: board, name: guessed_name(url, board, domain))
+      Link.new(url: url, page: page(url, board, hosted, role), domain: domain, board: board, name: guessed_name(url, board, domain))
+    end
+
+    # Where the company's roles are listed, as the link shows it: its board's own page (whichever
+    # page of the board was pasted), a hosted careers site, or the page itself. A bare domain names
+    # none, nor does a role's page on the company's own site: its careers page is found from the domain.
+    def page(url, board, hosted, role)
+      return Resolution.board_url(*board) if board
+      return hosted_site(url) if hosted && role
+      return url if hosted
+
+      url if !role && URI.parse(url).path.to_s.delete_suffix("/").present?
     end
 
     # [vendor, board] when the link is on a known ATS board.
@@ -84,6 +107,20 @@ module Verifier
       end
       BOARDS.each { |vendor, pattern| (match = url.match(pattern)) and return [ vendor, match[1] ] }
       nil
+    end
+
+    def company_from(link, name, actor)
+      company = existing(link, name)
+      return create!(link, name, actor) unless company
+
+      if company.resolution_status == "resolved"
+        Added.new(company: company, created: false, note: "#{company.name} is already watched.")
+      elsif company.resolution_status == "candidate"
+        Added.new(company: company, created: false, note: "#{company.name} has a careers page waiting for you to confirm.")
+      else
+        try_first!(company, link, actor)
+        Added.new(company: company, created: false, note: "#{company.name} was on record without a careers page.")
+      end
     end
 
     def existing(link, name)
@@ -112,6 +149,93 @@ module Verifier
       end
     end
 
+    # --- A role ------------------------------------------------------------------
+
+    # Where the operator found the role: kept, never fetched. A LinkedIn job is kept by its id alone.
+    def source_link(input)
+      return if input.to_s.strip.empty?
+
+      url = web(input.to_s.strip)
+      (id = linkedin_id(url)) ? "https://www.linkedin.com/jobs/view/#{id}" : url
+    end
+
+    def linkedin_id(url) = (url[LINKEDIN_JOB, 1] if host(url).end_with?("linkedin.com"))
+
+    # The posting found at the same LinkedIn job, whichever form its link was kept in.
+    def by_source(source)
+      id = source && linkedin_id(source) or return
+      Posting.includes(:company).where("posting_url ~ ?", "linkedin\\.com/jobs/view/([^/?#]*-)?#{id}([/?#]|$)").first
+    end
+
+    def by_link(company, url)
+      key = link_key(url)
+      company.postings.where.not(job_url: nil).find { |posting| link_key(posting.job_url) == key }
+    end
+
+    # A role on record by its title alone, only while it has no link of its own to tell it apart.
+    def by_title(company, title)
+      words = title_words(title)
+      company.postings.where(job_url: nil).find { |posting| title_words(posting.role_title) == words }
+    end
+
+    def create_role!(company, own, title, location, source, actor)
+      posting = company.postings.new(role_title: title || Posting::TITLE_PENDING, location: location.to_s.squish.presence,
+                                     job_url: own.url, posting_url: source, tracking: "tracked")
+      ApplicationRecord.transaction do
+        posting.save!
+        AuditEvent.record_write!(posting, actor: actor,
+                                          reasoning: "Added by URL: #{own.url}#{" (found at #{source})" if source}.")
+      end
+      Placed.new(posting: posting, created: true, note: title ? "#{title} tracked." : "Role tracked: its title is read from its own page.")
+    end
+
+    # A role already on record, chosen: tracked, with the links it lacked.
+    def choose!(posting, own, source, actor)
+      was = posting.tracking
+      posting.job_url ||= own.url
+      posting.posting_url ||= source unless source.nil? || Posting.where.not(id: posting.id).exists?(posting_url: source)
+      posting.tracking = "tracked"
+      if posting.changed?
+        ApplicationRecord.transaction do
+          posting.save!
+          mark = was == "tracked" ? "Its links filled in." : "Tracked by hand."
+          AuditEvent.record_write!(posting, actor: actor, reasoning: "#{mark} Added by URL: #{own.url}.")
+        end
+      end
+      chosen = { "tracked" => "is already tracked", "suggested" => "was suggested: now tracked",
+                 "dismissed" => "was dismissed: tracked again" }.fetch(was)
+      Placed.new(posting: posting, created: false, note: "#{posting.role_title} at #{posting.company.name} #{chosen}.")
+    end
+
+    # Mirrors workers/verifier/src/verifier/links.py link_key: a link compared as the role it names,
+    # a board's other address (SAME_HOSTS) or a Workday page's language aside.
+    def link_key(url)
+      uri = URI.parse(url)
+      host = uri.host.to_s.downcase.delete_prefix("www.")
+      host = SAME_HOSTS.fetch(host, host)
+      path = uri.path.to_s.chomp("/")
+      path = path.sub(%r{\A/[a-z]{2}-[A-Z]{2}(?=/)}, "") if host.end_with?(".myworkdayjobs.com")
+      query = URI.decode_www_form(uri.query.to_s).reject { |name, _| name.downcase.start_with?(*TRACKING) }
+      route = uri.fragment.to_s.start_with?("/", "!/") ? uri.fragment.chomp("/") : ""
+      [ uri.scheme.to_s.downcase, host, path, URI.encode_www_form(query), route ].join("|")
+    rescue URI::InvalidURIError, ArgumentError
+      url
+    end
+
+    # A title's words, as matching compares them: case, accents, and punctuation aside, "Sr." spelled out.
+    def title_words(title)
+      I18n.transliterate(title.to_s).downcase.scan(/[a-z0-9]+/).map { |word| { "sr" => "senior", "jr" => "junior" }.fetch(word, word) }
+    end
+
+    # --- Addresses ---------------------------------------------------------------
+
+    def web(text)
+      url = text.match?(%r{\Ahttps?://}i) ? text : "https://#{text}"
+      raise ArgumentError, "#{text.inspect} is not a web address or a domain" unless ResultContract.web_url?(url) && host(url).include?(".")
+
+      url
+    end
+
     def host(url) = URI.parse(url).host.to_s.downcase
 
     # The company's own domain from a host on its site: careers.acme.com is acme.com.
@@ -119,6 +243,15 @@ module Verifier
       labels = host.split(".")
       labels.shift while labels.size > 2 && SITE_LABELS.include?(labels.first)
       labels.join(".")
+    end
+
+    # A hosted careers site's own page for the company: acme.gupy.io, or apply.workable.com/acme.
+    def hosted_site(url)
+      labels = host(url).split(".")
+      return "https://#{host(url)}/" if labels.size > 2 && !SITE_LABELS.include?(labels.first)
+
+      first = URI.parse(url).path.split("/").compact_blank.first
+      first ? "https://#{host(url)}/#{first}" : url
     end
 
     # The name a domain was registered under: brasil.arcelormittal.com is arcelormittal, acme.com.br is acme.

@@ -10,6 +10,11 @@ A page that is gone, moved, closed, or unclear is never the last word: the
 company's watched page is read for that role or a close one, and "no longer
 listed" still needs the whole list there. A role found again under a new link is
 still listed, and the verdict carries the new link.
+
+A role added without a title (`title_from_page`) is named by what is read: on an
+ATS, the board's own listing for its link, free; on the company's own site, the
+page's heading when it plainly names a role (titles.heading_title), and only
+when it does not, one read by the LLM. The verdict's listing carries the name.
 """
 
 import re
@@ -23,17 +28,19 @@ from verifier import ats
 from verifier.contract import (
     AtsBoard,
     Listing,
+    LlmUsage,
     MatchTarget,
     PageResult,
     PostingVerdict,
     VerificationResult,
     VerifyTarget,
 )
+from verifier.errors import ExtractionFailed
 from verifier.links import same_job
 from verifier.match import Matcher
 from verifier.pipeline import Services, board_read
-from verifier.render import RenderError, render
-from verifier.titles import FILLER_WORDS, REGION_WORDS, SENIORITY_WORDS, title_words
+from verifier.render import RenderedPage, RenderError, render
+from verifier.titles import FILLER_WORDS, REGION_WORDS, SENIORITY_WORDS, heading_title, title_words
 from verifier.verify import verify_company
 
 # Wording a job page uses once a role is closed: English, Portuguese, Spanish.
@@ -69,15 +76,16 @@ def check_posting(target: VerifyTarget, services: Services, matcher: Matcher) ->
             return settled.model_copy(update={"duration_ms": elapsed()})
         evidence.append(check)
     else:
-        check, why = _own_page(target, services)
+        check, why, named = _own_page(target, services)
         evidence.append(check)
         if why is None:
+            shown = f'names the role "{named[0].title}", {named[1]}' if named else "shows the role"
             verdict = PostingVerdict(
                 posting_id=posting.id,
                 verdict="verified_live",
                 method="posting_page",
-                listing=Listing(title=posting.title, url=posting.url),
-                reasoning=f"Its own page is up and shows the role ({posting.url}).",
+                listing=named[0] if named else Listing(title=posting.title, url=posting.url),
+                reasoning=f"Its own page is up and {shown} ({posting.url}).",
             )
             return VerificationResult(
                 target_id=target.id,
@@ -148,26 +156,28 @@ def _on_board(
     return result, read, ""
 
 
-def _own_page(target: VerifyTarget, services: Services) -> tuple[PageResult, str | None]:
-    """The role's own page on the company's site, loaded but never read by the LLM.
+def _own_page(target: VerifyTarget, services: Services) -> tuple[PageResult, str | None, tuple[Listing, str] | None]:
+    """The role's own page on the company's site, loaded; read by the LLM only to name a role added without a title.
 
-    Returns the check and why the page is not clearly up, or None when it is.
+    Returns the check, why the page is not clearly up (None when it is), and, for a role added
+    without a title, the listing its page names and how it was named.
     """
     posting = target.postings[0]
     url = posting.url
     checked_at = datetime.now(UTC).isoformat(timespec="seconds")
     started = time.monotonic()
 
-    def finish(why: str | None, **fields) -> tuple[PageResult, str | None]:
+    def finish(why: str | None, named: tuple[Listing, str] | None = None, **fields):
+        up = f'is up and names the role "{named[0].title}", {named[1]}' if named else "is up and shows the role"
         result = PageResult(
             target_id=target.id,
             url=url,
             checked_at=checked_at,
             duration_ms=int((time.monotonic() - started) * 1000),
-            notes=f"The role's own page {why}." if why else "The role's own page is up and shows the role.",
+            notes=f"The role's own page {why or up}.",
             **fields,
         )
-        return result, why
+        return result, why, named
 
     if refusal := services.robots.check(url):
         return finish("is off limits by robots.txt", outcome="blocked", reason=refusal)
@@ -186,9 +196,39 @@ def _own_page(target: VerifyTarget, services: Services) -> tuple[PageResult, str
         return finish(f"now leads to {page.final_url}", outcome="ok", method="render", reason="redirected", **seen)
     if CLOSED.search(page.text):
         return finish("says the role is closed", outcome="ok", method="render", reason="says_closed", **seen)
+    if posting.title_from_page:
+        listing, how, usage = _name(page, target, services)
+        method = "render+llm" if usage else "render"
+        if listing is None:
+            why = f"names no role plainly ({how})"
+            return finish(why, outcome="ok", method=method, reason="role_not_named", llm=usage, **seen)
+        return finish(None, (listing, how), outcome="ok", method=method, llm=usage, **seen)
     if not _shows(posting.title, page.text):
         return finish("does not show the role", outcome="ok", method="render", reason="role_not_shown", **seen)
     return finish(None, outcome="ok", method="render", **seen)
+
+
+def _name(page: RenderedPage, target: VerifyTarget, services: Services) -> tuple[Listing | None, str, LlmUsage | None]:
+    """What a role's own page names it: its heading, when that plainly names a role; else the LLM's read of the page."""
+    url = target.postings[0].url
+    if title := heading_title([page.heading, page.title], target.name or target.label):
+        return Listing(title=title, url=url), "as its heading names it", None
+    try:
+        extraction, usage = services.extractor.extract(page)
+    except ExtractionFailed as error:
+        return None, f"the LLM could not read it: {error.reason}", error.usage
+    if not extraction.listings:
+        return None, "its heading is unclear, and the LLM found no role on it", usage
+    found = extraction.listings[0]
+    listing = Listing(
+        title=found.title,
+        location=found.location,
+        url=url,
+        work_mode=found.work_mode,
+        department=found.department,
+        employment_type=found.employment_type,
+    )
+    return listing, "as the LLM read it, its heading being unclear", usage
 
 
 def _shows(title: str, text: str) -> bool:

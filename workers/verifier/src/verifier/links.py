@@ -11,20 +11,31 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # Query parameters that track a visit rather than name a role.
 TRACKING = ("utm_", "gh_src", "trk")
+# One board at two addresses: Greenhouse's older host and its current one.
+SAME_HOSTS = {
+    "boards.greenhouse.io": "job-boards.greenhouse.io",
+    "boards.eu.greenhouse.io": "job-boards.eu.greenhouse.io",
+}
+# A Workday page in a chosen language (/en-US/acme/job/...) is the page its API names without it (/acme/job/...).
+_WORKDAY_LOCALE = re.compile(r"^/[a-z]{2}-[A-Z]{2}(?=/)")
 
 
 def link_key(url: str) -> str:
     """A role link compared as the role it names.
 
     A fragment that is a route (#/jobs/405, #!/jobs/405), as single-page job boards use, names
-    the role and is kept.
+    the role and is kept. A board's other address, or a Workday page's language, is aside: a
+    link pasted from a browser names the same role as the one the board's API gives.
     """
     parts = urlsplit(url)
+    host = parts.netloc.lower().removeprefix("www.")
+    host = SAME_HOSTS.get(host, host)
+    path = parts.path.rstrip("/")
+    if host.endswith(".myworkdayjobs.com"):
+        path = _WORKDAY_LOCALE.sub("", path)
     query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not k.lower().startswith(TRACKING)])
     route = parts.fragment.rstrip("/") if parts.fragment.startswith(("/", "!/")) else ""
-    return urlunsplit(
-        (parts.scheme.lower(), parts.netloc.lower().removeprefix("www."), parts.path.rstrip("/"), query, route)
-    )
+    return urlunsplit((parts.scheme.lower(), host, path, query, route))
 
 
 def link_prefix(url: str) -> tuple[str, str]:

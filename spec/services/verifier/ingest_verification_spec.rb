@@ -148,6 +148,30 @@ RSpec.describe Verifier::Ingest, "#verification" do
     end
   end
 
+  describe "a role added without a title" do
+    before { posting.update!(role_title: Posting::TITLE_PENDING, job_url: "https://acme.example/jobs/7", location: nil) }
+
+    it "takes the name and location its own page gave it, audited with how it was named" do
+      named = verdict("verified_live", method: "posting_page", listing_index: nil,
+                                       listing: { "title" => "Sales Engineer", "location" => "São Paulo, Brazil",
+                                                  "url" => "https://acme.example/jobs/7" },
+                                       reasoning: 'Its own page is up and names the role "Sales Engineer", as its heading names it.')
+
+      ingest.verification(result(named, complete: false, listing_count: nil))
+
+      expect(posting.reload).to have_attributes(role_title: "Sales Engineer", location: "São Paulo, Brazil", title_pending?: false)
+      event = posting.audit_events.where(actor: "agent:verifier").sole
+      expect(event.changes_made["role_title"]).to eq([ Posting::TITLE_PENDING, "Sales Engineer" ])
+      expect(event.reasoning).to start_with('Its own page is up and names the role "Sales Engineer"')
+    end
+
+    it "is never named by a near-miss the LLM judged" do
+      ingest.verification(result(verdict("verified_live", method: "llm", listing: { "title" => "Sales Engineer II" })))
+
+      expect(posting.reload.role_title).to eq(Posting::TITLE_PENDING)
+    end
+  end
+
   it "keeps a check that reused an earlier read, linked to it, with when its listings were actually read" do
     earlier = create(:page_check, company: company, purpose: "verification", url: company.careers_page_url,
                                   checked_at: Time.utc(2026, 9, 28, 12))

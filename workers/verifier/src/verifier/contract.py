@@ -157,6 +157,8 @@ class TrackedPosting(BaseModel):
     title: str
     location: str | None = None
     url: str | None = None  # the role's own page at the employer, when known: matched before any title
+    # Added without a title (its `title` a placeholder): its own page names it, the first time it is read.
+    title_from_page: bool = False
 
 
 class MatchTarget(BaseModel):

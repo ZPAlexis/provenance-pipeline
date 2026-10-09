@@ -40,6 +40,83 @@ RSpec.describe Verifier::Capture do
     end
   end
 
+  describe ".role!" do
+    def add(**fields) = described_class.role!(**{ link: "https://job-boards.greenhouse.io/acme/jobs/4012345", title: "Sales Engineer" }.merge(fields))
+
+    it "tracks a new role as the operator, with its company added from its link, the board to try first" do
+      placed = add(location: "São Paulo, Brazil", source: "https://www.linkedin.com/jobs/view/sales-engineer-at-acme-4099887766/?trk=x")
+
+      expect(placed).to have_attributes(created: true, note: "Acme added. Sales Engineer tracked.")
+      expect(placed.posting).to have_attributes(
+        role_title: "Sales Engineer", location: "São Paulo, Brazil", tracking: "tracked", verification_state: "pending",
+        job_url: "https://job-boards.greenhouse.io/acme/jobs/4012345", posting_url: "https://www.linkedin.com/jobs/view/4099887766"
+      )
+      expect(placed.posting.company).to have_attributes(name: "Acme", careers_page_url: "https://job-boards.greenhouse.io/acme")
+      expect(AuditEvent.find_by!(target: placed.posting)).to have_attributes(
+        actor: "human:operator", reasoning: "Added by URL: https://job-boards.greenhouse.io/acme/jobs/4012345 "                                             "(found at https://www.linkedin.com/jobs/view/4099887766)."
+      )
+    end
+
+    it "finds a role already on record by its LinkedIn job, in whatever form its link was kept, and tracks it again" do
+      clay = create(:posting, role_title: "Sales Engineer (Remote)", tracking: "dismissed",
+                              posting_url: "https://www.linkedin.com/jobs/view/sales-engineer-at-acme-4099887766")
+
+      placed = add(source: "https://www.linkedin.com/jobs/search/?currentJobId=4099887766&keywords=sales")
+
+      expect(placed).to have_attributes(posting: clay, created: false)
+      expect(placed.note).to end_with("was dismissed: tracked again.")
+      expect(clay.reload).to have_attributes(tracking: "tracked", job_url: "https://job-boards.greenhouse.io/acme/jobs/4012345")
+      expect(AuditEvent.where(target: clay).last.reasoning).to start_with("Tracked by hand. Added by URL:")
+      expect(Company.count).to eq(1) # its own company: none added
+    end
+
+    it "finds a role by its own link, or by its title while it has no link, and never adds it twice" do
+      company = create(:company, :resolved, domain: "acme.com")
+      suggested = create(:posting, company: company, role_title: "Sales Engineer", tracking: "suggested",
+                                   job_url: "https://acme.com/careers/jobs/7?utm_source=linkedin")
+      untitled = create(:posting, company: company, role_title: "Sr. Solutions Architect", posting_url: nil)
+
+      expect(add(link: "https://www.acme.com/careers/jobs/7/")).to have_attributes(posting: suggested, note: /was suggested: now tracked/)
+      expect(add(link: "https://acme.com/careers/jobs/9", title: "Senior Solutions Architect"))
+        .to have_attributes(posting: untitled, note: /is already tracked/)
+      expect(untitled.reload.job_url).to eq("https://acme.com/careers/jobs/9")
+      expect(Posting.count).to eq(2)
+    end
+
+    it "finds a role by the link its board's API gave, pasted from a browser with a language or an older host" do
+      zendesk = create(:company, :resolved, domain: "zendesk.com.br", board_vendor: "workday", board_token: "zendesk.wd1/zendesk",
+                                            board_overlap: 1.0, board_evidence: "Lists the roles.", board_confirmed_at: 1.day.ago)
+      learned = create(:posting, company: zendesk, role_title: "Sales Engineer", tracking: "suggested",
+                                 job_url: "https://zendesk.wd1.myworkdayjobs.com/zendesk/job/So-Paulo-Brazil/Sales-Engineer_R35148")
+
+      placed = add(link: "https://zendesk.wd1.myworkdayjobs.com/en-US/zendesk/job/So-Paulo-Brazil/Sales-Engineer_R35148", title: "")
+
+      expect(placed.posting).to eq(learned)
+      expect(described_class.link_key("https://boards.greenhouse.io/acme/jobs/1"))
+        .to eq(described_class.link_key("https://job-boards.greenhouse.io/acme/jobs/1"))
+    end
+
+    it "refuses a job board as the role's own page" do
+      expect { add(link: "https://www.linkedin.com/jobs/view/4099887766") }.to raise_error(ArgumentError, /can go in where you found it/)
+    end
+
+    it "takes a role without a title, to be named by its own page at its first check, never matched by title" do
+      untitled = create(:posting, company: create(:company, domain: "acme.com"), role_title: Posting::TITLE_PENDING, posting_url: nil)
+
+      placed = add(link: "https://acme.com/careers/jobs/12", title: " ")
+
+      expect(placed).to have_attributes(created: true, note: "Role tracked: its title is read from its own page.")
+      expect(placed.posting).to have_attributes(role_title: Posting::TITLE_PENDING, title_pending?: true)
+      expect(placed.posting).not_to eq(untitled)
+    end
+
+    it "takes a role on the company's own site at the company's domain, its careers page left to be found" do
+      placed = add(link: "https://careers.acme.com.br/vagas/123-engenheiro", title: "Engenheiro de Vendas")
+
+      expect(placed.posting.company).to have_attributes(domain: "acme.com.br", careers_page_url: nil)
+    end
+  end
+
   describe ".company!" do
     it "adds a company as the operator, keeping the page given to try first" do
       added = described_class.company!("https://careers.acme.com/open-roles", name: "Acme Inc")
