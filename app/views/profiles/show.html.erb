@@ -19,6 +19,14 @@
       "Solutions Engineer" fits "Senior Engineer, Solutions". A single word fits any title holding it.
     </p>
     <%= f.text_area :titles_text, rows: 6, placeholder: "Product Designer\nData Analyst\nAnalytics" %>
+    <div class="related-ask">
+      <%= f.button "Suggest related titles", type: "submit", formaction: related_profile_path, class: "btn small",
+                                             data: { turbo_frame: "related-titles", turbo_submits_with: "Asking…",
+                                                     turbo_confirm: "One AI call proposes titles in the same area as yours, " \
+                                                                    "in the languages of your places: about #{cost(Verifier::RelatedTitles.estimate)}. Ask?" } %>
+      <span class="hint">Titles employers use for the same work, each with how many new roles it would add. You pick.</span>
+    </div>
+    <%= turbo_frame_tag "related-titles" %>
   </div>
 
   <div class="field">

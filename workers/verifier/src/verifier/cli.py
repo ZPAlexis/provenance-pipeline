@@ -1,4 +1,4 @@
-"""`verifier extract|resolve|match|verify|check|boards|suggest --targets targets.json --out results.jsonl`
+"""`verifier extract|resolve|match|verify|check|boards|suggest|related --targets targets.json --out results.jsonl`
 
 extract  checks each careers page and extracts its listings: one PageResult per target.
 resolve  finds each company's careers page: one ResolutionResult per target,
@@ -14,6 +14,8 @@ boards   looks for a free board listing the same roles as a page the LLM had to
          read: one BoardResult per company. Never calls the LLM.
 suggest  weighs a company's stored roles against a search profile: one
          SuggestionResult per company. Nothing is fetched; never calls the LLM.
+related  proposes titles in the same area as a search profile's, for the
+         operator to pick from: one RelatedResult per profile, one LLM call each.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -47,6 +49,8 @@ from verifier.contract import (
     MatchResult,
     MatchTarget,
     PageResult,
+    RelatedResult,
+    RelateTarget,
     ResolutionResult,
     ResolveTarget,
     SuggestionResult,
@@ -70,7 +74,9 @@ EXIT_OK, EXIT_BAD_INPUT, EXIT_CREDIT, EXIT_CREDENTIAL, EXIT_LLM_UNAVAILABLE = 0,
 _OUTAGE = re.compile(r"^llm_(http_5\d\d|connection_error|rate_limited)$")
 OUTAGE_LIMIT = 3
 
-Result = PageResult | ResolutionResult | MatchResult | VerificationResult | BoardResult | SuggestionResult
+Result = (
+    PageResult | ResolutionResult | MatchResult | VerificationResult | BoardResult | SuggestionResult | RelatedResult
+)
 
 
 @dataclass
@@ -170,6 +176,15 @@ def run_suggest(targets: list[SuggestTarget], out_path: Path, log=sys.stderr) ->
     return _run(targets, out_path, suggest, failed, log)
 
 
+def run_related(targets: list[RelateTarget], out_path: Path, proposer, log=sys.stderr) -> RunSummary:
+    from verifier.related import related
+
+    def failed(target: RelateTarget, reason: str) -> RelatedResult:
+        return RelatedResult(target_id=target.id, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: related(target, proposer), failed, log)
+
+
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
     summary = RunSummary()
     outage_streak = 0
@@ -203,25 +218,28 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 
 
 def _pages(result: Result) -> list[PageResult]:
-    if isinstance(result, MatchResult | BoardResult | SuggestionResult):
+    if isinstance(result, MatchResult | BoardResult | SuggestionResult | RelatedResult):
         return []
     return result.checks if isinstance(result, ResolutionResult | VerificationResult) else [result]
 
 
 def _usages(result: Result) -> list:
     usages = [page.llm for page in _pages(result) if page.llm]
-    extra = result.llm if isinstance(result, MatchResult) else getattr(result, "match_llm", None)
+    extra = result.llm if isinstance(result, MatchResult | RelatedResult) else getattr(result, "match_llm", None)
     return usages + [extra] if extra else usages
 
 
 def _reasons(result: Result) -> list[str | None]:
-    own = [result.reason] if isinstance(result, MatchResult | VerificationResult) else []
+    own = [result.reason] if isinstance(result, MatchResult | VerificationResult | RelatedResult) else []
     return [page.reason for page in _pages(result)] + own
 
 
 def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, result: Result) -> str:
     cost = sum(usage.cost_usd for usage in _usages(result))
     timing = f"({result.duration_ms / 1000:.1f}s{f', ${cost:.4f}' if cost else ''})"
+    if isinstance(result, RelatedResult):
+        found = f"{len(result.proposals)} titles proposed" if result.outcome == "ok" else f"error, {result.reason}"
+        return f"{target.id}: {found} {timing}"
     if isinstance(result, SuggestionResult):
         if result.outcome != "ok":
             return f"{target.label or target.id}: {result.outcome}, {result.reason} {timing}"
@@ -270,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("--no-llm", action="store_true", help="leave near-misses undecided")
     commands.add_parser("boards", parents=[common], help="find free boards listing the same roles as LLM-read pages")
     commands.add_parser("suggest", parents=[common], help="weigh stored roles against a search profile")
+    commands.add_parser("related", parents=[common], help="propose titles in the same area as a profile's")
     args = parser.parse_args(argv)
 
     model = {
@@ -279,6 +298,7 @@ def main(argv: list[str] | None = None) -> int:
         "check": VerifyTarget,
         "boards": BoardTarget,
         "suggest": SuggestTarget,
+        "related": RelateTarget,
     }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
@@ -295,8 +315,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{summary.targets}/{len(targets)} companies, {summary.fits} fit ({summary.new} new)", file=sys.stderr)
         return _exit_code(summary)
 
-    from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher
+    from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher, LlmTitleProposer
     from verifier.match import Matcher
+
+    if args.command == "related":
+        # Nothing is fetched: one LLM call per profile.
+        summary = run_related(targets, args.out, LlmTitleProposer(model=args.model))
+        print(f"\n{summary.targets}/{len(targets)} profiles, est. ${summary.cost_usd:.4f}", file=sys.stderr)
+        return _exit_code(summary)
 
     if args.command == "match":
         # Nothing is fetched: the listings were read before, and stored.

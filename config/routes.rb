@@ -25,6 +25,7 @@ Rails.application.routes.draw do
   resources :suggestions, only: :create
   resource :profile, only: %i[show update] do
     patch :preview
+    patch :related
   end
   get "about", to: "pages#about"
 end

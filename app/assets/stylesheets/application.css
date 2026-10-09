@@ -282,3 +282,11 @@ details.add > summary::-webkit-details-marker { display: none; }
 }
 .add-form p { flex-basis: 100%; margin: 0; }
 .decide { display: flex; gap: 8px; margin: 6px 0 12px; }
+
+/* Related titles, proposed for the profile */
+
+.related-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; }
+.related-ask .hint { margin: 0; }
+.related { margin: 10px 0 4px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.related-list { list-style: none; margin: 6px 0 10px; padding: 0; display: grid; gap: 8px; }
+.related-list label { font-weight: 400; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }

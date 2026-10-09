@@ -75,3 +75,29 @@ RSpec.describe "Profile", type: :request do
     end
   end
 end
+
+RSpec.describe "Related titles", type: :request do
+  let(:fields) { { titles_text: "Solutions Engineer", places_text: "Brazil", work_modes: [ "" ], levels: [ "" ] } }
+
+  it "lists the titles proposed for the profile on the page, each with what it would add, for the operator to pick" do
+    proposals = [ Verifier::RelatedTitles::Proposal.new(title: "Sales Engineer", language: "English", reason: "Same work.",
+                                                        adds: 2, examples: [ "Sales Engineer at Zendesk" ]) ]
+    allow(Verifier::RelatedTitles).to receive(:propose)
+      .and_return(Verifier::RelatedTitles::Result.new(proposals: proposals, cost_usd: 0.002, problems: []))
+
+    expect { patch related_profile_path, params: { search_profile: fields }, headers: { "Turbo-Frame" => "related-titles" } }
+      .not_to change { [ SearchProfile.count, AuditEvent.count ] }
+
+    expect(Verifier::RelatedTitles).to have_received(:propose).with(have_attributes(titles: [ "Solutions Engineer" ]))
+    expect(response.body).to include("Sales Engineer", "2 new roles", "Sales Engineer at Zendesk", "Add ticked titles", "$0.002")
+  end
+
+  it "asks for a title first, and calls nothing" do
+    allow(Verifier::RelatedTitles).to receive(:propose)
+
+    patch related_profile_path, params: { search_profile: fields.merge(titles_text: "") }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(Verifier::RelatedTitles).not_to have_received(:propose)
+  end
+end
