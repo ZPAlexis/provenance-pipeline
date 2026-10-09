@@ -120,7 +120,7 @@ RSpec.describe Verifier::CheckNow do
       expect(described_class.refusal(create(:company, :resolved, kind: "aggregator"))).to match(/aggregator/)
       expect(described_class.refusal(create(:company, :resolution_candidate))).to match(/waiting for you/)
       expect(described_class.refusal(create(:company, name: "Confidencial"))).to match(/employer is withheld/)
-      expect(described_class.refusal(create(:posting, company: create(:company)))).to match(/check the company first/)
+      expect(described_class.refusal(create(:posting, company: create(:company)))).to be_nil # its company's page found first
     end
   end
 
@@ -136,6 +136,17 @@ RSpec.describe Verifier::CheckNow do
       company.update!(board_vendor: "ashby", board_token: "acme", board_overlap: 0.95, board_evidence: "Lists the roles.",
                       board_confirmed_at: 1.day.ago)
       expect(described_class.ceiling(role)).to eq(0.0)
+    end
+
+    it "adds one read for a role to be named by its own page on the company's site, never on an ATS" do
+      create(:llm_call, cost_usd: 0.02)
+      check = create(:page_check, company: company, purpose: "verification", run_id: "r1")
+      create(:llm_call, page_check: check, cost_usd: 0.07)
+
+      untitled = create(:posting, company: company, role_title: Posting::TITLE_PENDING, job_url: "https://acme.example/jobs/7")
+      expect(described_class.ceiling(untitled)).to be_within(1e-9).of(0.07 + 0.045) # the page, and one average read
+      untitled.update!(job_url: "https://jobs.lever.co/acme/0f1e")
+      expect(described_class.ceiling(untitled)).to be_within(1e-9).of(0.07) # its board's listing names it, free
     end
 
     it "adds what finding a careers page has cost per company when it has none yet" do
@@ -185,7 +196,22 @@ RSpec.describe Verifier::CheckNow do
     it "says when no page was found" do
       outcome = described_class.company(added, worker: worker_class.new([]), finder: worker_class.new([ found("failed", failure: "not_found") ]))
 
-      expect(outcome.summary).to eq("No careers page found (not_found). Set it by hand on this page if you know it.")
+      expect(outcome.summary).to eq("No careers page found (not_found). Set it by hand on the company's page if you know it.")
+    end
+
+    it "finds it first for a role's check too, then checks the role, its own page first" do
+      posting = create(:posting, company: added, role_title: "Sales Engineer", job_url: "https://beta.example/jobs/7")
+      finder = worker_class.new([ found("resolved", careers_page_url: "https://beta.example/jobs", method: "imported", confidence: "high") ])
+      live = { "posting_id" => posting.id, "verdict" => "verified_live", "method" => "posting_page",
+               "listing" => { "title" => "Sales Engineer", "url" => "https://beta.example/jobs/7" },
+               "reasoning" => "Its own page is up and shows the role (https://beta.example/jobs/7)." }
+      checker = worker_class.new([ verification(verdicts: [ live ]).merge("target_id" => added.id, "url" => "https://beta.example/jobs") ])
+
+      outcome = described_class.role(posting, worker: checker, finder: finder)
+
+      expect(checker.asked).to include(command: "check", targets: [ include(postings: [ include(id: posting.id) ]) ])
+      expect(outcome.answer).to eq("verified_live")
+      expect(outcome.summary).to start_with("Careers page found: https://beta.example/jobs (imported, high). Its own page is up")
     end
   end
 end

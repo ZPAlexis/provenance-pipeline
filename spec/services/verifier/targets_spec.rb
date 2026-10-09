@@ -23,7 +23,7 @@ RSpec.describe Verifier::Targets do
       target = described_class.verify(company)
 
       expect(target).to include(id: company.id, url: page, board: nil,
-                                postings: [ { id: posting.id, title: "RevOps Engineer", location: nil, url: nil } ])
+                                postings: [ { id: posting.id, title: "RevOps Engineer", location: nil, url: nil, title_from_page: false } ])
       expect(target[:previous].pluck(:page_check_id)).to contain_exactly(latest.id, second.id)
       expect(target[:previous].find { |r| r[:page_check_id] == latest.id })
         .to include(content_hash: "sha256:new", next_page_url: "#{page}?page=2", listings: latest.listings)
@@ -114,7 +114,13 @@ RSpec.describe Verifier::Targets do
       create(:posting, company: company, role_title: "Designer", tracking: "dismissed")
 
       expect(described_class.verify(company)[:postings])
-        .to eq([ { id: tracked.id, title: "RevOps Engineer", location: nil, url: "https://acme.example/jobs/1" } ])
+        .to eq([ { id: tracked.id, title: "RevOps Engineer", location: nil, url: "https://acme.example/jobs/1", title_from_page: false } ])
+    end
+
+    it "asks the worker to name a role added without a title from its own page" do
+      create(:posting, company: company, role_title: Posting::TITLE_PENDING, job_url: "https://acme.example/jobs/2")
+
+      expect(described_class.verify(company)[:postings].sole).to include(title_from_page: true)
     end
 
     it "checks one role alone, with its company's watched page" do

@@ -28,6 +28,13 @@ from verifier.config import (
 _LINKS_JS = """() => Array.from(document.querySelectorAll('a[href]'))
   .map(a => [(a.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 200), a.href])"""
 _EMBED_SRCS_JS = """() => Array.from(document.querySelectorAll('iframe[src], script[src]')).map(e => e.src)"""
+# The page's main heading: its first non-empty h1, else what it says it is to links shared (og:title).
+_HEADING_JS = """() => {
+  const h1 = Array.from(document.querySelectorAll('h1'))
+    .map(e => (e.innerText || '').replace(/\\s+/g, ' ').trim()).find(t => t);
+  const og = document.querySelector('meta[property="og:title"]');
+  return (h1 || (og && og.content) || '').trim().slice(0, 300);
+}"""
 
 # A button that loads more of the same list, in English, Portuguese, Spanish, or German.
 # Buttons only: a link could take the page somewhere else mid-read.
@@ -64,6 +71,7 @@ class RenderedPage:
     title: str
     text: str
     links: list[tuple[str, str]] = field(default_factory=list)  # (link text, absolute URL)
+    heading: str = ""  # its first h1, else its og:title: what a role's own page names it
     urls: list[str] = field(default_factory=list)  # final, frame, and embed URLs: where a known ATS shows up
     load_more_clicks: int = 0  # how many times a "load more" button was clicked before reading
 
@@ -152,10 +160,15 @@ def _read(page: Page, status: int | None) -> RenderedPage:
         except PlaywrightError:
             continue  # a frame detached or never finished loading; read the rest
 
+    try:
+        heading = page.evaluate(_HEADING_JS)
+    except PlaywrightError:
+        heading = ""
     return RenderedPage(
         final_url=page.url,
         status=status,
         title=page.title(),
+        heading=heading,
         text="\n\n".join(text for text in texts if text.strip()),
         links=_dedupe_links(links),  # all of them; the prompt decides how many the model sees
         urls=[url for url in dict.fromkeys(urls) if url and not url.startswith(("about:", "javascript:"))],

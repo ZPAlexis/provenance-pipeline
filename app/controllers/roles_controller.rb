@@ -14,6 +14,21 @@ class RolesController < ApplicationController
     @roles = roles.joins(:company).includes(:company).order("companies.name", :role_title)
   end
 
+  # "Add a role": its own page at the employer and its title, tracked as the operator's
+  # choice, then checked right away (its company's careers page found first when it has none).
+  def create
+    placed = Verifier::Capture.role!(link: params[:link], title: params[:title], location: params[:location],
+                                     source: params[:source], company_name: params[:company_name])
+    role = placed.posting
+    if Verifier::CheckNow.refusal(role).nil?
+      CheckRun.start_for!(role)
+      started = " Checking it now: its own page first."
+    end
+    redirect_to role_path(role), notice: "#{placed.note}#{started}", status: :see_other
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    redirect_to roles_path(add: 1), alert: e.message.upcase_first, status: :see_other
+  end
+
   def show
     @role = Posting.includes(:company).find_by(id: params[:id]) or return withdrawn
     CheckRun.abandon_stale!

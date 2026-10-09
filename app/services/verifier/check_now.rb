@@ -23,8 +23,6 @@ module Verifier
         "#{company.name} has a careers page waiting for you: confirm, reject, or set it first."
       elsif Resolution.anonymised?(company)
         "#{company.name} is not a company: the employer is withheld."
-      elsif record.is_a?(Posting) && company.resolution_status != "resolved"
-        "#{company.name} has no watched careers page yet: check the company first."
       end
     end
 
@@ -34,11 +32,15 @@ module Verifier
     # page costs on average when it has none yet. A free board costs nothing.
     def ceiling(record)
       company = record.is_a?(Posting) ? record.company : record
-      return 0.0 if company.board_in_use
+      # A role added without a title, on the company's own site, may need one LLM read of its page to be named.
+      naming = record.is_a?(Posting) && record.title_pending? && !Capture.board(record.job_url.to_s) ? average_read : 0.0
+      return naming if company.board_in_use
 
-      read = Targets.full_read_cost(company) || LlmCall.where(purpose: "extract").average(:cost_usd).to_f
-      company.resolution_status == "resolved" ? read : read + finding_cost
+      read = Targets.full_read_cost(company) || average_read
+      naming + (company.resolution_status == "resolved" ? read : read + finding_cost)
     end
+
+    def average_read = LlmCall.where(purpose: "extract").average(:cost_usd).to_f
 
     # What finding a careers page has cost per company, on average, from the record.
     def finding_cost
@@ -46,23 +48,29 @@ module Verifier
       spent / [ PageCheck.where(purpose: "resolution").distinct.count(:company_id), 1 ].max
     end
 
-    def role(posting, worker: Worker.new(run_dir: Worker.dir_for("check")))
-      run = worker.run([ Targets.check(posting) ], command: "check")
-      record(run) do |result, verdicts|
-        verdict = verdicts.first
-        [ verdict&.dig("verdict"), verdict ? verdict["reasoning"] : "The check failed (#{result['reason']}); nothing was written." ]
+    def role(posting, worker: Worker.new(run_dir: Worker.dir_for("check")), finder: nil)
+      with_page(posting.company, finder) do
+        run = worker.run([ Targets.check(posting) ], command: "check")
+        record(run) do |result, verdicts|
+          verdict = verdicts.first
+          [ verdict&.dig("verdict"), verdict ? verdict["reasoning"] : "The check failed (#{result['reason']}); nothing was written." ]
+        end
       end
     end
 
     def company(company, worker: Worker.new(run_dir: Worker.dir_for("verify")), finder: nil)
-      unless company.resolution_status == "resolved"
-        found = find_page(company, finder || Worker.new(run_dir: Worker.dir_for("resolve")))
-        return found unless company.resolution_status == "resolved"
-      end
+      with_page(company, finder) { read_list(company, worker) }
+    end
 
-      outcome = read_list(company, worker)
-      return outcome unless found
+    # The check, once the company has a watched page: found first when it has none
+    # (one just added, say), and the check said after what finding it found.
+    def with_page(company, finder)
+      return yield if company.resolution_status == "resolved"
 
+      found = find_page(company, finder || Worker.new(run_dir: Worker.dir_for("resolve")))
+      return found unless company.resolution_status == "resolved"
+
+      outcome = yield
       outcome.summary = "#{found.summary} #{outcome.summary}"
       outcome.cost_usd += found.cost_usd
       outcome
@@ -86,9 +94,10 @@ module Verifier
           "Careers page found: #{company.careers_page_url} (#{company.resolution_method}, #{company.resolution_confidence})."
         when "candidate"
           "A careers page was found, but only at low confidence: #{company.resolution_candidate_url}. " \
-            "Confirm it, reject it, or set the right one on this page."
+            "Confirm it, reject it, or set the right one on the company's page."
         else
-          "No careers page found (#{company.resolution_failure || result['reason']}). Set it by hand on this page if you know it."
+          "No careers page found (#{company.resolution_failure || result['reason']}). " \
+            "Set it by hand on the company's page if you know it."
         end
       Outcome.new(summary: summary, tally: {}, cost_usd: cost(result), run_id: run.id, run_dir: run.dir, stopped: run.stopped)
     end

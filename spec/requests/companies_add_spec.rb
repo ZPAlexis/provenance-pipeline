@@ -71,3 +71,31 @@ RSpec.describe "Adding a company, and deciding its careers page", type: :request
     end
   end
 end
+
+RSpec.describe "Adding a role", type: :request do
+  include ActiveJob::TestHelper
+
+  it "tracks it as the operator's choice and starts checking it, its own page first" do
+    expect { post roles_path, params: { link: "https://jobs.lever.co/acme/0f1e2d3c", title: "Sales Engineer", source: "" } }
+      .to change(Posting, :count).by(1).and have_enqueued_job(CheckNowJob)
+
+    role = Posting.sole
+    expect(response).to redirect_to(role_path(role))
+    expect(flash[:notice]).to eq("Acme added. Sales Engineer tracked. Checking it now: its own page first.")
+    expect(role.check_runs.sole).to have_attributes(kind: "role", status: "queued")
+  end
+
+  it "keeps a job board's link only as where it was found, and says so" do
+    post roles_path, params: { link: "https://www.linkedin.com/jobs/view/4099887766", title: "Sales Engineer" }
+
+    expect(response).to redirect_to(roles_path(add: 1))
+    expect(flash[:alert]).to match(/linkedin\.com is a job board/)
+    expect(Posting.count).to eq(0)
+  end
+
+  it "offers the form on the roles page" do
+    get roles_path
+
+    expect(response.body).to include("Add a role", "Where you found it", "Add and check")
+  end
+end

@@ -14,7 +14,9 @@ module Verifier
     def verify(company, postings: company.postings.not_dismissed)
       {
         id: company.id, url: company.careers_page_url, label: company.name, domain: company.domain, name: company.name,
-        postings: postings.map { |p| { id: p.id, title: p.role_title, location: p.location, url: p.job_url } },
+        postings: postings.map do |p|
+          { id: p.id, title: p.role_title, location: p.location, url: p.job_url, title_from_page: p.title_pending? }
+        end,
         board: company.board_in_use, previous: previous_reads(company)
       }
     end

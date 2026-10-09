@@ -2,10 +2,10 @@
 
 One normalization and one vocabulary for every comparison of titles: matching a
 posting to a listing (match.py), measuring how many of a page's roles a board
-lists (boards.py), telling whether a role's own page shows it (check.py), and
-fitting a role to a search profile (profiles.py). A change here changes all of
-them at once, on purpose: "Sr." meaning "Senior" cannot be true for matching and
-false for board adoption.
+lists (boards.py), telling whether a role's own page shows it or naming the role
+from it (check.py), and fitting a role to a search profile (profiles.py). A
+change here changes all of them at once, on purpose: "Sr." meaning "Senior"
+cannot be true for matching and false for board adoption.
 """
 
 import re
@@ -78,3 +78,41 @@ def title_level(title: str | None) -> str | None:
         if word in LEVEL_OF and not (word == "lead" and following in _LEAD_AS_NOUN)
     ]
     return max(stated, key=LEVELS.index, default=None)
+
+
+# Words a heading uses when it names the page or the company, not a role: "Careers", "Join us", "Vagas".
+PAGE_WORDS = {
+    "careers", "career", "jobs", "job", "openings", "opening", "opportunities", "opportunity", "positions",
+    "position", "vacancies", "vacancy", "join", "us", "our", "team", "work", "with", "apply", "now", "details",
+    "description", "home", "page", "welcome", "not", "found", "error", "404", "vagas", "vaga", "trabalhe",
+    "conosco", "carreiras", "oportunidades", "empleos", "empleo", "trabaja", "nosotros", "detalhes", "detalles",
+}  # fmt: skip
+# Where a page's title runs its parts together: "Sales Engineer | Acme Careers", "Sales Engineer – Acme".
+_HEADING_PARTS = re.compile(r"\s+[|–—·•@-]\s+|\s*\|\s*")
+MAX_TITLE_CHARS = 100
+
+
+def heading_title(headings: list[str | None], company: str | None = None) -> str | None:
+    """A role's title from its own page's headings (its h1, then its <title>), when one plainly names it.
+
+    Parts naming only the company or the page ("Acme Careers", "Join us") are dropped, the rest kept in order:
+    "Sales Engineer - LATAM | Acme Careers" is "Sales Engineer - LATAM". None when no heading names a role
+    plainly: the caller reads the page another way.
+    """
+    named = set(title_words(company))
+    beside = named | PAGE_WORDS | FILLER_WORDS
+    for heading in headings:
+        parts = [_without_company(part.strip(), named) for part in _HEADING_PARTS.split(heading or "")]
+        kept = [part for part in parts if not set(title_words(part)) <= beside]
+        title = " - ".join(kept)
+        if kept and len(title) <= MAX_TITLE_CHARS:
+            return title
+    return None
+
+
+def _without_company(part: str, company: set[str]) -> str:
+    """A part without its trailing "at Acme" ("em", "en", "na" Acme): the company, not the role."""
+    match = re.search(r"\s+(?:at|em|en|na|no|bei|chez)\s+(.+)$", part, re.IGNORECASE)
+    if company and match and set(title_words(match.group(1))) <= company | FILLER_WORDS:
+        return part[: match.start()]
+    return part

@@ -11,7 +11,9 @@
       <%= hidden_field_tag(role ? :posting_id : :company_id, record.id) %>
       <%= form.submit "Check now", class: "btn primary" %>
       <span class="muted small">
-        <% if role %>
+        <% if role && record.company.resolution_status != "resolved" %>
+          Finds <%= record.company.name %>'s careers page first, then checks the role, its own page first: at most <%= cost(ceiling) %>.
+        <% elsif role %>
           Its own page first, free. <%= ceiling.positive? ? "At most #{cost(ceiling)} if its company's careers page must be read again." : "Its company's careers page is free to read too." %>
         <% elsif record.resolution_status != "resolved" %>
           Finds its careers page first<%= ", trying #{record.careers_page_url}" if record.careers_page_url %>, then reads its roles: at most <%= cost(ceiling) %>.

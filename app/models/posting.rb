@@ -53,6 +53,9 @@ class Posting < ApplicationRecord
   # job_url is the role's own page at the employer, learned from the listing it
   # matched; posting_url is where it was found (often LinkedIn, never fetched).
   TRACKING = %w[suggested tracked dismissed].freeze
+  # A role added without a title holds this until its first check reads its own page,
+  # which names it (Verifier::Ingest): free on an ATS, its heading or one LLM read elsewhere.
+  TITLE_PENDING = "(title pending)".freeze
 
   VERIFICATION_STATES = %w[pending verified_live not_found inaccessible].freeze
   VERDICTS = (VERIFICATION_STATES - %w[pending]).freeze
@@ -102,6 +105,8 @@ class Posting < ApplicationRecord
   def verdict?
     VERDICTS.include?(verification_state)
   end
+
+  def title_pending? = role_title == TITLE_PENDING
 
   def suspect_negative?
     verification_state == "not_found" && roles_listed_count.to_i.zero?
