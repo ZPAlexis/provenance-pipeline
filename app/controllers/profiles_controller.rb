@@ -27,6 +27,19 @@ class ProfilesController < ApplicationController
     render :preview, status: @preview ? :ok : :unprocessable_content
   end
 
+  # Titles in the same area as the profile on the page, saved or not: one AI call proposes
+  # them, a free preview counts what each would add, and the operator picks. Nothing is saved.
+  def related
+    @profile = editing
+    return render(:related, status: :unprocessable_content) unless @profile.valid?
+
+    @related = Verifier::RelatedTitles.propose(@profile)
+    render :related
+  rescue Verifier::Worker::Error => e
+    @related = Verifier::RelatedTitles::Result.new(proposals: [], cost_usd: 0.0, problems: [ e.message.upcase_first ])
+    render :related
+  end
+
   private
 
   def editing

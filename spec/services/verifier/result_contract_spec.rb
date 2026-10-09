@@ -128,6 +128,17 @@ RSpec.describe Verifier::ResultContract do
     end
   end
 
+  describe ".related_errors" do
+    def related(proposals) = { "kind" => "related", "target_id" => "p1", "outcome" => "ok", "proposals" => proposals }
+
+    it "accepts titles with their language and why, and refuses one missing any" do
+      expect(described_class.related_errors(related([ { "title" => "Sales Engineer", "language" => "English", "reason" => "Same work." } ]))).to be_empty
+      expect(described_class.related_errors(related([ { "title" => "Sales Engineer", "language" => "" } ])))
+        .to eq([ "proposal 1 must have a title, its language, and why" ])
+      expect(described_class.related_errors(related(nil))).to include("proposals must be a list")
+    end
+  end
+
   describe ".suggestion_errors" do
     def fit(**overrides)
       { "listing_index" => 0, "listing" => { "title" => "Solutions Engineer" }, "title" => "Solutions Engineer",

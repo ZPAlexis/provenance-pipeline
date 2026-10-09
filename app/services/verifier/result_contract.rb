@@ -118,6 +118,26 @@ module Verifier
       errors
     end
 
+    # Titles the LLM proposed for a profile, each with its language and why.
+    def related_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be related" unless result["kind"] == "related"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "unknown outcome #{result['outcome'].inspect}" unless %w[ok error].include?(result["outcome"])
+      errors.concat(llm_errors(result["llm"]).map { |error| "llm #{error}" }) if result["llm"]
+      proposals = result["proposals"]
+      return errors << "proposals must be a list" unless proposals.is_a?(Array)
+
+      proposals.each_with_index do |proposal, index|
+        next if proposal.is_a?(Hash) && %w[title language reason].all? { |key| proposal[key].is_a?(String) && proposal[key].present? }
+
+        errors << "proposal #{index + 1} must have a title, its language, and why"
+      end
+      errors
+    end
+
     RULED_OUT = %w[excluded level place work_mode].freeze
     FIT_NOTES = %w[work_mode_not_stated place_not_stated level_not_stated].freeze
     WORK_MODES = [ *SearchProfile::WORK_MODES, "unknown" ].freeze

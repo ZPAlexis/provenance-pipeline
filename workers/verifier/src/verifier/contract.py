@@ -52,7 +52,7 @@ class Listing(BaseModel):
 class LlmUsage(BaseModel):
     model: str  # the model the API reports having served
     settings: dict = Field(default_factory=dict)  # request settings, e.g. effort
-    purpose: Literal["extract", "resolve", "match"] = "extract"
+    purpose: Literal["extract", "resolve", "match", "relate"] = "extract"
     # A hash over the system prompt, output schema, and limits that produced this call.
     prompt_version: str = ""
     input_tokens: int = 0
@@ -335,6 +335,34 @@ class SuggestionResult(BaseModel):
     # Each posting on record found among the listings, fitting or not: posting id -> listing index.
     # A posting missing here was not in this read, which may be only part of the list.
     listed: dict[str, int] = Field(default_factory=dict)
+    duration_ms: int = 0
+
+
+class RelateTarget(BaseModel):
+    """A search profile's titles, for titles in the same area to be proposed."""
+
+    id: str  # the profile
+    titles: list[str]
+    excluded: list[str] = Field(default_factory=list)
+    places: list[str] = Field(default_factory=list)  # their languages are the languages proposed in
+
+
+class ProposedTitle(BaseModel):
+    title: str
+    language: str
+    reason: str
+
+
+class RelatedResult(BaseModel):
+    """Titles the LLM proposes in the same area as a profile's: for the operator to pick, never added on their own."""
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["related"] = "related"
+    target_id: str
+    outcome: Literal["ok", "error"] = "ok"
+    reason: str | None = None
+    proposals: list[ProposedTitle] = Field(default_factory=list)
+    llm: LlmUsage | None = None
     duration_ms: int = 0
 
 

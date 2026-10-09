@@ -1,0 +1,35 @@
+<%= turbo_frame_tag "related-titles" do %>
+  <% if @related.nil? %>
+    <%= render "errors", profile: @profile %>
+  <% else %>
+    <% if @related.problems.any? %>
+      <div class="form-errors" role="alert"><ul><% @related.problems.each do |problem| %><li><%= problem %></li><% end %></ul></div>
+    <% end %>
+    <% if @related.proposals.any? %>
+      <div class="related" data-controller="related" data-related-field-value="search_profile_titles_text">
+        <p class="hint">
+          Proposed by one AI call (<%= cost(@related.cost_usd) %>). Each says how many new roles it would suggest from what the
+          watched pages last listed, as the rest of the profile stands. Tick the ones to add to your titles.
+        </p>
+        <ul class="related-list">
+          <% @related.proposals.each do |proposal| %>
+            <li>
+              <label>
+                <input type="checkbox" value="<%= proposal.title %>" data-related-target="choice">
+                <strong><%= proposal.title %></strong> <span class="muted small"><%= proposal.language %></span>
+                <span class="badge <%= proposal.adds.positive? ? "live" : "" %>"><%= pluralize(proposal.adds, "new role") %></span>
+              </label>
+              <div class="muted small">
+                <%= proposal.reason %><%= " For example: #{proposal.examples.join('; ')}." if proposal.examples.any? %>
+              </div>
+            </li>
+          <% end %>
+        </ul>
+        <button type="button" class="btn small" data-action="related#add">Add ticked titles</button>
+        <span class="muted small" data-related-target="status"></span>
+      </div>
+    <% elsif @related.problems.empty? %>
+      <p class="muted small">No title to add: every title proposed is already one of yours.</p>
+    <% end %>
+  <% end %>
+<% end %>
