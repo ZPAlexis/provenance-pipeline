@@ -127,6 +127,18 @@ RSpec.describe ReviewQueue do
     end
   end
 
+  it "restates an open item's evidence when only its wording changed, keeping the item" do
+    missing = create(:company, resolution_status: "failed", resolution_failure: "not_found")
+    described_class.sync!(missing)
+    item = missing.review_items.open.sole
+    item.update!(evidence: "Worded the old way.")
+
+    described_class.sync!(missing)
+
+    expect(item.reload).to have_attributes(status: "open", evidence: "No careers page found (not_found).")
+    expect(AuditEvent.where(target: item).pluck(:reasoning)).to include("Restated what was seen.")
+  end
+
   it "never raises the same question twice" do
     company.update!(kind_suggestion: "recruiter")
 

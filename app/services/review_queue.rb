@@ -30,12 +30,27 @@ module ReviewQueue
     ApplicationRecord.transaction do
       open.each do |item|
         finding = wanted[[ item.kind, item.subject_type, item.subject_id ]]
-        next if finding && finding.key == item.evidence_key
+        next restate!(item, finding) if finding && finding.key == item.evidence_key
 
         close!(item, "done", "resolved", actor: actor,
                                          reasoning: finding ? "Resolved: what was seen changed." : "Resolved: no longer asked by the record.")
       end
       wanted.each_value { |finding| raise!(company, finding) }
+    end
+  end
+
+  # The operator's decision on an item, carried out by the block through the
+  # services every such write goes through. The item closes with the decision in
+  # the same transaction: a write that fails leaves it open. "leave" closes it as
+  # left, and it comes back only when the evidence changes.
+  def decide!(item, decision, note: nil, actor: AuditEvent::OPERATOR)
+    left = decision == "leave"
+    raise ArgumentError, "say why you leave it as is: your note goes on the record" if left && note.blank?
+
+    ApplicationRecord.transaction do
+      close!(item, left ? "left" : "done", decision, actor: actor, note: note,
+                                                     reasoning: left ? "Left as is by hand: #{note}" : "Decided by hand: #{decision.humanize.downcase}.#{" #{note}" if note}")
+      yield if block_given?
     end
   end
 
@@ -46,6 +61,14 @@ module ReviewQueue
     item = company.review_items.create!(kind: finding.kind, subject: finding.subject, evidence: finding.evidence,
                                         evidence_key: finding.key, proposal: finding.proposal, raised_by: RAISED_BY)
     AuditEvent.record_write!(item, actor: RAISED_BY, reasoning: "Raised for review: #{finding.evidence}")
+  end
+
+  # The same evidence, worded as the record words it now.
+  def restate!(item, finding)
+    return if item.evidence == finding.evidence
+
+    item.update!(evidence: finding.evidence)
+    AuditEvent.record_write!(item, actor: RAISED_BY, reasoning: "Restated what was seen.")
   end
 
   def close!(item, status, decision, actor:, reasoning:, note: nil)
@@ -80,10 +103,9 @@ module ReviewQueue
     return unless company.resolution_status == "failed" && FINDABLE.include?(company.resolution_failure)
     return if Verifier::Resolution.anonymised?(company)
 
-    seen = latest_reasoning(company, "resolution_failure")
     Finding.new(kind: "no_careers_page", subject: company, key: company.resolution_failure,
                 proposal: company.resolution_failure == "blocked" ? "set_page" : "find_again",
-                evidence: "No careers page found (#{company.resolution_failure}). #{seen}".strip)
+                evidence: latest_reasoning(company, "resolution_failure") || "No careers page found (#{company.resolution_failure}).")
   end
 
   # A watched list read only in part: a role missing from it is never marked no longer listed.

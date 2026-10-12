@@ -28,5 +28,8 @@ Rails.application.routes.draw do
     patch :related
   end
   get "review", to: "review_items#index", as: :review
+  resources :review_items, only: [] do
+    patch :decide, on: :member
+  end
   get "about", to: "pages#about"
 end

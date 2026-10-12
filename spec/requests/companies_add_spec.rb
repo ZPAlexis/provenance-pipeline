@@ -52,7 +52,7 @@ RSpec.describe "Adding a company, and deciding its careers page", type: :request
       patch confirm_page_company_path(company)
 
       expect(company.reload).to have_attributes(resolution_status: "resolved", careers_page_url: "https://acme.com/join")
-      expect(AuditEvent.where(target: company).last.actor).to eq("human:operator")
+      expect(AuditEvent.where(target: company).sole.actor).to eq("human:operator")
       expect(flash[:notice]).to eq("Its careers page is watched: check it now to read its roles.")
     end
 

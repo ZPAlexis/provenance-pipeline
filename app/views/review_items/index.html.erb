@@ -38,6 +38,7 @@
           <summary class="muted small">What to check</summary>
           <p class="small"><%= review_guidance(item) %></p>
         </details>
+        <%= render "actions", item: item %>
       </li>
     <% end %>
   </ol>
