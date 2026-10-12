@@ -37,6 +37,7 @@ module Verifier
       ApplicationRecord.transaction do
         result["checks"].each { |check| record_check(company, check, purpose: "resolution") }
         apply_resolution(company, result) unless result["outcome"] == "error"
+        ReviewQueue.sync!(company)
       end
       result["outcome"]
     end
@@ -55,9 +56,11 @@ module Verifier
       ApplicationRecord.transaction do
         checks = result["checks"].map { |check| record_check(company, check, purpose: "verification") }
         record_matches(checks.first, result) if checks.any?
-        result["verdicts"].each_with_object(Hash.new(0)) do |verdict, tally|
-          tally[apply_verdict(postings.fetch(verdict["posting_id"]), verdict, result)] += 1
+        tally = result["verdicts"].each_with_object(Hash.new(0)) do |verdict, counts|
+          counts[apply_verdict(postings.fetch(verdict["posting_id"]), verdict, result)] += 1
         end
+        ReviewQueue.sync!(company)
+        tally
       end
     end
 

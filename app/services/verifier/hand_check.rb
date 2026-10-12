@@ -15,6 +15,7 @@ module Verifier
       ApplicationRecord.transaction do
         posting.update!(verification_state: verdict, last_checked_at: at, roles_listed_count: roles, work_mode: work_mode)
         AuditEvent.record_write!(posting, actor: actor, reasoning: "#{MARK} #{note}")
+        ReviewQueue.sync!(posting.company, actor: actor)
       end
     end
 
@@ -34,6 +35,7 @@ module Verifier
           posting, actor: actor,
           reasoning: "Undid the verifier's verdict of #{event.occurred_at.utc.to_date} (#{state.join(' -> ')}). #{reasoning}"
         )
+        ReviewQueue.sync!(posting.company, actor: actor)
       end
     end
 

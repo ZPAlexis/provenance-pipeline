@@ -21,6 +21,7 @@ module Verifier
       ApplicationRecord.transaction do
         posting.update!(tracking: tracking)
         AuditEvent.record_write!(posting, actor: actor, reasoning: "#{mark} #{note}")
+        ReviewQueue.sync!(posting.company, actor: actor)
       end
     end
     private_class_method :decide!

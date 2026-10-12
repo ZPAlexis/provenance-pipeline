@@ -131,6 +131,7 @@ module Verifier
         posting.destroy!
         tally[:withdrawn] += 1
       end
+      ReviewQueue.sync!(company, actor: ACTOR) if tally[:withdrawn].positive?
     end
 
     def suggest!(company, role, check, profile, weighed, run_id)

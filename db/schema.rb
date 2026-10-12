@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -163,6 +163,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_000001) do
     t.index ["verification_state"], name: "index_postings_on_verification_state"
   end
 
+  create_table "review_items", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "kind", null: false
+    t.uuid "company_id", null: false
+    t.string "subject_type", null: false
+    t.uuid "subject_id", null: false
+    t.string "status", default: "open", null: false
+    t.text "evidence", null: false
+    t.string "evidence_key", null: false
+    t.string "proposal"
+    t.string "raised_by", null: false
+    t.string "decided_by"
+    t.string "decision"
+    t.text "note"
+    t.datetime "decided_at"
+    t.jsonb "recommendation", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_review_items_on_company_id"
+    t.index ["kind", "subject_type", "subject_id"], name: "index_review_items_one_open_per_question", unique: true, where: "((status)::text = 'open'::text)"
+    t.index ["status"], name: "index_review_items_on_status"
+    t.index ["subject_type", "subject_id"], name: "index_review_items_on_subject_type_and_subject_id"
+  end
+
   create_table "search_profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "name", null: false
     t.string "titles", default: [], null: false, array: true
@@ -180,4 +203,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_000001) do
   add_foreign_key "page_checks", "companies"
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify
   add_foreign_key "postings", "companies"
+  add_foreign_key "review_items", "companies", on_delete: :cascade
 end
