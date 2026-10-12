@@ -145,9 +145,10 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Tabs */
 
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 8px 0 14px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 8px 0 14px; overflow-x: auto; scrollbar-width: thin; }
 .tabs a {
   padding: 6px 12px;
+  white-space: nowrap;
   color: var(--muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
