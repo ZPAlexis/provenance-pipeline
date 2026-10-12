@@ -22,6 +22,10 @@
     <div class="value"><%= @tracking.fetch("dismissed", 0) %></div>
     <div class="label">Dismissed</div>
   <% end %>
+  <%= link_to review_path, class: [ "tile", ("unsure" if @review.positive?) ] do %>
+    <div class="value"><%= @review %></div>
+    <div class="label">To review</div>
+  <% end %>
 </div>
 <% if @stale.positive? %>
   <p class="muted small"><%= pluralize(@stale, "tracked role") %> not checked in the last <%= Overview::STALE_AFTER.inspect %>.</p>

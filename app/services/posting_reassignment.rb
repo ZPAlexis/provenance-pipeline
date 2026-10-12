@@ -38,6 +38,7 @@ class PostingReassignment
         from.careers_page_url = nil
         save_audited(from, "Its careers page was #{to.name}'s, found by research on a posting now moved there.")
       end
+      [ from, to ].each { |company| ReviewQueue.sync!(company, actor: @actor) }
       to
     end
   end

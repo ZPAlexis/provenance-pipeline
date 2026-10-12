@@ -27,5 +27,6 @@ Rails.application.routes.draw do
     patch :preview
     patch :related
   end
+  get "review", to: "review_items#index", as: :review
   get "about", to: "pages#about"
 end

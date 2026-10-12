@@ -1,0 +1,46 @@
+<% content_for :title, "Review · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>To review</h1>
+    <p class="sub">
+      What an agent saw that needs your judgment, each with what was seen and a proposed action. Raised by the agent
+      that saw it; closed by your decision, or when the record resolves it.
+    </p>
+  </div>
+</div>
+
+<nav class="tabs">
+  <%= link_to review_path, class: ("current" unless @kind) do %>
+    All <span class="count"><%= @counts.values.sum %></span>
+  <% end %>
+  <% ReviewItem::KINDS.each do |kind| %>
+    <%= link_to review_path(kind: kind), class: ("current" if kind == @kind) do %>
+      <%= review_kind_label(kind) %> <span class="count"><%= @counts.fetch(kind, 0) %></span>
+    <% end %>
+  <% end %>
+</nav>
+
+<% if @items.any? %>
+  <ol class="review-list">
+    <% @items.each do |item| %>
+      <li class="review-item" id="<%= dom_id(item) %>">
+        <div class="review-head">
+          <span class="badge"><%= review_kind_label(item.kind) %></span>
+          <strong><%= review_question(item) %></strong>
+        </div>
+        <p class="small"><%= item.evidence %></p>
+        <p class="small">
+          <span class="muted">Proposed:</span> <%= review_proposal(item) %>
+          · <span class="muted">Raised by <%= actor_label(item.raised_by) %> <%= ago(item.created_at) %></span>
+          · <%= review_subject_link(item) %>
+        </p>
+        <details class="guidance">
+          <summary class="muted small">What to check</summary>
+          <p class="small"><%= review_guidance(item) %></p>
+        </details>
+      </li>
+    <% end %>
+  </ol>
+<% else %>
+  <p class="empty">Nothing to review<%= " of this kind" if @kind %>.</p>
+<% end %>

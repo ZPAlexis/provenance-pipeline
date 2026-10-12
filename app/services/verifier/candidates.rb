@@ -24,6 +24,7 @@ module Verifier
         resolution_candidate_url: nil, resolved_at: Time.current
       )
       AuditEvent.record_write!(company, actor: actor, reasoning: "Confirmed by hand: the candidate careers page found by #{method}.")
+      ReviewQueue.sync!(company, actor: actor)
     end
 
     def reject!(company, actor: ACTOR)
@@ -35,6 +36,7 @@ module Verifier
         resolution_method: nil, resolution_confidence: nil, resolution_candidate_url: nil
       )
       AuditEvent.record_write!(company, actor: actor, reasoning: "Rejected by hand: #{url} is not this company's careers page.")
+      ReviewQueue.sync!(company, actor: actor)
     end
 
     # The page a human found: for a candidate that was wrong, a company
@@ -52,6 +54,7 @@ module Verifier
           resolution_candidate_url: nil, resolution_failure: nil, resolved_at: Time.current
         )
         AuditEvent.record_write!(company, actor: actor, reasoning: "Set by hand. #{reasoning}")
+        ReviewQueue.sync!(company, actor: actor)
       end
     end
 
@@ -65,6 +68,7 @@ module Verifier
         company.update!(kind: kind, kind_suggestion: nil)
         AuditEvent.record_write!(company, actor: actor,
                                           reasoning: [ "Kind set by hand: #{kind}.", reasoning.presence ].compact.join(" "))
+        ReviewQueue.sync!(company, actor: actor)
       end
     end
 
