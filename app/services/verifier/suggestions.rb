@@ -12,6 +12,7 @@ module Verifier
   # profile, or when its latest check found it gone from the whole list.
   module Suggestions
     ACTOR = "agent:suggester".freeze
+    SCOPES = %w[postings:suggest].freeze
     # One refresh writes at a time: a check finishing as the profile is saved must not suggest a role twice.
     LOCK = 0x5355_4747
 
@@ -73,13 +74,18 @@ module Verifier
       targets = companies.filter_map { |company| Targets.suggest(company, profile) }
       return Refresh.new(**nothing, problems: []) if targets.empty?
 
-      run = worker.run(targets, command: "suggest")
-      results, problems = usable(run, companies)
-      DatabaseBackup.daily
       tally = Hash.new(0)
-      ApplicationRecord.transaction do
-        ApplicationRecord.connection.execute("SELECT pg_advisory_xact_lock(#{LOCK})")
-        results.each { |company, result| write(company, result, profile, run.id, tally) }
+      # The run's own credential (1.3): it may propose, refit and withdraw suggestions, and nothing else.
+      purpose = "suggest at #{companies.one? ? companies.first.name : "#{companies.size} companies"}"
+      run, problems = Authority.run(ACTOR, scopes: SCOPES, purpose: purpose, ttl: companies.one? ? Authority::ONE : Authority::BATCH) do
+        run = worker.run(targets, command: "suggest")
+        results, problems = usable(run, companies)
+        DatabaseBackup.daily
+        ApplicationRecord.transaction do
+          ApplicationRecord.connection.execute("SELECT pg_advisory_xact_lock(#{LOCK})")
+          results.each { |company, result| write(company, result, profile, run.id, tally) }
+        end
+        [ run, problems ]
       end
       Refresh.new(created: tally[:created], updated: tally[:updated], withdrawn: tally[:withdrawn], problems: problems,
                   run_id: run.id)
@@ -108,8 +114,9 @@ module Verifier
       Fit.new(company: company, on_record: postings[role["on_record"]], **FIT_FIELDS.to_h { |field| [ field.to_sym, role[field] ] })
     end
 
-    # One company's result: new suggestions, refits, withdrawals.
+    # One company's result: new suggestions, refits, withdrawals. Only under the suggester's credential.
     def write(company, result, profile, run_id, tally)
+      Authority.require_agent!(ACTOR)
       check = company.page_checks.find(result["page_check_id"])
       postings = company.postings.to_a.index_by(&:id)
       fitting = result["roles"].select { |role| role["suggested"] }

@@ -29,6 +29,9 @@ RSpec.describe AuditEvent do
   end
 
   describe ".record!" do
+    # The log's shape, whoever writes it: an agent's events seeded as history (Authority is spec'd on its own).
+    around { |example| Authority.unchecked { example.run } }
+
     let(:posting) { create(:posting) }
 
     it "persists who, what, why, and on which record" do
@@ -65,6 +68,9 @@ RSpec.describe AuditEvent do
   end
 
   describe ".record_write!" do
+    # The log's shape, whoever writes it: an agent's events seeded as history (Authority is spec'd on its own).
+    around { |example| Authority.unchecked { example.run } }
+
     it "records a create as a snapshot of everything the write set, as [before, after] pairs" do
       posting = create(:posting, role_title: "GTM Engineer", location: nil, enrichment: { "hiring_evidence" => "Listed." })
       event = described_class.record_write!(posting, actor: "agent:test", reasoning: "Imported.")
@@ -96,6 +102,9 @@ RSpec.describe AuditEvent do
   end
 
   describe ".record_destroy!" do
+    # The log's shape, whoever writes it: an agent's events seeded as history (Authority is spec'd on its own).
+    around { |example| Authority.unchecked { example.run } }
+
     it "keeps everything a record held before it is deleted, as [value, nil] pairs" do
       posting = create(:posting, role_title: "Solutions Engineer", tracking: "suggested", fit: { "title" => "Solutions Engineer" })
 

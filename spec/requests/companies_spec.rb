@@ -21,8 +21,10 @@ RSpec.describe "Companies", type: :request do
                     board_confirmed_at: 1.day.ago)
     create(:posting, company: company, role_title: "RevOps Engineer")
     create(:page_check, company: company, purpose: "verification", read_via: "ats_api:ashby", listing_count: 40)
-    AuditEvent.record!(actor: "agent:verifier", action: "update", target: company,
-                       changes_made: { "board_vendor" => [ nil, "ashby" ] }, reasoning: "A free board lists the same roles.")
+    Authority.unchecked do # history, as the agent wrote it
+      AuditEvent.record!(actor: "agent:verifier", action: "update", target: company,
+                         changes_made: { "board_vendor" => [ nil, "ashby" ] }, reasoning: "A free board lists the same roles.")
+    end
 
     get company_path(company)
 

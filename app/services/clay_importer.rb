@@ -115,7 +115,9 @@ class ClayImporter
       "they were reached (ISO 8601, e.g. 2026-09-22) — Clay exports carry no per-row check date."
   end
 
+  # Only under the importer's own credential (1.3), issued by clay:import.
   def call
+    Authority.require_agent!(ACTOR)
     require_verified_at!
 
     CSV.foreach(@path, headers: true, encoding: "bom|utf-8") do |csv_row|

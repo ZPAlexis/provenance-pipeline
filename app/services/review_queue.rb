@@ -11,9 +11,14 @@
 # Called after every write that can change what a company's record asks (the
 # verifier's reads, the operator's decisions, the suggester's withdrawals);
 # `bin/rails review:sync` reconciles every company at once.
+#
+# This bookkeeping is written by the queue itself, under a grant fixed in code
+# (Authority::SYSTEM, 1.3): it raises, restates, and closes what resolved, and
+# never decides. Each item still names whose evidence raised it.
 module ReviewQueue
   Finding = Data.define(:kind, :subject, :evidence, :key, :proposal)
 
+  ACTOR = "system:review_queue".freeze
   # Who saw what each kind is about: every finding so far comes from the verifier's reads.
   RAISED_BY = Verifier::Ingest::ACTOR
   # Failures a person can do something about; "rejected" was their own call, "anonymised" names no company.
@@ -27,12 +32,16 @@ module ReviewQueue
     wanted = findings(company).index_by { |finding| [ finding.kind, finding.subject.class.name, finding.subject.id ] }
     open = company.review_items.open.to_a
 
+    Authority.as_system(ACTOR) { keep_in_step!(company, wanted, open, actor) }
+  end
+
+  def keep_in_step!(company, wanted, open, actor)
     ApplicationRecord.transaction do
       open.each do |item|
         finding = wanted[[ item.kind, item.subject_type, item.subject_id ]]
         next restate!(item, finding) if finding && finding.key == item.evidence_key
 
-        close!(item, "done", "resolved", actor: actor,
+        close!(item, "done", "resolved", actor: actor, audit_as: ACTOR,
                                          reasoning: finding ? "Resolved: what was seen changed." : "Resolved: no longer asked by the record.")
       end
       wanted.each_value { |finding| raise!(company, finding) }
@@ -103,7 +112,7 @@ module ReviewQueue
 
     item = company.review_items.create!(kind: finding.kind, subject: finding.subject, evidence: finding.evidence,
                                         evidence_key: finding.key, proposal: finding.proposal, raised_by: RAISED_BY)
-    AuditEvent.record_write!(item, actor: RAISED_BY, reasoning: "Raised for review: #{finding.evidence}")
+    AuditEvent.record_write!(item, actor: ACTOR, reasoning: "Raised for review: #{finding.evidence}")
   end
 
   # The same evidence, worded as the record words it now.
@@ -111,12 +120,13 @@ module ReviewQueue
     return if item.evidence == finding.evidence
 
     item.update!(evidence: finding.evidence)
-    AuditEvent.record_write!(item, actor: RAISED_BY, reasoning: "Restated what was seen.")
+    AuditEvent.record_write!(item, actor: ACTOR, reasoning: "Restated what was seen.")
   end
 
-  def close!(item, status, decision, actor:, reasoning:, note: nil)
+  # Closes an item as `actor`'s; audited as the queue when its bookkeeping closes it (`audit_as`).
+  def close!(item, status, decision, actor:, reasoning:, note: nil, audit_as: actor)
     item.update!(status: status, decision: decision, decided_by: actor, decided_at: Time.current, note: note)
-    AuditEvent.record_write!(item, actor: actor, reasoning: reasoning)
+    AuditEvent.record_write!(item, actor: audit_as, reasoning: reasoning)
   end
 
   # --- What a company's record asks of the operator now ----------------------

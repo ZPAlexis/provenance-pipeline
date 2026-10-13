@@ -10,10 +10,24 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  create_table "agent_credentials", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "actor", null: false
+    t.string "scopes", default: [], null: false, array: true
+    t.string "token_digest", null: false
+    t.string "purpose", null: false
+    t.string "issued_by", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "revoked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["actor", "created_at"], name: "index_agent_credentials_on_actor_and_created_at"
+    t.index ["token_digest"], name: "index_agent_credentials_on_token_digest", unique: true
+  end
 
   create_table "audit_events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "actor", null: false
@@ -26,7 +40,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_000002) do
     t.datetime "occurred_at", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.uuid "credential_id"
     t.index ["actor"], name: "index_audit_events_on_actor"
+    t.index ["credential_id"], name: "index_audit_events_on_credential_id"
     t.index ["occurred_at"], name: "index_audit_events_on_occurred_at"
     t.index ["target_type", "target_id"], name: "index_audit_events_on_target"
   end
@@ -197,6 +213,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_000002) do
     t.datetime "updated_at", null: false
   end
 
+  add_foreign_key "audit_events", "agent_credentials", column: "credential_id"
   add_foreign_key "check_runs", "companies"
   add_foreign_key "check_runs", "postings", on_delete: :nullify
   add_foreign_key "llm_calls", "page_checks"

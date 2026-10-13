@@ -21,10 +21,10 @@ RSpec.describe Verifier::Resolution do
       placeholder = create(:company, :without_domain, name: "Confidential Company")
       real = create(:company, name: "Confidence Labs")
 
-      expect(described_class.mark_anonymised!([ placeholder, real ])).to eq(1)
+      expect(as_agent("agent:verifier") { described_class.mark_anonymised!([ placeholder, real ]) }).to eq(1)
       expect(placeholder.reload).to have_attributes(resolution_status: "failed", resolution_failure: "anonymised")
       expect(real.reload.resolution_status).to be_nil
-      expect(described_class.mark_anonymised!([ placeholder ])).to eq(0)
+      expect(as_agent("agent:verifier") { described_class.mark_anonymised!([ placeholder ]) }).to eq(0)
       expect(placeholder.audit_events.sole.actor).to eq("agent:verifier")
     end
   end

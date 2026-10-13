@@ -7,7 +7,9 @@ RSpec.describe "Dashboard", type: :request do
     role = create(:posting, :verified_live, company: company, role_title: "RevOps Engineer")
     create(:posting, company: company, tracking: "dismissed")
     role.update!(verification_state: "not_found")
-    AuditEvent.record_write!(role, actor: "agent:verifier", reasoning: "None of the 12 roles on the page is it.")
+    Authority.unchecked do # history, as the agent wrote it
+      AuditEvent.record_write!(role, actor: "agent:verifier", reasoning: "None of the 12 roles on the page is it.")
+    end
     create(:llm_call, cost_usd: 0.25)
 
     get root_path
