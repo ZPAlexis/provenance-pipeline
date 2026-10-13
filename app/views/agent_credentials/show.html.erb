@@ -1,0 +1,87 @@
+<% content_for :title, "Credential · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <p class="muted small"><%= link_to "Agents", agents_path %> / Credential</p>
+    <h1><%= @credential.purpose %></h1>
+    <p class="sub">
+      Issued to the <%= actor_label(@credential.actor).downcase %> for one run. Everything it wrote is below, and anything it
+      was refused.
+    </p>
+  </div>
+  <%= credential_badge(@credential) %>
+</div>
+
+<dl class="facts">
+  <dt>Agent</dt><dd><%= actor_label(@credential.actor) %> <code class="muted"><%= @credential.actor %></code></dd>
+  <dt>Scopes</dt>
+  <dd>
+    <ul class="scopes">
+      <% @credential.scopes.each do |scope| %>
+        <li><code class="scope"><%= scope %></code> <span class="small"><%= scope_about(scope) %></span></li>
+      <% end %>
+    </ul>
+  </dd>
+  <dt>Issued</dt><dd><%= ago(@credential.created_at) %> by <%= actor_label(@credential.issued_by) %></dd>
+  <dt>Expires</dt><dd><%= @credential.expires_at.utc.strftime("%Y-%m-%d %H:%M UTC") %></dd>
+  <dt>Revoked</dt>
+  <dd>
+    <% if @credential.revoked_at %>
+      <%= ago(@credential.revoked_at) %>, <%= @revocation ? "by hand (#{actor_label(@revocation.actor)})" : "when its run ended" %>
+    <% else %>
+      <span class="muted">not yet</span>
+    <% end %>
+  </dd>
+  <dt>Token</dt><dd class="muted">Handed to its run once and never stored: only its SHA-256 digest is kept.</dd>
+</dl>
+
+<% if @credential.status == "active" %>
+  <%= form_with url: revoke_agent_credential_path(@credential), method: :patch, class: "add-form",
+                data: { turbo_confirm: "Revoke it? Its run's next write is refused." } do |form| %>
+    <label>Why <%= form.text_field :note, placeholder: "Started by mistake" %></label>
+    <%= form.submit "Revoke it", class: "btn small" %>
+  <% end %>
+<% end %>
+
+<h2>What it wrote</h2>
+<% if @wrote.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>On</th><th>Change</th><th>Why</th></tr></thead>
+      <tbody>
+        <% @wrote.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= event_subject(event) %></td>
+            <td class="nowrap"><%= change_summary(event) %></td>
+            <td class="reason"><%= event.reasoning.to_s.truncate(240) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">
+    Audited changes only: the evidence it recorded (page checks, LLM calls) and checks that confirmed an answer are under
+    each company's checks.
+  </p>
+<% else %>
+  <p class="empty">No audited change: its run confirmed what was on record, or wrote nothing.</p>
+<% end %>
+
+<% if @refused.any? %>
+  <h2>What it was refused</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>On</th><th>Tried</th><th>Why</th></tr></thead>
+      <tbody>
+        <% @refused.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= event_subject(event) %></td>
+            <td class="muted"><%= event.changes_made.keys.join(", ").presence || "—" %></td>
+            <td class="reason"><%= event.reasoning.to_s.delete_prefix("Denied: ") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
