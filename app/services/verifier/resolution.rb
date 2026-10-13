@@ -18,7 +18,9 @@ module Verifier
     end
 
     # Records anonymised companies as resolution failures. Returns how many changed.
+    # Only under the verifier's credential.
     def mark_anonymised!(companies, actor: Ingest::ACTOR)
+      Authority.require_agent!(actor)
       companies.select { |company| anonymised?(company) }.count do |company|
         ApplicationRecord.transaction do
           company.update!(resolution_status: "failed", resolution_failure: "anonymised")

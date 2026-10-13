@@ -21,8 +21,10 @@ RSpec.describe Verifier::Status do
                           listings_incomplete: true)
       create(:posting, :verified_live, company: company, role_title: "RevOps Engineer",
                                        enrichment: { "raw_verification" => "not_found" })
-      AuditEvent.record!(actor: "agent:verifier", action: "update", target: company,
-                         changes_made: { "resolution_status" => [ nil, "resolved" ] }, reasoning: "Found by path_probe.")
+      Authority.unchecked do # history, as the agent wrote it
+        AuditEvent.record!(actor: "agent:verifier", action: "update", target: company,
+                           changes_made: { "resolution_status" => [ nil, "resolved" ] }, reasoning: "Found by path_probe.")
+      end
 
       text = described_class.lines(company).join("\n")
 

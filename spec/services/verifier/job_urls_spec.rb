@@ -22,7 +22,7 @@ RSpec.describe Verifier::JobUrls do
         [ listing("Designer", "https://acme.example/jobs/2"), listing("Data Engineer", "https://acme.example/jobs/3") ],
         index: 2) # the second page's repeat of "Designer" was not counted again
 
-    expect(described_class.backfill!).to eq(1)
+    expect(as_agent("agent:verifier") { described_class.backfill! }).to eq(1)
     expect(posting.reload.job_url).to eq("https://acme.example/jobs/3")
     event = posting.audit_events.sole
     expect(event).to have_attributes(actor: "agent:verifier")
@@ -32,10 +32,10 @@ RSpec.describe Verifier::JobUrls do
   it "learns nothing when the listing has no link, the match was not live, or the index does not name its listing" do
     run([ listing("Data Engineer") ], index: 0)
     run([ listing("Data Engineer", "https://acme.example/jobs/3") ], index: 0, verdict: "not_found", run_id: "r2")
-    expect(described_class.backfill!).to eq(0)
+    expect(as_agent("agent:verifier") { described_class.backfill! }).to eq(0)
 
     run([ listing("Designer", "https://acme.example/jobs/2") ], index: 0, run_id: "r3") # reasoning names another title
-    expect(described_class.backfill!).to eq(0)
+    expect(as_agent("agent:verifier") { described_class.backfill! }).to eq(0)
     expect(posting.reload.job_url).to be_nil
   end
 
@@ -45,22 +45,22 @@ RSpec.describe Verifier::JobUrls do
     run([ listing("Data Engineer", "https://acme.example/jobs/3") ], index: 0, at: 2.days.ago, run_id: "r1")
     run([ listing("Designer", "https://acme.example/jobs/2") ], index: nil, verdict: "not_found", at: 1.day.ago, run_id: "r2")
 
-    expect(described_class.backfill!).to eq(0)
+    expect(as_agent("agent:verifier") { described_class.backfill! }).to eq(0)
   end
 
   it "learns nothing from a near-miss the LLM judged the same role" do
     run([ listing("Data Engineer II", "https://acme.example/jobs/3") ], index: 0, method: "llm", title: "Data Engineer II")
 
-    expect(described_class.backfill!).to eq(0)
+    expect(as_agent("agent:verifier") { described_class.backfill! }).to eq(0)
   end
 
   it "leaves a posting that already knows its page, or is dismissed, alone" do
     run([ listing("Data Engineer", "https://acme.example/jobs/3") ], index: 0)
     posting.update!(job_url: "https://acme.example/jobs/old")
-    expect(described_class.backfill!).to eq(0)
+    expect(as_agent("agent:verifier") { described_class.backfill! }).to eq(0)
     expect(posting.reload.job_url).to eq("https://acme.example/jobs/old")
 
     posting.update!(job_url: nil, tracking: "dismissed")
-    expect(described_class.backfill!).to eq(0)
+    expect(as_agent("agent:verifier") { described_class.backfill! }).to eq(0)
   end
 end

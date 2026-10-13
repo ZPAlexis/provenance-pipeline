@@ -10,6 +10,10 @@ module Verifier
       def finished? = stopped.nil?
     end
 
+    # What each of its runs may write (1.3): finding a careers page, and checking roles against a list.
+    FINDING = %w[companies:enrich evidence:write].freeze
+    CHECKING = %w[postings:verify evidence:write].freeze
+
     module_function
 
     # Why a role or company cannot be checked now; nil when it can.
@@ -50,8 +54,8 @@ module Verifier
 
     def role(posting, worker: Worker.new(run_dir: Worker.dir_for("check")), finder: nil)
       with_page(posting.company, finder) do
-        run = worker.run([ Targets.check(posting) ], command: "check")
-        record(run) do |result, verdicts|
+        start = -> { worker.run([ Targets.check(posting) ], command: "check") }
+        record(start, purpose: "check now: #{posting.role_title} at #{posting.company.name}") do |result, verdicts|
           verdict = verdicts.first
           [ verdict&.dig("verdict"), verdict ? verdict["reasoning"] : "The check failed (#{result['reason']}); nothing was written." ]
         end
@@ -77,16 +81,20 @@ module Verifier
     end
 
     # A company's careers page found and recorded as verifier:resolve records it,
-    # as the verifier. A low-confidence find waits for the operator; nothing found says why.
+    # as the verifier, under a credential for this one run. A low-confidence find
+    # waits for the operator; nothing found says why.
     def find_page(company, finder)
-      run = finder.run(Resolution.targets([ company ]), command: "resolve")
-      result = run.results.first
+      run, result = Authority.run(Ingest::ACTOR, scopes: FINDING, purpose: "check now: find #{company.name}'s careers page") do
+        run = finder.run(Resolution.targets([ company ]), command: "resolve")
+        result = run.results.first
+        Ingest.new(run_id: run.id).resolution(result) if result
+        [ run, result ]
+      end
       unless result
         return Outcome.new(summary: "Stopped before its careers page was found: #{run.stopped || 'no result written'}.",
                            tally: {}, cost_usd: 0.0, run_id: run.id, run_dir: run.dir, stopped: run.stopped || "no result")
       end
 
-      Ingest.new(run_id: run.id).resolution(result)
       company.reload
       summary =
         case company.resolution_status
@@ -103,8 +111,8 @@ module Verifier
     end
 
     def read_list(company, worker)
-      run = worker.run([ Targets.verify(company) ], command: "verify")
-      record(run) do |result, verdicts|
+      start = -> { worker.run([ Targets.verify(company) ], command: "verify") }
+      record(start, purpose: "check now: #{company.name}") do |result, verdicts|
         found = verdicts.map { |v| v["verdict"] || "inconclusive" }.tally
         read = result["outcome"] == "ok" ? "#{result['listing_count']} roles read#{', the whole list' if result['complete']}" : "Not read (#{result['reason']})"
         roles = found.map { |state, count| "#{count} #{Posting::ANSWER_LABELS.fetch(state, 'no answer').downcase}" }
@@ -112,15 +120,20 @@ module Verifier
       end
     end
 
-    # Records the run's one result through the write path; the block turns it into an answer and a summary.
-    def record(run)
-      result = run.results.first
+    # Starts the run and records its one result through the write path, under the
+    # verifier's credential for this run; the block turns it into an answer and a
+    # summary. The suggestions are brought up to date after, by the suggester.
+    def record(start, purpose:)
+      run, result, tally = Authority.run(Ingest::ACTOR, scopes: CHECKING, purpose: purpose) do
+        run = start.call
+        result = run.results.first
+        [ run, result, (Ingest.new(run_id: run.id).verification(result) if result) ]
+      end
       unless result
         return Outcome.new(summary: "Stopped before a result: #{run.stopped || 'no result written'}.", tally: {},
                            cost_usd: 0.0, run_id: run.id, run_dir: run.dir, stopped: run.stopped || "no result")
       end
 
-      tally = Ingest.new(run_id: run.id).verification(result)
       verdicts = Array(result["verdicts"])
       answer, summary = yield(result, verdicts)
       summary = [ summary, suggestions_after(result["target_id"], always: verdicts.empty?) ].compact.join(" ")

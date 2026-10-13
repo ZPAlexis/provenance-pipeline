@@ -18,10 +18,14 @@ namespace :clay do
 
     results =
       begin
-        if pathname.directory?
-          ClayImporter.import_dir(pathname, verified_at: verified_at)
-        else
-          [ [ pathname.basename.to_s, ClayImporter.call(pathname, slice: slice, verified_at: verified_at) ] ]
+        # The import's own credential (1.3): companies and roles from the export, never a role's tracking.
+        Authority.run(ClayImporter::ACTOR, scopes: %w[companies:import postings:import], purpose: "clay:import #{pathname.basename}",
+                                           ttl: Authority::BATCH) do
+          if pathname.directory?
+            ClayImporter.import_dir(pathname, verified_at: verified_at)
+          else
+            [ [ pathname.basename.to_s, ClayImporter.call(pathname, slice: slice, verified_at: verified_at) ] ]
+          end
         end
       rescue ClayImporter::MissingVerifiedAt => e
         abort e.message

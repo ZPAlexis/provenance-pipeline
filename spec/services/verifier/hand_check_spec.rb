@@ -22,7 +22,9 @@ RSpec.describe Verifier::HandCheck do
 
   describe ".latest_verdict" do
     it "reads the verdict the latest hand check left, even when it confirmed the one before" do
-      AuditEvent.record_write!(posting, actor: "agent:clay_importer")
+      Authority.unchecked do # history, as the agent wrote it
+        AuditEvent.record_write!(posting, actor: "agent:clay_importer")
+      end
       described_class.record!(posting, verdict: "not_found", note: "Not on the page.")
       described_class.record!(posting, verdict: "not_found", note: "Still not there.", at: 1.hour.from_now)
 
@@ -38,7 +40,9 @@ RSpec.describe Verifier::HandCheck do
     it "restores what the verifier's latest verdict replaced, audited as the operator with why" do
       pending_posting = create(:posting, verification_state: "pending")
       pending_posting.update!(verification_state: "not_found", last_checked_at: Time.utc(2026, 10, 2, 14), roles_listed_count: 0)
-      AuditEvent.record_write!(pending_posting, actor: Verifier::Ingest::ACTOR, reasoning: "Run x.")
+      Authority.unchecked do # history, as the agent wrote it
+        AuditEvent.record_write!(pending_posting, actor: Verifier::Ingest::ACTOR, reasoning: "Run x.")
+      end
 
       described_class.undo_verdict!(pending_posting, reasoning: "The portal was down for maintenance: no roles were read.")
 

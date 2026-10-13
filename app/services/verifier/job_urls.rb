@@ -6,8 +6,9 @@ module Verifier
   module JobUrls
     module_function
 
-    # Returns how many postings learned their link.
+    # Returns how many postings learned their link. Only under the verifier's credential.
     def backfill!(postings = Posting.not_dismissed.where(job_url: nil))
+      Authority.require_agent!(Ingest::ACTOR)
       postings.includes(:company).count do |posting|
         found = matched_listing(posting) or next false
         listing, check = found

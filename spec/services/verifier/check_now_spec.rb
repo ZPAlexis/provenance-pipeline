@@ -44,6 +44,11 @@ RSpec.describe Verifier::CheckNow do
                                          run_id: "20261007T120000Z-check", summary: /Its own page is up/)
       expect(outcome).to be_finished
       expect(role.reload).to have_attributes(verification_state: "verified_live", job_url: "https://acme.example/jobs/1")
+      # Written under a credential issued for this one check, with the check's scopes alone, and revoked after.
+      expect(AuditEvent.find_by!(target: role, action: "update").credential.reload).to have_attributes(
+        actor: "agent:verifier", scopes: %w[postings:verify evidence:write], purpose: "check now: RevOps Engineer at Acme",
+        status: "revoked"
+      )
     end
 
     it "has no answer when the check could not confirm, and writes no verdict" do

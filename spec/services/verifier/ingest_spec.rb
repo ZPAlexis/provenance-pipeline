@@ -1,7 +1,7 @@
 require "rails_helper"
 
 RSpec.describe Verifier::Ingest do
-  subject(:ingest) { described_class.new(run_id: "20260930T120000Z-resolve") }
+  subject(:ingest) { acting(Verifier::Ingest::ACTOR) { described_class.new(run_id: "20260930T120000Z-resolve") } }
 
   let(:company) { create(:company, name: "Acme Robotics", domain: "acme.example") }
 

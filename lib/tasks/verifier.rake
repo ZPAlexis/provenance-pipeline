@@ -112,22 +112,27 @@ namespace :verifier do
 
     # From here on the database holds writes that cannot be regenerated from source.
     puts "Backed up to #{DatabaseBackup.call}"
-    anonymised = Verifier::Resolution.mark_anonymised!(companies)
-    puts "Marked #{anonymised} anonymised compan#{anonymised == 1 ? 'y' : 'ies'} as not resolvable." if anonymised.positive?
     targets = Verifier::Resolution.targets(companies)
-    next puts("Nothing left to resolve.") if targets.empty?
-
-    puts "Resolving #{targets.size} companies, model #{ENV['MODEL'].presence || 'default'}\n\n"
-    run = build_worker.call("resolve").run(targets, command: "resolve")
-
-    ingest = Verifier::Ingest.new(run_id: run.id)
     outcomes = Hash.new(0)
     invalid = []
-    run.results.each do |result|
-      outcomes[ingest.resolution(result)] += 1
-    rescue Verifier::Ingest::InvalidResult => e
-      invalid << e.message
+    # The run's credential: careers pages and the evidence behind them, nothing else.
+    run = Authority.run(Verifier::Ingest::ACTOR, scopes: %w[companies:enrich evidence:write], purpose: "verifier:resolve",
+                                               ttl: Authority::BATCH) do
+      anonymised = Verifier::Resolution.mark_anonymised!(companies)
+      puts "Marked #{anonymised} anonymised compan#{anonymised == 1 ? 'y' : 'ies'} as not resolvable." if anonymised.positive?
+      next if targets.empty?
+
+      puts "Resolving #{targets.size} companies, model #{ENV['MODEL'].presence || 'default'}\n\n"
+      run = build_worker.call("resolve").run(targets, command: "resolve")
+      ingest = Verifier::Ingest.new(run_id: run.id)
+      run.results.each do |result|
+        outcomes[ingest.resolution(result)] += 1
+      rescue Verifier::Ingest::InvalidResult => e
+        invalid << e.message
+      end
+      run
     end
+    next puts("Nothing left to resolve.") unless run
 
     puts "\nRecorded #{run.results.size - invalid.size}/#{targets.size}: #{outcomes.sort.to_h}"
     puts "Candidates waiting for you: #{Verifier::Candidates.pending.count} (bin/rails verifier:candidates)"
@@ -467,6 +472,7 @@ namespace :verifier do
     flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
     tally = Hash.new(0)
     invalid = []
+    run = nil
     record = lambda do |results, run_id|
       ingest = Verifier::Ingest.new(run_id: run_id)
       results.each do |result|
@@ -476,9 +482,13 @@ namespace :verifier do
       end
     end
 
-    saved.group_by(&:first).each { |run_id, pairs| record.call(pairs.map(&:last), run_id) }
-    run = build_worker.call("verify").run(targets, command: "verify", flags: flags) if targets.any?
-    record.call(run.results, run.id) if run
+    # The run's credential: verdicts and the evidence behind them, nothing else.
+    Authority.run(Verifier::Ingest::ACTOR, scopes: %w[postings:verify evidence:write], purpose: "verifier:verify",
+                                         ttl: Authority::BATCH) do
+      saved.group_by(&:first).each { |run_id, pairs| record.call(pairs.map(&:last), run_id) }
+      run = build_worker.call("verify").run(targets, command: "verify", flags: flags) if targets.any?
+      record.call(run.results, run.id) if run
+    end
 
     recorded = saved.size + (run ? run.results.size : 0) - invalid.size
     puts "\nRecorded #{recorded}/#{saved.size + targets.size} companies: " \
@@ -507,15 +517,20 @@ namespace :verifier do
 
     puts "Looking for boards for #{targets.size} companies whose pages the LLM read (no API cost)."
     puts "Backed up to #{DatabaseBackup.call}\n\n"
-    run = build_worker.call("find_boards").run(targets, command: "boards")
-    ingest = Verifier::Ingest.new(run_id: run.id)
     names = Company.where(id: targets.pluck(:id)).pluck(:id, :name).to_h
     tally = Hash.new(0)
-    run.results.each do |result|
-      tally[ingest.board(result)] += 1
-      puts "  #{names[result['target_id']]}: #{result['outcome']}, #{result['evidence'] || result['reason']}"
-    rescue Verifier::Ingest::InvalidResult => e
-      puts "  NOT RECORDED, breaks the result contract: #{e.message}"
+    # The run's credential: the boards recorded on companies, nothing else.
+    run = Authority.run(Verifier::Ingest::ACTOR, scopes: %w[companies:enrich], purpose: "verifier:find_boards",
+                                               ttl: Authority::BATCH) do
+      run = build_worker.call("find_boards").run(targets, command: "boards")
+      ingest = Verifier::Ingest.new(run_id: run.id)
+      run.results.each do |result|
+        tally[ingest.board(result)] += 1
+        puts "  #{names[result['target_id']]}: #{result['outcome']}, #{result['evidence'] || result['reason']}"
+      rescue Verifier::Ingest::InvalidResult => e
+        puts "  NOT RECORDED, breaks the result contract: #{e.message}"
+      end
+      run
     end
     puts "\n#{tally['adopted']} boards read in place of their pages from now on; #{tally['rejected']} found but not " \
          "listing the same roles; #{tally['none']} companies with no board found.   (details: #{run.dir})"
@@ -572,7 +587,8 @@ namespace :verifier do
        "backs up first."
   task backfill_job_urls: :environment do
     puts "Backed up to #{DatabaseBackup.call}"
-    learned = Verifier::JobUrls.backfill!
+    learned = Authority.run(Verifier::Ingest::ACTOR, scopes: %w[postings:verify], purpose: "verifier:backfill_job_urls",
+                                                   ttl: Authority::BATCH) { Verifier::JobUrls.backfill! }
     remaining = Posting.not_dismissed.where(job_url: nil).count
     puts "#{learned} postings learned their own page; #{remaining} have none yet " \
          "(never matched live, or the listing they matched had no link)."

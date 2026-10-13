@@ -21,7 +21,9 @@ module Verifier
 
     class InvalidResult < StandardError; end
 
+    # Only under the verifier's credential (1.3): what it may write is that credential's scopes.
     def initialize(run_id:)
+      Authority.require_agent!(ACTOR)
       @run_id = run_id
     end
 

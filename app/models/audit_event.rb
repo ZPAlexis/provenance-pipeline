@@ -1,5 +1,7 @@
 class AuditEvent < ApplicationRecord
   belongs_to :target, polymorphic: true, optional: true
+  # The credential an agent wrote under (1.3); none for the operator or a system grant.
+  belongs_to :credential, class_name: "AgentCredential", optional: true, inverse_of: :audit_events
 
   validates :actor, presence: true
   validates :action, presence: true
@@ -13,10 +15,12 @@ class AuditEvent < ApplicationRecord
   # The target reference already carries the id, and occurred_at the time.
   UNTRACKED_ATTRIBUTES = %w[id created_at updated_at].freeze
 
-  # The one human operator, until 1.3 gives every actor a credential.
+  # The one human operator. Their writes need no credential until a login exists (1.4).
   OPERATOR = "human:operator".freeze
 
-  # Every write to the system records who made it, what changed, and why.
+  scope :denied, -> { where(action: "denied") }
+
+  # Every write to the system records who made it, under which credential, what changed, and why.
   def self.record!(actor:, action:, target: nil, changes_made: {}, model_version: nil, reasoning: nil)
     create!(
       actor: actor,
@@ -25,6 +29,7 @@ class AuditEvent < ApplicationRecord
       changes_made: changes_made,
       model_version: model_version,
       reasoning: reasoning,
+      credential: Authority.credential,
       occurred_at: Time.current
     )
   end

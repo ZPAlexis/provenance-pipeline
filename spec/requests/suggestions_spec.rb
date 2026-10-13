@@ -59,7 +59,9 @@ RSpec.describe "Suggestions", type: :request do
 
     it "explains a suggestion withdrawn since its page was opened" do
       role = create(:posting, company: company, role_title: "Solutions Engineer", tracking: "suggested")
-      AuditEvent.record_destroy!(role, actor: "agent:suggester", reasoning: "Withdrawn: it is no longer listed.")
+      Authority.unchecked do # history, as the agent wrote it
+        AuditEvent.record_destroy!(role, actor: "agent:suggester", reasoning: "Withdrawn: it is no longer listed.")
+      end
       role.destroy!
 
       get role_path(role.id)

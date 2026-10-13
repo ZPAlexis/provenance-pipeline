@@ -4,6 +4,8 @@ require "rails_helper"
 # Clay exports byte for byte: no BOM, CRLF, non-empty fields quoted, and the
 # leading "search" column Clay prepends. Real exports are never committed.
 RSpec.describe ClayImporter do
+  let(:importer) { acting(ClayImporter::ACTOR) { described_class } }
+
   let(:sourcing_csv) { file_fixture("clay/GTM-Testland-export-1000000000001.csv") }
   let(:research_csv) { file_fixture("clay/GTM-Researchland-export-1000000000002.csv") }
 
@@ -16,7 +18,7 @@ RSpec.describe ClayImporter do
   end
 
   describe "a 7-column sourcing export" do
-    subject(:result) { described_class.call(sourcing_csv) }
+    subject(:result) { importer.call(sourcing_csv) }
 
     it "reports what it did" do
       expect(result).to have_attributes(
@@ -85,19 +87,19 @@ RSpec.describe ClayImporter do
     end
 
     context "when imported a second time" do
-      before { described_class.call(sourcing_csv) }
+      before { importer.call(sourcing_csv) }
 
       it "creates no duplicate records" do
-        expect { described_class.call(sourcing_csv) }
+        expect { importer.call(sourcing_csv) }
           .to not_change(Company, :count).and not_change(Posting, :count)
       end
 
       it "skips every posting it already has" do
-        expect(described_class.call(sourcing_csv).postings_skipped).to eq(4)
+        expect(importer.call(sourcing_csv).postings_skipped).to eq(4)
       end
 
       it "writes nothing to the audit log" do
-        expect { described_class.call(sourcing_csv) }.not_to change(AuditEvent, :count)
+        expect { importer.call(sourcing_csv) }.not_to change(AuditEvent, :count)
       end
     end
 
@@ -110,7 +112,7 @@ RSpec.describe ClayImporter do
   end
 
   describe "a 28-column research-enriched export" do
-    subject(:result) { described_class.call(research_csv, verified_at: "2026-09-22") }
+    subject(:result) { importer.call(research_csv, verified_at: "2026-09-22") }
 
     it "reports what it did" do
       expect(result).to have_attributes(
@@ -249,7 +251,7 @@ RSpec.describe ClayImporter do
     # flip the company between their answers and log churn as real changes.
     it "writes nothing to the audit log when imported a second time" do
       result
-      expect { described_class.call(research_csv, verified_at: "2026-09-22") }.not_to change(AuditEvent, :count)
+      expect { importer.call(research_csv, verified_at: "2026-09-22") }.not_to change(AuditEvent, :count)
     end
   end
 
@@ -262,47 +264,47 @@ RSpec.describe ClayImporter do
     end
 
     it "stamps each recognized verdict with the supplied date, at noon UTC so the calendar day never shifts" do
-      described_class.call(research_csv, verified_at: "2026-09-22")
+      importer.call(research_csv, verified_at: "2026-09-22")
 
       expect(posting_for("Senior RevOps Engineer").last_checked_at).to eq(Time.utc(2026, 9, 22, 12))
       expect(posting_for("Data Engineer").last_checked_at).to be_nil
     end
 
     it "keeps a full timestamp as given" do
-      described_class.call(research_csv, verified_at: "2026-09-22T15:30:00Z")
+      importer.call(research_csv, verified_at: "2026-09-22T15:30:00Z")
       expect(posting_for("GTM Engineer").last_checked_at).to eq(Time.utc(2026, 9, 22, 15, 30))
     end
 
     it "does not count an unrecognized verdict as a check" do
-      described_class.call(research_csv, verified_at: "2026-09-22")
+      importer.call(research_csv, verified_at: "2026-09-22")
       expect(posting_for("Systems Analyst")).to have_attributes(verification_state: "pending", last_checked_at: nil)
     end
 
     it "says in the create event that the operator supplied the date, and at day precision" do
-      described_class.call(research_csv, verified_at: "2026-09-22")
+      importer.call(research_csv, verified_at: "2026-09-22")
       expect(reasoning_for("GTM Engineer")).to include("VERIFIED_AT", "operator", "2026-09-22", "day precision")
     end
 
     it "does not call an operator-supplied full timestamp day precision" do
-      described_class.call(research_csv, verified_at: "2026-09-22T15:30:00Z")
+      importer.call(research_csv, verified_at: "2026-09-22T15:30:00Z")
 
       expect(reasoning_for("GTM Engineer")).to include("VERIFIED_AT", "2026-09-22T15:30:00Z")
       expect(reasoning_for("GTM Engineer")).not_to include("day precision")
     end
 
     it "adds no date note to a posting without a verdict" do
-      described_class.call(research_csv, verified_at: "2026-09-22")
+      importer.call(research_csv, verified_at: "2026-09-22")
       expect(reasoning_for("Data Engineer")).not_to include("VERIFIED_AT")
     end
 
     it "refuses an export with verdicts when no date is supplied, before writing anything" do
-      expect { described_class.call(research_csv) }
+      expect { importer.call(research_csv) }
         .to raise_error(described_class::MissingVerifiedAt, /GTM-Researchland-export-1000000000002\.csv.*VERIFIED_AT/)
       expect([ Company.count, Posting.count, AuditEvent.count ]).to eq([ 0, 0, 0 ])
     end
 
     it "needs no date for an export without verdicts" do
-      expect(described_class.call(sourcing_csv).errors).to be_empty
+      expect(importer.call(sourcing_csv).errors).to be_empty
     end
 
     it "needs no date when an export's only verdicts are unrecognized" do
@@ -311,7 +313,7 @@ RSpec.describe ClayImporter do
         path = File.join(dir, "GTM-Researchland-export-1.csv")
         File.write(path, header + rows.grep(/umbrella\.example/).join)
 
-        expect(described_class.call(path).errors).to be_empty
+        expect(importer.call(path).errors).to be_empty
       end
       expect(posting_for("Systems Analyst").last_checked_at).to be_nil
     end
@@ -321,22 +323,22 @@ RSpec.describe ClayImporter do
         FileUtils.cp(sourcing_csv, File.join(dir, "GTM-Alpha-export-1.csv"))
         FileUtils.cp(research_csv, File.join(dir, "GTM-Beta-export-2.csv"))
 
-        expect { described_class.import_dir(dir) }.to raise_error(described_class::MissingVerifiedAt)
+        expect { importer.import_dir(dir) }.to raise_error(described_class::MissingVerifiedAt)
       end
       expect(Posting.count).to eq(0)
     end
 
     it "rejects a date that is not ISO 8601" do
-      expect { described_class.call(research_csv, verified_at: "last tuesday") }.to raise_error(ArgumentError)
+      expect { importer.call(research_csv, verified_at: "last tuesday") }.to raise_error(ArgumentError)
     end
   end
 
   describe "importing sourcing and research pulls that overlap" do
     it "fills in a careers page for a company first seen without one, and records it" do
-      described_class.call(sourcing_csv)
+      importer.call(sourcing_csv)
       expect(company_at("acme.example").careers_page_url).to be_nil
 
-      result = described_class.call(research_csv, verified_at: "2026-09-22")
+      result = importer.call(research_csv, verified_at: "2026-09-22")
       update = AuditEvent.find_by!(target: company_at("acme.example"), action: "update")
 
       expect(result).to have_attributes(companies_created: 7, companies_matched: 2)
@@ -350,9 +352,9 @@ RSpec.describe ClayImporter do
   describe "a research run over postings imported earlier" do
     let(:research_run) { file_fixture("clay/enrichment-runs/GTM-Testland-Default-view-export-1000000000003.csv") }
 
-    before { described_class.call(sourcing_csv) }
+    before { importer.call(sourcing_csv) }
 
-    subject(:result) { described_class.call(research_run, verified_at: "2026-09-30") }
+    subject(:result) { importer.call(research_run, verified_at: "2026-09-30") }
 
     it "reports what it did" do
       expect(result).to have_attributes(
@@ -426,9 +428,9 @@ RSpec.describe ClayImporter do
     it "writes nothing when imported a second time" do
       result
 
-      second = described_class.call(research_run, verified_at: "2026-09-30")
+      second = importer.call(research_run, verified_at: "2026-09-30")
       expect(second).to have_attributes(postings_researched: 0, postings_skipped: 5)
-      expect { described_class.call(research_run, verified_at: "2026-09-30") }.not_to change(AuditEvent, :count)
+      expect { importer.call(research_run, verified_at: "2026-09-30") }.not_to change(AuditEvent, :count)
     end
 
     # A posting takes research once. A later run is a second opinion, not a
@@ -440,7 +442,7 @@ RSpec.describe ClayImporter do
         path = File.join(dir, "GTM-Testland-Default-view-export-2.csv")
         File.write(path, File.read(research_run).sub("probably_live", "verified_live"))
 
-        expect(described_class.call(path, verified_at: "2026-10-01").postings_researched).to eq(0)
+        expect(importer.call(path, verified_at: "2026-10-01").postings_researched).to eq(0)
       end
       expect(posting_for("GTM Systems Analyst")).to have_attributes(verification_state: "pending", last_checked_at: nil)
     end
@@ -449,7 +451,7 @@ RSpec.describe ClayImporter do
   it "never overwrites a posting that already has a check" do
     checked = create(:posting, :credible_negative, posting_url: "https://jobs.example/postings/103")
 
-    described_class.call(
+    importer.call(
       file_fixture("clay/enrichment-runs/GTM-Testland-Default-view-export-1000000000003.csv"), verified_at: "2026-09-30"
     )
 
@@ -468,7 +470,7 @@ RSpec.describe ClayImporter do
     end
 
     it "is reported with its row number while the rest of the file imports" do
-      result = described_class.call(sourcing_csv)
+      result = importer.call(sourcing_csv)
 
       expect(result.errors).to eq([ { row: 4, error: "simulated failure" } ])
       expect(result.postings_created).to eq(3)
@@ -477,7 +479,7 @@ RSpec.describe ClayImporter do
     # Rows are atomic: a failed posting must not leave behind the company it
     # created, or an audit event for a write that was rolled back.
     it "writes nothing at all for that row" do
-      result = described_class.call(sourcing_csv)
+      result = importer.call(sourcing_csv)
 
       expect(Company.where(name: "Nameless Co")).to be_empty
       expect(AuditEvent.count).to eq(2 + 3)
@@ -490,21 +492,21 @@ RSpec.describe ClayImporter do
       Dir.mktmpdir do |dir|
         path = File.join(dir, "Testland.csv")
         FileUtils.cp(sourcing_csv, path)
-        described_class.call(path)
+        importer.call(path)
       end
 
       expect(Posting.distinct.pluck(:source_slice)).to eq([ "testland" ])
     end
 
     it "can be named outright, for a table whose filename does not end in it" do
-      described_class.call(sourcing_csv, slice: "elsewhere")
+      importer.call(sourcing_csv, slice: "elsewhere")
       expect(Posting.distinct.pluck(:source_slice)).to eq([ "elsewhere" ])
     end
   end
 
   describe ".import_dir" do
     it "imports every CSV in the directory in filename order" do
-      results = described_class.import_dir(file_fixture("clay"), verified_at: "2026-09-22")
+      results = importer.import_dir(file_fixture("clay"), verified_at: "2026-09-22")
 
       expect(results.map(&:first)).to eq(%w[
         GTM-Researchland-export-1000000000002.csv

@@ -8,14 +8,14 @@ RSpec.describe ReviewQueue do
   describe "a careers page found at low confidence" do
     let(:company) { create(:company, :resolution_candidate, name: "Acme", domain: "acme.example") }
 
-    it "is raised by the verifier with what was seen, and closed as the operator's when they confirm it" do
+    it "is raised from the verifier's evidence by the queue's own grant, and closed as the operator's when they confirm it" do
       described_class.sync!(company)
 
       item = company.review_items.open.sole
       expect(item).to have_attributes(kind: "careers_page_candidate", proposal: "confirm", raised_by: "agent:verifier",
                                       evidence_key: "https://acme.example/join")
       expect(item.evidence).to start_with("Found by llm_link at low confidence: https://acme.example/join.")
-      expect(AuditEvent.find_by!(target: item)).to have_attributes(actor: "agent:verifier", action: "create")
+      expect(AuditEvent.find_by!(target: item)).to have_attributes(actor: "system:review_queue", action: "create", credential: nil)
 
       Verifier::Candidates.confirm!(company)
 
@@ -90,7 +90,9 @@ RSpec.describe ReviewQueue do
   describe "a role's answer" do
     it "is suspect when no longer listed came from a read that saw no roles, until the operator checks it by hand" do
       posting = create(:posting, :suspect_negative, company: company, role_title: "Sales Engineer")
-      AuditEvent.record!(actor: "agent:verifier", action: "update", target: posting, changes_made: { "last_checked_at" => [ nil, 1 ] })
+      Authority.unchecked do # history, as the agent wrote it
+        AuditEvent.record!(actor: "agent:verifier", action: "update", target: posting, changes_made: { "last_checked_at" => [ nil, 1 ] })
+      end
 
       described_class.sync!(company)
       item = company.review_items.open.sole
@@ -173,7 +175,7 @@ RSpec.describe ReviewQueue do
     result = { "kind" => "resolution", "target_id" => candidate.id, "outcome" => "candidate", "method" => "llm_link",
                "confidence" => "low", "careers_page_url" => "https://beta.example/careers", "checks" => [] }
 
-    Verifier::Ingest.new(run_id: "r1").resolution(result)
+    acting(Verifier::Ingest::ACTOR) { Verifier::Ingest.new(run_id: "r1") }.resolution(result)
 
     expect(candidate.review_items.open.sole).to have_attributes(kind: "careers_page_candidate")
   end
