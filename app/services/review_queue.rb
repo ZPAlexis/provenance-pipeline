@@ -39,6 +39,49 @@ module ReviewQueue
     end
   end
 
+  DECISIONS = %w[confirm reject set_page set_kind find_again check_again still_listed no_longer_listed undo leave].freeze
+  DONE = {
+    "confirm" => "Confirmed: its careers page is watched. Check it now to read its roles.",
+    "reject" => "Rejected: set the right page by hand if you know it.",
+    "set_page" => "Set: its careers page is watched. Check it now to read its roles.",
+    "set_kind" => "Its kind is set.",
+    "still_listed" => "Recorded: still listed, as you saw it.",
+    "no_longer_listed" => "Recorded: no longer listed, as you saw it.",
+    "undo" => "The verdict is undone.",
+    "leave" => "Left as is: it comes back only if what was seen changes."
+  }.freeze
+
+  # Carries out the operator's decision on an open item, through the service that
+  # makes that write; returns what was done, in a sentence. Shared by the Review
+  # page and review:decide. `check` runs a check asked for from the queue (in the
+  # background from the page, in the foreground from the command line): the item
+  # stays open, and closes if the check settles it.
+  def act!(item, decision, check:, note: nil, url: nil, kind: nil)
+    raise ArgumentError, "that item is already decided." unless item.status == "open"
+    raise ArgumentError, "unknown decision #{decision.inspect}: one of #{DECISIONS.join(', ')}" unless DECISIONS.include?(decision)
+
+    company, role, note = item.company, item.subject, note.to_s.strip.presence
+    if %w[find_again check_again].include?(decision)
+      record = decision == "find_again" ? company : role or raise ArgumentError, "the role asked about is no longer on record"
+      why = Verifier::CheckNow.refusal(record) and raise ArgumentError, why
+      said = check.call(record)
+      return said.is_a?(String) ? said : "Checking it now, in the background. The item closes if the check settles it."
+    end
+
+    decide!(item, decision, note: note) do
+      case decision
+      when "confirm" then Verifier::Candidates.confirm!(company)
+      when "reject" then Verifier::Candidates.reject!(company)
+      when "set_page" then Verifier::Candidates.set_page!(company, url.to_s.strip, reasoning: note)
+      when "set_kind" then Verifier::Candidates.set_kind!(company, kind.to_s, reasoning: note)
+      when "still_listed", "no_longer_listed"
+        Verifier::HandCheck.record!(role, verdict: decision == "still_listed" ? "verified_live" : "not_found", note: note)
+      when "undo" then Verifier::HandCheck.undo_verdict!(role, reasoning: note)
+      end
+    end
+    DONE.fetch(decision)
+  end
+
   # The operator's decision on an item, carried out by the block through the
   # services every such write goes through. The item closes with the decision in
   # the same transaction: a write that fails leaves it open. "leave" closes it as
