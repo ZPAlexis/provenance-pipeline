@@ -65,7 +65,7 @@ module ReviewQueue
       record = decision == "find_again" ? company : role or raise ArgumentError, "the role asked about is no longer on record"
       why = Verifier::CheckNow.refusal(record) and raise ArgumentError, why
       said = check.call(record)
-      return said.is_a?(String) ? said : "Checking it now, in the background. The item closes if the check settles it."
+      return said.is_a?(String) ? said : "Checking it now, in the background: the item shows how it goes, and closes if the check settles it."
     end
 
     decide!(item, decision, note: note) do

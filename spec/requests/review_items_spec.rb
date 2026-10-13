@@ -15,6 +15,17 @@ RSpec.describe "Review", type: :request do
     expect(response.body).to include("Nothing to review of this kind.")
   end
 
+  it "names the company and the role an item is about at its top, each linked to its page" do
+    company = create(:company, :resolved, name: "Acme", domain: "acme.example")
+    role = create(:posting, company: company, role_title: "Sales Engineer", verification_state: "inaccessible", last_checked_at: 1.day.ago)
+    ReviewQueue.sync!(company)
+
+    get review_path
+
+    head = response.body[/<div class="review-head">.*?<\/div>/m]
+    expect(head).to include(%(href="#{company_path(company)}"), ">Acme</a>", %(href="#{role_path(role)}"), ">Sales Engineer</a>")
+  end
+
   it "shows how many are waiting on the dashboard" do
     company = create(:company, resolution_status: "failed", resolution_failure: "blocked")
     ReviewQueue.sync!(company)
@@ -94,6 +105,22 @@ RSpec.describe "Deciding a review item", type: :request do
 
     expect(item.reload.status).to eq("open")
     expect(flash[:notice]).to start_with("Checking it now")
+
+    # The item follows its check, and says when it ends whether the check settled it.
+    run = company.check_runs.sole
+    get review_path
+    expect(response.body).to include("Waiting for the check before it to finish", "review_item_id=#{item.id}")
+
+    run.update!(status: "done", finished_at: Time.current, summary: "No careers page found (not_found).")
+    get check_run_path(run, poll: 1, review_item_id: item.id)
+    expect(response.body).to include("The check didn't settle it: the item is still open.")
+    expect(response.body).not_to include('data-controller="refresh"')
+
+    company.update!(careers_page_url: "https://acme.example/careers", resolution_status: "resolved", resolution_failure: nil,
+                    resolution_method: "path_probe", resolution_confidence: "high", resolved_at: Time.current)
+    ReviewQueue.sync!(company)
+    get check_run_path(run, poll: 1, review_item_id: item.id)
+    expect(response.body).to include("The check settled it: this item is closed.")
   end
 
   it "refuses an item already decided, and a decision it does not know" do

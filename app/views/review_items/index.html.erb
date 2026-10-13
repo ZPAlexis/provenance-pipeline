@@ -1,4 +1,7 @@
 <% content_for :title, "Review · Provenance Pipeline" %>
+<%# A decision redirects back here: keep the operator's place in the list, and the notice in view. %>
+<% turbo_refreshes_with method: :replace, scroll: :preserve %>
+<% content_for :floating_flash, true %>
 <div class="page-head">
   <div>
     <h1>To review</h1>
@@ -26,19 +29,24 @@
       <li class="review-item" id="<%= dom_id(item) %>">
         <div class="review-head">
           <span class="badge"><%= review_kind_label(item.kind) %></span>
-          <strong><%= review_question(item) %></strong>
+          <%= review_subject_links(item) %>
         </div>
+        <p class="review-question"><strong><%= review_question(item) %></strong></p>
         <p class="small"><%= item.evidence %></p>
         <p class="small">
           <span class="muted">Proposed:</span> <%= review_proposal(item) %>
           · <span class="muted">Raised by <%= actor_label(item.raised_by) %> <%= ago(item.created_at) %></span>
-          · <%= review_subject_link(item) %>
         </p>
-        <details class="guidance">
-          <summary class="muted small">What to check</summary>
-          <p class="small"><%= review_guidance(item) %></p>
-        </details>
-        <%= render "actions", item: item %>
+        <% if (run = @runs[item.id]) %>
+          <%= render "check_runs/run", run: run, poll: false, item: item %>
+        <% end %>
+        <div class="review-actions">
+          <details class="guidance">
+            <summary class="muted small">What to check</summary>
+            <p class="small"><%= review_guidance(item) %></p>
+          </details>
+          <%= render "actions", item: item %>
+        </div>
       </li>
     <% end %>
   </ol>
