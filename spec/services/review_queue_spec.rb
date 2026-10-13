@@ -139,6 +139,27 @@ RSpec.describe ReviewQueue do
     expect(AuditEvent.where(target: item).pluck(:reasoning)).to include("Restated what was seen.")
   end
 
+  describe ".act!, shared by the Review page and review:decide" do
+    let(:missing) { create(:company, resolution_status: "failed", resolution_failure: "not_found") }
+    let(:item) { described_class.sync!(missing) && missing.review_items.open.sole }
+
+    it "hands a check to whoever runs it, saying what it said, and leaves the item to the check" do
+      checked = []
+      said = described_class.act!(item, "find_again", check: ->(record) { checked << record && "Found it." })
+
+      expect([ checked, said, item.reload.status ]).to eq([ [ missing ], "Found it.", "open" ])
+    end
+
+    it "closes the item with a decision carried out, and refuses one it doesn't know or an item already decided" do
+      expect { described_class.act!(item, "shrug", check: nil) }.to raise_error(ArgumentError, /unknown decision/)
+
+      expect(described_class.act!(item, "leave", note: "Hires through agencies.", check: nil)).to eq(ReviewQueue::DONE["leave"])
+      expect(item.reload).to have_attributes(status: "left", decision: "leave", decided_by: "human:operator")
+
+      expect { described_class.act!(item, "leave", note: "Again.", check: nil) }.to raise_error(ArgumentError, /already decided/)
+    end
+  end
+
   it "never raises the same question twice" do
     company.update!(kind_suggestion: "recruiter")
 
