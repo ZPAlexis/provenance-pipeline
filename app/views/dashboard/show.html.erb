@@ -106,7 +106,7 @@
             <td><%= role ? link_to(role.role_title, role_path(role)) : tag.span("deleted role", class: "muted") %></td>
             <td><%= link_to(role.company.name, company_path(role.company)) if role %></td>
             <td class="nowrap"><%= change_summary(event) %></td>
-            <td><%= actor_label(event.actor) %></td>
+            <td><%= actor_cell(event) %></td>
             <td class="reason"><%= event.reasoning.to_s.truncate(180) %></td>
           </tr>
         <% end %>

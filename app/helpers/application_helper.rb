@@ -85,7 +85,9 @@ module ApplicationHelper
   # What an audit event changed, in words: a verdict, the watch list, or the fields it set.
   def change_summary(event)
     changes = event.changes_made
-    if event.action == "destroy"
+    if event.action == "denied"
+      safe_join([ tag.span("Refused", class: "badge gone"), (" #{changes.keys.join(', ')}" if changes.any?) ])
+    elsif event.action == "destroy"
       changes.dig("tracking", 0) == "suggested" ? "withdrawn" : "deleted"
     elsif event.action == "create" && changes.dig("tracking", 1) == "suggested"
       "suggested"
@@ -100,6 +102,15 @@ module ApplicationHelper
     else
       event.action == "create" ? "created" : changes.keys.join(", ")
     end
+  end
+
+  # Who wrote it, and the credential its run held when an agent did (1.3).
+  def actor_cell(event)
+    label = actor_label(event.actor)
+    return label unless event.credential
+
+    safe_join([ label, tag.div(link_to("its credential", agent_credential_path(event.credential), title: event.credential.purpose),
+                               class: "small") ])
   end
 
   def nav_link(label, path, current:)

@@ -119,7 +119,7 @@
         <% @events.each do |event| %>
           <tr>
             <td><%= ago(event.occurred_at) %></td>
-            <td><%= actor_label(event.actor) %></td>
+            <td><%= actor_cell(event) %></td>
             <td class="muted"><%= event.changes_made.keys.join(", ") %></td>
             <td class="reason"><%= event.reasoning.to_s.truncate(240) %></td>
           </tr>

@@ -6,6 +6,9 @@
   <%= nav_link "Profile", profile_path, current: controller_name == "profiles" %>
   <% waiting = review_open_count %>
   <%= nav_link waiting.positive? ? "Review (#{waiting})" : "Review", review_path, current: controller_name == "review_items" %>
+  <% refused = agents_refused_recently %>
+  <%= nav_link refused.positive? ? "Agents (#{refused} refused)" : "Agents", agents_path,
+               current: %w[agents agent_credentials].include?(controller_name) %>
   <span class="spacer"></span>
   <%= nav_link "About", about_path, current: controller_name == "pages" %>
 </nav>

@@ -31,8 +31,19 @@ class AgentCredential < ApplicationRecord
 
   def credential = self
 
+  # Revoked when its run ends (not audited: the run's own end).
   def revoke!
     update!(revoked_at: Time.current) unless revoked_at
+  end
+
+  # Revoked by a person while it can still be used: audited as theirs. Its run's next write is refused.
+  def revoke_by!(actor, note: nil)
+    raise ArgumentError, "it is already #{status}" unless status == "active"
+
+    transaction do
+      revoke!
+      AuditEvent.record_write!(self, actor: actor, reasoning: [ "Revoked by hand: its run's next write is refused.", note.presence ].compact.join(" "))
+    end
   end
 
   # Why it can't be used now, from the database (a revocation made elsewhere

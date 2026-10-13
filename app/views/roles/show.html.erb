@@ -51,7 +51,7 @@
         <tr>
           <td><%= ago(event.occurred_at) %></td>
           <td class="nowrap"><%= change_summary(event) %></td>
-          <td><%= actor_label(event.actor) %></td>
+          <td><%= actor_cell(event) %></td>
           <td class="reason"><%= event.reasoning %></td>
         </tr>
       <% end %>

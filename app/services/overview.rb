@@ -25,7 +25,7 @@ module Overview
   # The latest verdicts that changed, newest first: the verifier's and the operator's.
   def recent_changes(limit = RECENT_CHANGES)
     AuditEvent.where(target_type: "Posting", action: "update").where("changes_made ? 'verification_state'")
-              .order(occurred_at: :desc).limit(limit).preload(target: :company)
+              .order(occurred_at: :desc).limit(limit).preload(:credential, target: :company)
   end
 
   def companies

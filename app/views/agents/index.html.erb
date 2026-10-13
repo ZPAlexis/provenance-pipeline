@@ -1,0 +1,111 @@
+<% content_for :title, "Agents · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Agents</h1>
+    <p class="sub">
+      Who may write what. Every agent run holds a credential issued for that run, with only the scopes it needs, and
+      every write it makes is checked against it. A write no scope allows is refused, and the refusal is on the record.
+    </p>
+  </div>
+</div>
+
+<div class="agents">
+  <% Authority::AGENTS.each do |actor, agent| %>
+    <section class="agent">
+      <div class="agent-head"><strong><%= actor_label(actor) %></strong> <code class="muted"><%= actor %></code></div>
+      <p class="small"><%= agent[:about] %></p>
+      <ul class="scopes">
+        <% agent[:scopes].each do |scope| %>
+          <li><code class="scope"><%= scope %></code> <span class="small"><%= scope_about(scope) %></span></li>
+        <% end %>
+      </ul>
+      <p class="muted small">
+        Last run <%= ago(@last_issued[actor]) %> · <%= pluralize(@issued.fetch(actor, 0), "credential") %> issued ·
+        <%= pluralize(@writes.fetch(actor, 0), "write") %> in 30 days<% if @refusals[actor].to_i.positive? %>,
+          <strong class="refused"><%= @refusals[actor] %> refused</strong><% end %>
+      </p>
+    </section>
+  <% end %>
+
+  <% Authority::SYSTEM.each_value do |grant| %>
+    <section class="agent">
+      <div class="agent-head"><strong><%= actor_label(grant.actor) %></strong> <code class="muted"><%= grant.actor %></code></div>
+      <p class="small"><%= grant.about %> A grant fixed in code, never a token: its writes are checked like an agent's.</p>
+      <ul class="scopes">
+        <% grant.scopes.each do |scope| %>
+          <li><code class="scope"><%= scope %></code> <span class="small"><%= scope_about(scope) %></span></li>
+        <% end %>
+      </ul>
+      <p class="muted small"><%= pluralize(@writes.fetch(grant.actor, 0), "write") %> in 30 days</p>
+    </section>
+  <% end %>
+
+  <section class="agent human">
+    <div class="agent-head"><strong>Yours alone</strong></div>
+    <p class="small">No scope allows these, whatever an agent holds. Your own writes need no credential until the app has a login.</p>
+    <ul class="scopes">
+      <% Authority::HUMAN_ONLY.each do |write| %>
+        <li class="small"><%= write %></li>
+      <% end %>
+    </ul>
+  </section>
+</div>
+
+<h2>Credentials</h2>
+<nav class="tabs">
+  <%= link_to agents_path, class: ("current" unless @actor) do %>
+    All <span class="count"><%= @issued.values.sum %></span>
+  <% end %>
+  <% Authority::AGENTS.each_key do |actor| %>
+    <%= link_to agents_path(actor: actor), class: ("current" if actor == @actor) do %>
+      <%= actor_label(actor) %> <span class="count"><%= @issued.fetch(actor, 0) %></span>
+    <% end %>
+  <% end %>
+</nav>
+<% if @credentials.any? %>
+  <p class="muted small">The latest <%= AgentsController::RECENT %>. Each is revoked when its run ends, and expires anyway after its run's limit.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Issued</th><th>Agent</th><th>For</th><th>Scopes</th><th>State</th><th class="num">Wrote</th><th class="num">Refused</th></tr>
+      </thead>
+      <tbody>
+        <% @credentials.each do |credential| %>
+          <tr>
+            <td><%= ago(credential.created_at) %></td>
+            <td><%= actor_label(credential.actor) %></td>
+            <td><%= link_to credential.purpose, agent_credential_path(credential) %></td>
+            <td><%= scope_chips(credential.scopes) %></td>
+            <td><%= credential_badge(credential) %></td>
+            <td class="num"><%= @wrote.fetch(credential.id, 0) %></td>
+            <td class="num"><%= (refused = @refused.fetch(credential.id, 0)).positive? ? tag.strong(refused, class: "refused") : 0 %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">No credential issued yet<%= " to the #{actor_label(@actor).downcase}" if @actor %>: one is issued with each run.</p>
+<% end %>
+
+<h2>Refused writes</h2>
+<% if @denied.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>By</th><th>On</th><th>Tried</th><th>Why</th></tr></thead>
+      <tbody>
+        <% @denied.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= actor_cell(event) %></td>
+            <td><%= event_subject(event) %></td>
+            <td class="muted"><%= event.changes_made.keys.join(", ").presence || "—" %></td>
+            <td class="reason"><%= event.reasoning.to_s.delete_prefix("Denied: ") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">None refused: every agent write so far was one its credential allows.</p>
+<% end %>

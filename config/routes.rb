@@ -31,5 +31,9 @@ Rails.application.routes.draw do
   resources :review_items, only: [] do
     patch :decide, on: :member
   end
+  get "agents", to: "agents#index", as: :agents
+  resources :agent_credentials, only: :show, path: "agents/credentials" do
+    patch :revoke, on: :member
+  end
   get "about", to: "pages#about"
 end
