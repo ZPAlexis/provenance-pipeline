@@ -2,11 +2,15 @@
 # (ReviewQueue), and the operator's decisions on it, each carried out through the
 # service that makes that write, audited as theirs.
 class ReviewItemsController < ApplicationController
+  # The kinds whose items offer a check, and what is checked: the company, or the role asked about.
+  CHECKED = { "no_careers_page" => "company", "suspect_verdict" => "role", "unconfirmed_role" => "role" }.freeze
+
   def index
     @counts = ReviewItem.open.group(:kind).count
     @kind = params[:kind] if ReviewItem::KINDS.include?(params[:kind])
     items = ReviewItem.open.includes(:company, :subject).oldest_first
     @items = @kind ? items.where(kind: @kind) : items
+    @runs = latest_checks(@items)
   end
 
   # A check started from the queue runs in the background; the item closes if it settles it.
@@ -17,5 +21,21 @@ class ReviewItemsController < ApplicationController
     redirect_back_or_to review_path, notice: done, status: :see_other
   rescue ArgumentError, Verifier::Candidates::NotACandidate, ActiveRecord::RecordInvalid => e
     redirect_back_or_to review_path, alert: e.message.upcase_first, status: :see_other
+  end
+
+  private
+
+  # The latest check of each item's company or role started since the item was
+  # raised, by item id: shown on the item, so a check asked from here can be followed.
+  def latest_checks(items)
+    items = items.select { |item| CHECKED.key?(item.kind) }
+    return {} if items.empty?
+
+    runs = CheckRun.where(company_id: items.map(&:company_id), created_at: items.map(&:created_at).min..).newest_first.to_a
+    items.to_h do |item|
+      [ item.id, runs.find do |run|
+        run.created_at >= item.created_at && (CHECKED[item.kind] == "role" ? run.posting_id == item.subject_id : run.kind == "company")
+      end ]
+    end.compact
   end
 end

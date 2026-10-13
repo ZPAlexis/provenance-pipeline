@@ -13,9 +13,11 @@ class CheckRunsController < ApplicationController
   end
 
   # The run as a Turbo Frame, for the page to poll; `poll` marks a reply to polling,
-  # so a finished run tells the page to reload once with its new answer.
+  # so a finished run tells the page to reload once with its new answer. Polled
+  # from a review item, a finished run says instead whether it settled the item.
   def show
     run = CheckRun.find(params[:id])
-    render partial: "check_runs/run", locals: { run: run, poll: params[:poll].present? }
+    item = ReviewItem.find_by(id: params[:review_item_id]) if params[:review_item_id].present?
+    render partial: "check_runs/run", locals: { run: run, poll: params[:poll].present?, item: item }
   end
 end

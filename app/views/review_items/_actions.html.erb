@@ -14,13 +14,13 @@
     <% end %>
   <% when "no_careers_page" %>
     <%= button_to "Find it again", url, method: :patch, params: { decision: "find_again" },
-                                        class: [ "btn", "small", ("primary" if item.proposal == "find_again") ],
+                                        class: [ "btn", "small", "check-button", ("primary" if item.proposal == "find_again") ],
                                         data: { turbo_confirm: "Finding its careers page and reading it: at most #{cost(Verifier::CheckNow.ceiling(item.company))}. Go?" } %>
   <% when "suspect_verdict", "unconfirmed_role" %>
     <% if role %>
       <%= outside_link(role.job_url, label: "Open its page") if role.job_url %>
       <%= button_to "Check it again", url, method: :patch, params: { decision: "check_again" },
-                                           class: [ "btn", "small", ("primary" if item.proposal == "check_again") ],
+                                           class: [ "btn", "small", "check-button", ("primary" if item.proposal == "check_again") ],
                                            data: { turbo_confirm: "Checking it now: its own page first; at most #{cost(Verifier::CheckNow.ceiling(role))}. Go?" } %>
     <% end %>
   <% end %>

@@ -49,11 +49,12 @@ module ReviewHelper
     end
   end
 
-  # Where to go to look: the role's page for a question about a role, else the company's.
-  def review_subject_link(item)
-    return link_to(item.subject.role_title, role_path(item.subject)) if item.subject.is_a?(Posting)
+  # Who an item is about, each linked to its page: the company, and the role when the question is about one.
+  def review_subject_links(item)
+    company = link_to(item.company.name, company_path(item.company), class: "review-company")
+    return company unless item.subject.is_a?(Posting)
 
-    link_to(item.company.name, company_path(item.company))
+    safe_join([ company, tag.span("/", class: "muted"), link_to(item.subject.role_title, role_path(item.subject)) ], " ")
   end
 
   def review_open_count = ReviewItem.open.count
