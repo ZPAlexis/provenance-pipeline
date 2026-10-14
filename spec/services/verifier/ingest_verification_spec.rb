@@ -63,6 +63,7 @@ RSpec.describe Verifier::Ingest, "#verification" do
     expect(posting.reload.attributes).to eq(before)
     expect(company.page_checks.sole.matches.sole).to include("posting_id" => posting.id, "verdict" => nil,
                                                              "reasoning" => "Not among the 25 roles read; inconclusive.")
+    expect(company.page_checks.sole.complete).to be(false) # the worker's own answer, kept for what changed and Test B
   end
 
   it "writes inaccessible when the site refused us, with no count observed" do

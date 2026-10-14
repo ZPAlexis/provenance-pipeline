@@ -19,7 +19,9 @@ module Verifier
   # A hand check is recorded with verifier:hand_check, and read back from the
   # posting's history, so it counts in every later run.
   #
-  # REPLAY reads the listings stored by an earlier page check, at no API cost.
+  # REPLAY reads the listings an earlier verification run stored, its whole run
+  # (every page of its list), with the worker's own answer to whether the whole
+  # list was read, at no API cost. Runs from 1.4 on store that answer.
   # FRESH reads each watched page in full now (every page of its list), which is
   # what the pass is decided on. Read-only either way: the test writes nothing.
   class TestB
@@ -87,28 +89,12 @@ module Verifier
       raw if Posting::VERDICTS.include?(raw)
     end
 
-    # The stored check that read the watched page: by its address, or, for a
-    # board watched at its public address, by the board it read.
+    # The first check of the company's latest verification run that stored the
+    # worker's answer to "was the whole list read?" (1.4): the run a replay reads
+    # again, its listings rebuilt from all its pages as the worker read them.
     def self.snapshot_for(company)
-      url = company.careers_page_url or return
-      checks = company.page_checks.where(outcome: "ok").order(:checked_at)
-      checks.where("url = :url OR final_url = :url", url: url).last ||
-        checks.where.not(ats_vendor: nil).to_a.reverse.find { |c| Resolution.board_url(c.ats_vendor, c.ats_board) == url }
-    end
-
-    # Whether a stored check read the whole list, by the worker's own rule
-    # (workers/verifier pipeline._whole_list), applied to the one check replayed:
-    # never one job's ad; an ATS API's list unless it was read only in part; never
-    # a rendered page that showed no roles and did not say it has none; up to the
-    # total the page states; otherwise a page that neither says it shows only part
-    # nor links to a next page. A copy until 1.4 stores the worker's own answer.
-    def self.complete?(check)
-      return false if check.single_job_posting
-      return true if check.read_via.to_s.start_with?("ats_api") && !check.listings_incomplete
-      return false if check.listing_count.to_i.zero? && !check.explicit_no_openings
-      return check.listing_count.to_i >= check.stated_total if check.stated_total
-
-      !check.listings_incomplete && check.next_page_url.blank?
+      company.page_checks.where(purpose: "verification", step: nil).where.not(complete: nil)
+             .order(:checked_at, :created_at).last
     end
 
     def initialize(postings = Posting.includes(:company))
@@ -140,8 +126,8 @@ module Verifier
     def replay_targets
       @cases.select { |c| c.scored_label? && c.snapshot }.group_by(&:company_id).map do |company_id, cases|
         check = cases.first.snapshot
-        { id: company_id, label: cases.first.company, page_check_id: check.id, complete: self.class.complete?(check),
-          listings: check.listings,
+        { id: company_id, label: cases.first.company, page_check_id: check.id, complete: check.complete,
+          listings: JobUrls.run_listings(check),
           postings: cases.map { |c| { id: c.posting_id, title: c.title, location: c.location, url: c.job_url } } }
       end
     end

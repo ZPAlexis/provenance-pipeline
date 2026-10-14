@@ -55,7 +55,7 @@ module Authority
       about: "Page checks and LLM calls: what was read, how, and what it cost.",
       rules: [
         Rule.new(model: "PageCheck", actions: %i[create]),
-        Rule.new(model: "PageCheck", actions: %i[update], attributes: %w[matches]),
+        Rule.new(model: "PageCheck", actions: %i[update], attributes: %w[matches complete]),
         Rule.new(model: "LlmCall", actions: %i[create])
       ]
     },

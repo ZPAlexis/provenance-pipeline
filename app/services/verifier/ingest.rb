@@ -113,9 +113,10 @@ module Verifier
       [ text, "Run #{@run_id}." ].join(" ")
     end
 
-    # Each posting's outcome, on the check that read the page, and the near-miss call under it.
+    # Each posting's outcome, on the check that read the page, with the worker's own
+    # answer to "was the whole list read?" (1.4), and the near-miss call under it.
     def record_matches(page_check, result)
-      page_check.update!(matches: result["verdicts"].map do |verdict|
+      page_check.update!(complete: result["complete"], matches: result["verdicts"].map do |verdict|
         verdict.slice("posting_id", "verdict", "method", "listing_index", "location_note", "reasoning")
       end)
       record_llm(page_check, result["match_llm"], called_at: page_check.checked_at) if result["match_llm"]
