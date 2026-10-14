@@ -1,7 +1,7 @@
 module ReviewHelper
   KIND_LABELS = {
     "careers_page_candidate" => "Careers page to confirm", "company_kind" => "Kind of company",
-    "no_careers_page" => "No careers page", "partial_list" => "Part of a list",
+    "no_careers_page" => "No careers page", "partial_list" => "Part of a list", "page_changed" => "Page changed a lot",
     "suspect_verdict" => "Suspect answer", "unconfirmed_role" => "Couldn't confirm"
   }.freeze
 
@@ -16,6 +16,9 @@ module ReviewHelper
                          "a board on an ATS may still be readable. Set the page you find, or leave it when it has none in public.",
     "partial_list" => "The page shows part of its roles: a first page, a search, a \"load more\" that stopped. Look for a page or an ATS " \
                       "board listing them all and set it, or leave it when there is none.",
+    "page_changed" => "Open the page and compare it with what the company's own site links to as its jobs. Still its list (a " \
+                      "hiring wave, a reorganised board): say so. Another company's list, a job board, or a page that moved: " \
+                      "set the right page, and its roles are read there from then on.",
     "suspect_verdict" => "Open the role's own page and its company's careers page, and record what you see. Undo the verdict when it " \
                          "came from a read that went wrong.",
     "unconfirmed_role" => "The site refused or failed the verifier. Open the role's page yourself and record what you see, or check it again later."
@@ -23,7 +26,8 @@ module ReviewHelper
 
   PROPOSALS = {
     "confirm" => "Confirm it", "find_again" => "Find its careers page again", "set_page" => "Set its careers page by hand",
-    "hand_check" => "Look at its page and record what you see", "check_again" => "Check it again"
+    "hand_check" => "Look at its page and record what you see", "check_again" => "Check it again",
+    "review_page" => "Look at its page: is it still this company's list?"
   }.freeze
 
   def review_kind_label(kind) = KIND_LABELS.fetch(kind, kind.humanize)
@@ -45,6 +49,7 @@ module ReviewHelper
     when "company_kind" then "Is #{company} a #{item.evidence_key}?"
     when "no_careers_page" then "Where does #{company} list its open roles?"
     when "partial_list" then "Is there a page listing all of #{company}'s roles?"
+    when "page_changed" then "Is #{item.company.careers_page_url} still #{company}'s list of roles?"
     else "Is #{role} at #{company} still listed?"
     end
   end

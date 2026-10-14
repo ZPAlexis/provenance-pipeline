@@ -132,7 +132,7 @@ module ReviewQueue
   # --- What a company's record asks of the operator now ----------------------
 
   def findings(company)
-    [ candidate(company), kind(company), no_page(company), partial_list(company),
+    [ candidate(company), kind(company), no_page(company), partial_list(company), page_changed(company),
       *company.postings.where.not(tracking: "dismissed").flat_map { |posting| [ suspect(posting), unconfirmed(posting) ] } ].compact
   end
 
@@ -179,6 +179,18 @@ module ReviewQueue
                 evidence: "Read #{listings.size}#{" of #{total}" if total} roles at #{company.careers_page_url} " \
                           "on #{check.checked_at.to_date}: the page shows only part of its list, so a role missing from it " \
                           "is never marked no longer listed.")
+  end
+
+  # A watched list that changed a lot between two whole reads (1.4): is the page still this company's list?
+  # Asked while roles are in play there; raised again only for a later change.
+  def page_changed(company)
+    return unless company.resolution_status == "resolved" && company.kind != "aggregator"
+    return unless company.postings.where.not(tracking: "dismissed").exists?
+
+    change = Verifier::ListChange.latest(company) or return
+    Finding.new(kind: "page_changed", subject: company, key: change.after.id, proposal: "review_page",
+                evidence: "#{change.summary}. A list that changes this much is often a different page now (a redirect, " \
+                          "a redesign, a parent company's list), and every verdict there rests on it.")
   end
 
   # A verdict reached on weak evidence: "no longer listed" from a read that saw no roles at all,

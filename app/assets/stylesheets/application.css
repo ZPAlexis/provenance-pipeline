@@ -121,7 +121,7 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
 th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg); }
 tr:last-child td { border-bottom: none; }
-td.reason { max-width: 520px; color: var(--muted); }
+td.reason { max-width: 520px; color: var(--muted); overflow-wrap: anywhere; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Facts */

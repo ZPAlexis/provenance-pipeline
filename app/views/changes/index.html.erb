@@ -1,0 +1,160 @@
+<% content_for :title, "What changed · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>What changed</h1>
+    <p class="sub">
+      Since a check of everything: verdicts that changed, suggestions made and withdrawn, careers pages and boards, lists
+      that changed a lot, new review questions, and refused writes. Single checks in between are included.
+    </p>
+  </div>
+</div>
+
+<%= form_with url: changes_path, method: :get, class: "check-form" do %>
+  <label class="small">Compare from
+    <%= select_tag :from, options_for_select(@points.map { |point| [ point.label, point.key ] }, @point.key) %>
+  </label>
+  <%= submit_tag "Show", class: "btn small", name: nil %>
+  <span class="muted small">Since <%= @point.at.utc.strftime("%Y-%m-%d %H:%M UTC") %> (<%= ago(@point.at) %>).</span>
+<% end %>
+
+<% counts = @changes.counts %>
+<div class="tiles">
+  <% counts.each do |label, count| %>
+    <%= link_to "##{label.parameterize}", class: [ "tile", ("muted" if count.zero?) ] do %>
+      <div class="value"><%= count %></div>
+      <div class="label"><%= label %></div>
+    <% end %>
+  <% end %>
+</div>
+
+<% if counts.values.sum.zero? %>
+  <p class="empty">Nothing changed since then.</p>
+<% end %>
+
+<% { "not_found" => "No longer listed", "verified_live" => "Listed", "inaccessible" => "Couldn't confirm",
+     "pending" => "Back to no answer" }.each do |state, heading| %>
+  <% events = @changes.verdicts.fetch(state, []) %>
+  <% next if events.empty? %>
+  <h2 id="<%= heading.parameterize %>"><%= heading %> <span class="muted">(<%= events.size %>)</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Role</th><th>Company</th><th>Change</th><th>By</th><th>Why</th></tr></thead>
+      <tbody>
+        <% events.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= event_subject(event) %></td>
+            <td><%= link_to(event.target.company.name, company_path(event.target.company)) if event.target %></td>
+            <td class="nowrap"><%= change_summary(event) %></td>
+            <td><%= actor_cell(event) %></td>
+            <td class="reason"><%= event.reasoning.to_s.truncate(220) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
+<% [ [ "New suggestions", @changes.suggested ], [ "Suggestions withdrawn", @changes.withdrawn ] ].each do |heading, events| %>
+  <% next if events.empty? %>
+  <h2 id="<%= heading.parameterize %>"><%= heading %> <span class="muted">(<%= events.size %>)</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Role</th><th>Company</th><th>Why</th></tr></thead>
+      <tbody>
+        <% events.each do |event| %>
+          <% company = event.target&.company || Company.find_by(id: event.changes_made.dig("company_id", 0)) %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= event_subject(event) %></td>
+            <td><%= link_to(company.name, company_path(company)) if company %></td>
+            <td class="reason"><%= event.reasoning.to_s.truncate(220) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
+<% if @changes.lists.any? %>
+  <h2 id="pages-changed-a-lot">Pages changed a lot <span class="muted">(<%= @changes.lists.size %>)</span></h2>
+  <p class="muted small">
+    Between two whole reads of the same page, at least half its roles gone or half of them new, and at least
+    <%= Verifier::ListChange::AT_LEAST %> either way: often a different page now. Each is a question on the Review page.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Company</th><th class="num">Gone</th><th class="num">New</th><th>Between</th><th>Page</th></tr></thead>
+      <tbody>
+        <% @changes.lists.each do |change| %>
+          <tr>
+            <td><%= link_to change.company.name, company_path(change.company) %></td>
+            <td class="num"><%= change.gone %> of <%= change.before_size %></td>
+            <td class="num"><%= change.added %> of <%= change.after_size %></td>
+            <td class="nowrap"><%= change.before.checked_at.to_date %> → <%= change.after.checked_at.to_date %></td>
+            <td><%= outside_link(change.url) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
+<% [ [ "Careers pages", @changes.careers_pages ], [ "Boards", @changes.boards ] ].each do |heading, events| %>
+  <% next if events.empty? %>
+  <h2 id="<%= heading.parameterize %>"><%= heading %> <span class="muted">(<%= events.size %>)</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Company</th><th>Change</th><th>By</th><th>Why</th></tr></thead>
+      <tbody>
+        <% events.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= event_subject(event) %></td>
+            <td class="muted"><%= company_change(event) %></td>
+            <td><%= actor_cell(event) %></td>
+            <td class="reason"><%= event.reasoning.to_s.truncate(220) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
+<% if (questions = @changes.questions).any? %>
+  <h2 id="new-review-questions">New review questions <span class="muted">(<%= questions.size %>)</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Raised</th><th>Kind</th><th>Question</th><th>Now</th></tr></thead>
+      <tbody>
+        <% questions.each do |item| %>
+          <tr>
+            <td><%= ago(item.created_at) %></td>
+            <td><span class="badge"><%= review_kind_label(item.kind) %></span></td>
+            <td><%= review_question(item) %></td>
+            <td><%= item.status == "open" ? link_to("Open: decide it", review_path(kind: item.kind)) : tag.span(item.status == "left" ? "Left as is" : "Decided", class: "muted") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
+<% if (refused = @changes.refused).any? %>
+  <h2 id="refused-writes">Refused writes <span class="muted">(<%= refused.size %>)</span></h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>By</th><th>On</th><th>Why</th></tr></thead>
+      <tbody>
+        <% refused.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td><%= actor_cell(event) %></td>
+            <td><%= event_subject(event) %></td>
+            <td class="reason"><%= event.reasoning.to_s.delete_prefix("Denied: ") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>

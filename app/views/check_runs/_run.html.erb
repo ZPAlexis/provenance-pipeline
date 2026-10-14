@@ -22,6 +22,7 @@
       <%= run_answer(run) %>
       <span class="summary"><%= run.summary %></span>
       <div class="muted small">
+        <%= link_to("What changed", changes_path, data: { turbo_frame: "_top" }) + " · " if run.kind == "all" %>
         Finished <%= ago(run.finished_at) %> · cost <%= cost(run.cost_usd) %>
         <%= " · #{run.tally.map { |what, count| "#{count} #{what}" }.join(', ')}" if run.kind == "company" && run.tally.present? %>
       </div>

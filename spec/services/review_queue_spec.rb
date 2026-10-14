@@ -87,6 +87,48 @@ RSpec.describe ReviewQueue do
     end
   end
 
+  describe "a watched list that changed a lot" do
+    def whole_read(names, at:)
+      create(:page_check, company: company, purpose: "verification", step: nil, url: company.careers_page_url,
+                          run_id: "r-#{at.to_i}", complete: true, checked_at: at,
+                          listings: names.map { |name| { "title" => name, "url" => "https://acme.example/jobs/#{name}" } })
+    end
+
+    before do
+      company.update!(resolved_at: 30.days.ago)
+      create(:posting, company: company, role_title: "Sales Engineer")
+      whole_read(%w[a b c d e f g h], at: 2.days.ago)
+    end
+
+    it "asks whether the page is still the company's list, and a list left as is comes back only on a later change" do
+      changed = whole_read(%w[a b x y z w v u], at: 1.day.ago) # 6 of 8 gone, 6 of 8 new
+
+      described_class.sync!(company)
+      item = company.review_items.open.sole
+      expect(item).to have_attributes(kind: "page_changed", proposal: "review_page", evidence_key: changed.id)
+      expect(item.evidence).to start_with("6 of 8 roles gone and 6 of 8 new between whole reads of #{company.careers_page_url}")
+
+      described_class.act!(item, "leave", note: "Still this company's own list of roles.", check: nil)
+      whole_read(%w[a b x y z w v u], at: 1.hour.ago) # read again, unchanged
+      described_class.sync!(company)
+      expect(company.review_items.open).to be_empty
+
+      later = whole_read(%w[p q r s t o n m], at: Time.current)
+      described_class.sync!(company)
+      expect(company.review_items.open.sole.evidence_key).to eq(later.id)
+    end
+
+    it "is settled by setting the right page: comparisons start over there" do
+      whole_read(%w[a b x y z w v u], at: 1.day.ago)
+      described_class.sync!(company)
+
+      Verifier::Candidates.set_page!(company, "https://acme.example/careers/all", reasoning: "The company's own jobs link.")
+
+      expect(company.review_items.where(kind: "page_changed").sole.status).to eq("done")
+      expect(company.review_items.open.where(kind: "page_changed")).to be_empty
+    end
+  end
+
   describe "a role's answer" do
     it "is suspect when no longer listed came from a read that saw no roles, until the operator checks it by hand" do
       posting = create(:posting, :suspect_negative, company: company, role_title: "Sales Engineer")

@@ -8,7 +8,7 @@ class ReviewItem < ApplicationRecord
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 
-  KINDS = %w[careers_page_candidate company_kind no_careers_page partial_list suspect_verdict unconfirmed_role].freeze
+  KINDS = %w[careers_page_candidate company_kind no_careers_page partial_list page_changed suspect_verdict unconfirmed_role].freeze
   STATUSES = %w[open done left].freeze
 
   validates :kind, inclusion: { in: KINDS }
