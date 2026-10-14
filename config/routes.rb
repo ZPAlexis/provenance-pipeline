@@ -22,6 +22,7 @@ Rails.application.routes.draw do
     end
   end
   resources :check_runs, only: %i[create show]
+  resource :check_all, only: %i[show create], controller: "check_all"
   resources :suggestions, only: :create
   resource :profile, only: %i[show update] do
     patch :preview

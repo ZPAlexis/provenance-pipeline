@@ -11,6 +11,10 @@
        data-controller="<%= run.active? ? 'poll' : ('refresh' if poll && !item) %>">
     <% if run.status == "queued" %>
       <span class="spinner" aria-hidden="true"></span> Waiting for the check before it to finish…
+    <% elsif run.status == "running" && run.kind == "all" %>
+      <span class="spinner" aria-hidden="true"></span> Checking everything:
+      <%= run.total ? "#{run.progress.to_i} of #{pluralize(run.total, 'company')} read" : "working out what to read" %>,
+      started <%= ago(run.started_at) %>…
     <% elsif run.status == "running" %>
       <span class="spinner" aria-hidden="true"></span> Checking<%= " #{run.posting.role_title}" if run.kind == "role" && run.posting %>,
       started <%= ago(run.started_at) %>…

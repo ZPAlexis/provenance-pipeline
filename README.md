@@ -189,7 +189,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
   - **1.2c — Match and verdict** ✅ read each watched page in full (pagination, "load more", ATS APIs), match every tracked posting against it, and record verdicts that follow the evidence. Measured against the research labels on fresh reads: 98% agreement, and no closed role reported open.
   - **Cost pass** ✅ the LLM reads a page only when its role links changed (or every 14 days), and a company's own free ATS board is read in place of its page when it lists the same roles.
 - **1.3 — Scoped writes and provenance** ✅ a credential per agent run with exactly that run's scopes, checked at every write down to the attributes it sets; refused writes audited; every agent write names its credential; an Agents page and `agents:` commands. See [The permission model](#the-permission-model).
-- 1.4 — Monitoring on demand, and what changed: re-verify one role, one company, or every watched company when the user asks — a re-run of 1.2 that catches both new roles and closures — then show what changed since the last check. A schedule the operator sets comes later, with a host.
+- 1.4 — Monitoring on demand, and what changed: re-verify one role, one company, or every watched company when the user asks — a re-run of 1.2 that catches both new roles and closures — then show what changed since the last check. A schedule the operator sets comes with Stage 4.
 - **1.5 — Capture and watched roles** ✅ the first web UI. A search profile suggests roles from the watched pages, the user picks which to track, and each tracked role gets a "check now" that answers *still listed* or *no longer listed*. Paste a careers link, a posting link, or a company domain to resolve, verify, and add it to the watch list. In five slices:
   - **1.5a — Tracked roles and check now** ✅ a tracking state only the operator sets; each role's own page at the employer, matched before its title; `verifier:check`, the role's own page first, then its company's careers page.
   - **1.5b — The operator's pages** ✅ dashboard, roles, companies; track, dismiss, and check now from them.
@@ -202,6 +202,8 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 **Stage 2 — Pipeline system.** Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents.
 
 **Stage 3 — Governance completion.** Full audit views, a review queue for drafts, analytics.
+
+**Stage 4 — Showcase and distribution.** A local app anyone can run on their own machine, on a bundled made-up demo dataset: it works with no API key through free boards and stored reads, takes the user's own key for pages the LLM must read, and their own MCP client connects to it. Alongside it, a hosted read-only showcase of the same demo data. A schedule, a digest, and the production setup come with it. Last by design, so it ships a finished system, and nothing before it depends on it.
 
 ## Stack
 
