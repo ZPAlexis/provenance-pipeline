@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stages 1.5 and 1.3 complete.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Next: 1.4, monitoring on demand and what changed. See [Build stages](#build-stages).
+> **Status: Stage 1 complete.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Next: Stage 2, the pipeline system. See [Build stages](#build-stages).
 
 ---
 
@@ -133,6 +133,7 @@ page_checks   company_id, run_id, purpose (resolution | verification), step,
               url, final_url, outcome, reason, read_via, ats_vendor, ats_board,
               listing_count, stated_total, listings (jsonb snapshot),
               matches (jsonb: each posting's outcome and reasoning),
+              complete (the worker's own answer: was the whole list read?),
               listings_incomplete, single_job_posting, many_employers,
               next_page_url, content_hash, reused_from_id, listings_read_at,
               checked_at
@@ -163,6 +164,7 @@ Notes on a few choices:
 - **`llm_calls` answers "what did this cost, and what produced it"** without the run directory: one row per model call, with the model the API reports having served, its settings, and a `prompt_version` hash over the prompt, output schema, and limits.
 - **A repeat read is paid for only when the roles may have changed.** A page that links to exactly the role pages it did last time reuses that read's listings, and its check names the read it reused (`reused_from_id`); listings are read in full again once 14 days old (`listings_read_at`). A company whose free ATS board lists at least 90% of its page's roles has that board recorded beside the page (`board_*`, with the evidence) and read in its place for 30 days; the page stays the one on record.
 - **Only the operator tracks a role.** A posting is `suggested` (proposed by the suggester, with why in `fit`), `tracked` (on the operator's watch list), or `dismissed` (declined for good: never checked or suggested again); the agent may suggest, never track. A suggestion the operator never acted on is withdrawn when it no longer fits the profile or its check found it gone: deleted, with its whole record kept in its last audit event. `job_url` is the role's own page at the employer, learned from the listing it matched, so the next check finds the role by its link before its title; `posting_url` stays where it was found.
+- **Whether a list was read whole is the worker's own answer,** kept on each verification run's first check (`complete`): a role missing from part of a list has not closed, so what changed and the replays of Test B read it rather than guess.
 - **A credential is never deleted,** so every agent write can be traced to the run behind it. A refused write is an audit event too (`denied`), with what it tried.
 - **The review queue is worked out from the record.** Each open item is a question the record asks now (one per question about one company or role), raised by the agent whose read led to it and closed by the operator's decision or when its evidence resolves, all audited. `evidence_key` fingerprints what was seen: an item left as is is raised again only when it changes.
 - **Careers-page resolution is recorded beside the page:** how it was found, how sure we are (`high`, `medium`, `low`, or `confirmed` by a person), a held candidate, or why it failed. A low-confidence find waits in `resolution_candidate_url` and is never watched until a person confirms it.
@@ -180,7 +182,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 
 ## Build stages
 
-**Stage 1 — Job Finder.** A thin vertical slice through the whole stack rather than a horizontal layer, so something useful ships before the CRUD work and the governance model is proven on real data early.
+**Stage 1 — Job Finder** ✅ A thin vertical slice through the whole stack rather than a horizontal layer, so something useful ships before the CRUD work and the governance model is proven on real data early.
 
 - **1.1 — Schema and ingest** ✅
 - **1.2 — Verification agent** ✅ (Playwright + LLM, Python worker; see [`workers/verifier`](workers/verifier)), in three slices:
@@ -189,7 +191,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
   - **1.2c — Match and verdict** ✅ read each watched page in full (pagination, "load more", ATS APIs), match every tracked posting against it, and record verdicts that follow the evidence. Measured against the research labels on fresh reads: 98% agreement, and no closed role reported open.
   - **Cost pass** ✅ the LLM reads a page only when its role links changed (or every 14 days), and a company's own free ATS board is read in place of its page when it lists the same roles.
 - **1.3 — Scoped writes and provenance** ✅ a credential per agent run with exactly that run's scopes, checked at every write down to the attributes it sets; refused writes audited; every agent write names its credential; an Agents page and `agents:` commands. See [The permission model](#the-permission-model).
-- 1.4 — Monitoring on demand, and what changed: re-verify one role, one company, or every watched company when the user asks — a re-run of 1.2 that catches both new roles and closures — then show what changed since the last check. A schedule the operator sets comes with Stage 4.
+- **1.4 — Monitoring on demand, and what changed** ✅ one role, one company, or everything, checked when the operator asks: "Check everything" on the dashboard shows its plan and ceiling and asks first, then runs in the background with its progress (137 companies in 47 minutes for $1.17, the first time). A what-changed view reports what each check of everything found: verdicts, suggestions made and withdrawn, careers pages, boards, new review questions, refused writes, and lists that changed a lot between whole reads (raised for review: often another page now). A schedule comes with Stage 4.
 - **1.5 — Capture and watched roles** ✅ the first web UI. A search profile suggests roles from the watched pages, the user picks which to track, and each tracked role gets a "check now" that answers *still listed* or *no longer listed*. Paste a careers link, a posting link, or a company domain to resolve, verify, and add it to the watch list. In five slices:
   - **1.5a — Tracked roles and check now** ✅ a tracking state only the operator sets; each role's own page at the employer, matched before its title; `verifier:check`, the role's own page first, then its company's careers page.
   - **1.5b — The operator's pages** ✅ dashboard, roles, companies; track, dismiss, and check now from them.
@@ -197,7 +199,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
   - **1.5d — Add by URL** ✅ a company by its domain, careers page, or ATS board, and a role by its own page, from the Companies and Roles pages: never added twice, read right away (its careers page found first), what that could cost asked first. A role's title is optional: its page names it. A careers page found at low confidence is confirmed, rejected, or set right on the company's page.
   - **1.5e — The review queue** ✅ what the agents can't settle, raised by them with what was seen and an action proposed: careers pages found at low confidence, suggested kinds, companies with no careers page found, lists read only in part, answers resting on the AI's judgment alone or on a read that saw no roles, and roles that couldn't be confirmed. Decided from the Review page or `review:decide`, through the same audited services as everywhere else.
 
-**Build order is 1.2 → 1.5 → 1.3 → 1.4.** Capture needs only 1.2, so it shipped first to make the tool usable early; 1.3's check sits where every write passes, at the model layer, so it covered capture, suggestions and the review queue without reworking them. Monitoring is human-triggered first, so nothing waits on a host or a scheduler.
+**Build order was 1.2 → 1.5 → 1.3 → 1.4.** Capture needs only 1.2, so it shipped first to make the tool usable early; 1.3's check sits where every write passes, at the model layer, so it covered capture, suggestions and the review queue without reworking them. Monitoring is human-triggered first, so nothing waits on a host or a scheduler.
 
 **Stage 2 — Pipeline system.** Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents.
 
@@ -247,7 +249,8 @@ bin/rails verifier:resolve                       # find careers pages (backs up 
 bin/rails verifier:candidates                    # low-confidence finds waiting for a person
 bin/rails "verifier:confirm[company_id]"         # or verifier:reject, verifier:set_page, verifier:kind
 bin/rails "verifier:status[company name or id]"  # one company: its page, checks, postings, history
-bin/rails verifier:verify                        # shows the plan and its cost; GO=1 runs it
+bin/rails verifier:verify                        # check everything: shows the plan and its cost; GO=1 runs it
+bin/rails verifier:changes                       # what changed since the check of everything before the latest (FROM=)
 bin/rails verifier:find_boards                   # free boards listing the same roles as LLM-read pages (no API cost)
 bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's
 bin/rails "verifier:track[posting_id]"           # or verifier:dismiss: your watch list, with NOTE="why"
@@ -270,9 +273,9 @@ The suggester (`agent:suggester`) then writes each fitting role that is not alre
 
 ### The review queue
 
-What the agents can't settle goes to the operator as a question about one company or role, with what was seen and an action proposed: confirm or reject a careers page found at low confidence, set a company's kind, find a careers page again or set it by hand, set a better page for a list read only in part, look at a role's page and record what is there, or check a role again. The questions are worked out from the record, so the queue never disagrees with it: every write that can change what a company's record asks (a read, a decision, a withdrawn suggestion) brings that company's items in line, and an item whose evidence resolves closes on its own. Leaving an item as is takes a note, and it comes back only when what was seen changes. A decision goes through the same service as the same write anywhere else, and closes the item in the same transaction.
+What the agents can't settle goes to the operator as a question about one company or role, with what was seen and an action proposed: confirm or reject a careers page found at low confidence, set a company's kind, find a careers page again or set it by hand, set a better page for a list read only in part, say whether a page whose list changed a lot is still the company's, look at a role's page and record what is there, or check a role again. The questions are worked out from the record, so the queue never disagrees with it: every write that can change what a company's record asks (a read, a decision, a withdrawn suggestion) brings that company's items in line, and an item whose evidence resolves closes on its own. Leaving an item as is takes a note, and it comes back only when what was seen changes. A decision goes through the same service as the same write anywhere else, and closes the item in the same transaction.
 
-The tests that decide whether a slice works run locally against the private target list: `verifier:test_a`, `verifier:test_resolution`, and `verifier:test_b` (`REPLAY=1` replays stored page reads at no API cost; `FRESH=1` reads the pages now).
+The tests that decide whether a slice works run locally against the private target list: `verifier:test_a`, `verifier:test_resolution`, and `verifier:test_b` (`REPLAY=1` replays each company's latest verification run, whole, with the worker's own answer to whether it read the whole list, at no API cost (runs from 1.4 on); `FRESH=1` reads the pages now).
 
 ### Backups
 
@@ -293,7 +296,7 @@ Boot the server:
 bin/rails server
 ```
 
-It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, recent checks and verdict changes, API credit spent), the roles (tracked, suggested with why, dismissed, filtered by answer), each role's history and the checks behind it, the companies watched, the search profile with a preview of what it would suggest, and the Review page: the questions waiting for the operator, by kind, each naming its company and role and decided with a button; a check asked from one is followed on the item until it says whether it settled it; and the Agents page: each agent's scopes, the credentials its runs held, with what each wrote, and every refused write. From them the operator adds a company or a role by its link, confirms or sets a company's careers page, tracks or dismisses a role with a note on the record, finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
+It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, "Check everything" with its plan, ceiling and progress, recent checks and verdict changes, API credit spent), what changed since a check of everything, the roles (tracked, suggested with why, dismissed, filtered by answer), each role's history and the checks behind it, the companies watched, the search profile with a preview of what it would suggest, and the Review page: the questions waiting for the operator, by kind, each naming its company and role and decided with a button; a check asked from one is followed on the item until it says whether it settled it; and the Agents page: each agent's scopes, the credentials its runs held, with what each wrote, and every refused write. From them the operator adds a company or a role by its link, confirms or sets a company's careers page, tracks or dismisses a role with a note on the record, finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
 
 ## Note on data
 
