@@ -9,9 +9,11 @@ RSpec.describe Verifier::TestB do
                      enrichment: { "raw_verification" => label })
   end
 
+  # A verification run's first check, with the worker's answer to "was the whole list read?" stored (1.4).
   def snapshot(company, **attributes)
-    create(:page_check, company: company, url: company.careers_page_url, read_via: "render+llm",
-                        listings: [ { "title" => "RevOps Engineer" } ], listing_count: 1, **attributes)
+    create(:page_check, company: company, url: company.careers_page_url, purpose: "verification", step: nil,
+                        run_id: "r1", complete: true, listings: [ { "title" => "RevOps Engineer" } ], listing_count: 1,
+                        **attributes)
   end
 
   def verdict(posting, value, method: "exact")
@@ -47,34 +49,23 @@ RSpec.describe Verifier::TestB do
       ])
     end
 
-    it "finds a board watched at its public address by the board its check read" do
-      company.update!(careers_page_url: "https://job-boards.greenhouse.io/acme")
+    it "reads the latest run whole, every page of its list in the worker's order, with the worker's own answer" do
       labeled("verified_live")
-      check = create(:page_check, company: company, url: "https://job-boards.greenhouse.io/acme/jobs/8054669",
-                                  ats_vendor: "greenhouse", ats_board: "acme", read_via: "ats_api:greenhouse")
+      snapshot(company, run_id: "r0", checked_at: 2.days.ago, listings: [ { "title" => "Older" } ])
+      first = snapshot(company, run_id: "r2", complete: false, checked_at: 1.hour.ago, listings: [ { "title" => "RevOps Engineer" } ])
+      create(:page_check, company: company, url: "#{company.careers_page_url}?page=2", purpose: "verification", step: nil,
+                          run_id: "r2", checked_at: 1.hour.ago, listings: [ { "title" => "Sales Engineer" } ])
 
-      expect(described_class.new.replay_targets.sole).to include(page_check_id: check.id, complete: true)
+      expect(described_class.new.replay_targets.sole).to include(
+        page_check_id: first.id, complete: false, listings: [ { "title" => "RevOps Engineer" }, { "title" => "Sales Engineer" } ]
+      )
     end
 
-    it "marks a page that showed part of its list as incomplete, unless its stated total says otherwise" do
-      expect(described_class.complete?(build(:page_check, listings_incomplete: true))).to be(false)
-      expect(described_class.complete?(build(:page_check, listing_count: 25, stated_total: 393))).to be(false)
-      expect(described_class.complete?(build(:page_check, listing_count: 181, stated_total: 181, listings_incomplete: true)))
-        .to be(true)
-    end
+    it "leaves out a run that stored no answer: one from before 1.4, or a check that was not a run's first" do
+      labeled("verified_live")
+      snapshot(company, complete: nil)
 
-    # The worker's rule (pipeline._whole_list), point for point: a replay never calls
-    # part of a list whole, so it never scores a not_found the worker could not write.
-    it "judges a stored check whole only as the worker would" do
-      whole = ->(**attributes) { described_class.complete?(build(:page_check, **attributes)) }
-
-      expect(whole.call(read_via: "ats_api:greenhouse", listing_count: 0, listings: [])).to be(true) # the vendor's own list
-      expect(whole.call(read_via: "ats_api:workday", listing_count: 2000, stated_total: 2024, listings_incomplete: true))
-        .to be(false) # a board larger than the reader's guard
-      expect(whole.call(listing_count: 20, next_page_url: "https://acme.example/jobs?page=2")).to be(false)
-      expect(whole.call(listing_count: 1, single_job_posting: true)).to be(false)
-      expect(whole.call(listing_count: 0, listings: [])).to be(false) # a page that never loaded its roles
-      expect(whole.call(listing_count: 0, listings: [], explicit_no_openings: true)).to be(true)
+      expect(described_class.new.replay_targets).to be_empty
     end
 
     it "leaves out companies with no watched page or no stored check of it" do

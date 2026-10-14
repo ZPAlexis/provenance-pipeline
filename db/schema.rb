@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_13_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -148,6 +148,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_000001) do
     t.jsonb "matches", default: [], null: false
     t.uuid "reused_from_id"
     t.datetime "listings_read_at"
+    t.boolean "complete"
     t.index ["company_id", "checked_at"], name: "index_page_checks_on_company_id_and_checked_at"
     t.index ["company_id"], name: "index_page_checks_on_company_id"
     t.index ["reused_from_id"], name: "index_page_checks_on_reused_from_id"

@@ -377,7 +377,10 @@ namespace :verifier do
       puts "Test B (re-scored): #{results.size} companies' saved reads from #{dirs.map(&:basename).join(', ')}\n\n"
     else
       targets = replay ? test.replay_targets : test.verify_targets
-      abort "No labeled postings at a company with a watched page#{' and a stored check of it' if replay}." if targets.empty?
+      if targets.empty?
+        abort "No labeled postings at a company with a watched page" \
+              "#{' and a verification run that stored whether it read the whole list (runs from 1.4 on)' if replay}."
+      end
 
       flags = ENV["NO_LLM"].present? ? [ "--no-llm" ] : []
       mode = replay ? "replay" : "fresh"
