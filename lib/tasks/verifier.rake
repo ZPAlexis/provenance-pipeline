@@ -584,6 +584,52 @@ namespace :verifier do
          "(never matched live, or the listing they matched had no link)."
   end
 
+  desc "What changed since a check of everything, as the What changed page shows it: verdicts, suggestions made and " \
+       "withdrawn, lists that changed a lot, careers pages, boards, new review questions, refused writes. Read-only. " \
+       "[FROM=check_run_id] (by default, since the check before the latest ended)"
+  task changes: :environment do
+    helpers = ApplicationController.helpers
+    points = WhatChanged.points
+    point = WhatChanged.point(ENV["FROM"].presence)
+    if ENV["FROM"].present? && point.key != ENV["FROM"]
+      abort "No check of everything #{ENV['FROM'].inspect}. Points: #{points.map { |p| "#{p.key} (#{p.label})" }.join('; ')}"
+    end
+
+    changes = WhatChanged.new(point.at)
+    puts "#{point.label}: since #{point.at.utc.strftime('%Y-%m-%d %H:%M UTC')}."
+    puts "Other points: #{(points - [ point ]).map { |p| "FROM=#{p.key} (#{p.label})" }.join('; ')}" if points.size > 1
+    counts = changes.counts
+    puts "\n#{counts.map { |label, count| "#{label}: #{count}" }.join(' · ')}"
+    next puts("\nNothing changed since then.") if counts.values.sum.zero?
+
+    line = ->(event, what) { "  #{event.occurred_at.utc.strftime('%m-%d %H:%M')}  #{what}  [#{helpers.actor_label(event.actor)}] #{event.reasoning.to_s.truncate(140)}" }
+    role = ->(event) { event.target ? "#{event.target.company.name} / #{event.target.role_title}" : Array(event.changes_made["role_title"]).compact.first }
+    changes.verdicts.each do |state, events|
+      puts "\n#{Posting::ANSWER_LABELS.fetch(state, state.to_s.humanize)} (#{events.size})"
+      events.each { |event| puts line.call(event, "#{role.call(event)}: #{helpers.change_summary(event)}") }
+    end
+    { "New suggestions" => changes.suggested, "Suggestions withdrawn" => changes.withdrawn }.each do |heading, events|
+      puts "\n#{heading} (#{events.size})" if events.any?
+      events.each { |event| puts line.call(event, role.call(event)) }
+    end
+    if changes.lists.any?
+      puts "\nPages changed a lot (#{changes.lists.size}): each is a question on the Review page"
+      changes.lists.each { |change| puts "  #{change.company.name}: #{change.summary}" }
+    end
+    { "Careers pages" => changes.careers_pages, "Boards" => changes.boards }.each do |heading, events|
+      puts "\n#{heading} (#{events.size})" if events.any?
+      events.each { |event| puts line.call(event, "#{event.target&.name}: #{helpers.company_change(event)}") }
+    end
+    if changes.questions.any?
+      puts "\nNew review questions (#{changes.questions.size})"
+      changes.questions.each { |item| puts "  #{item.id}  [#{item.status}] #{helpers.review_question(item)}" }
+    end
+    if changes.refused.any?
+      puts "\nRefused writes (#{changes.refused.size})"
+      changes.refused.each { |event| puts line.call(event, "refused") }
+    end
+  end
+
   desc "Bring suggestions up to date: each watched company's latest list weighed against the saved search profile, " \
        "written as agent:suggester. No API cost; backs up first (at most once a day). PREVIEW=1 shows what it " \
        "would suggest and writes nothing. [COMPANY=name] [LIMIT=n]"
