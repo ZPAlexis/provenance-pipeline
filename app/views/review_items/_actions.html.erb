@@ -16,6 +16,10 @@
     <%= button_to "Find it again", url, method: :patch, params: { decision: "find_again" },
                                         class: [ "btn", "small", "check-button", ("primary" if item.proposal == "find_again") ],
                                         data: { turbo_confirm: "Finding its careers page and reading it: at most #{cost(Verifier::CheckNow.ceiling(item.company))}. Go?" } %>
+  <% when "page_changed" %>
+    <%= outside_link(item.company.careers_page_url, label: "Open the page") %>
+    <%= button_to "Still its list", url, method: :patch, params: { decision: "leave", note: "Still this company's own list of roles." },
+                                         class: "btn small primary" %>
   <% when "suspect_verdict", "unconfirmed_role" %>
     <% if role %>
       <%= outside_link(role.job_url, label: "Open its page") if role.job_url %>
@@ -38,9 +42,11 @@
   <% end %>
 <% end %>
 
-<% if %w[careers_page_candidate no_careers_page partial_list].include?(item.kind) %>
+<% if %w[careers_page_candidate no_careers_page partial_list page_changed].include?(item.kind) %>
   <details class="add" <%= "open" if item.proposal == "set_page" %>>
-    <summary class="muted small"><%= item.kind == "partial_list" ? "Set a page listing them all" : "Set its careers page by hand" %></summary>
+    <summary class="muted small">
+      <%= { "partial_list" => "Set a page listing them all", "page_changed" => "Set the right page" }.fetch(item.kind, "Set its careers page by hand") %>
+    </summary>
     <%= form_with url: url, method: :patch, class: "add-form" do |form| %>
       <%= hidden_field_tag :decision, "set_page" %>
       <label>Careers page <%= form.url_field :url, required: true, placeholder: "https://acme.com/careers" %></label>
