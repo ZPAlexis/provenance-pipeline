@@ -31,6 +31,11 @@
   <p class="muted small"><%= pluralize(@stale, "tracked role") %> not checked in the last <%= Overview::STALE_AFTER.inspect %>.</p>
 <% end %>
 
+<h2>Check everything</h2>
+<%= turbo_frame_tag "check_all", src: check_all_path do %>
+  <p class="muted small"><span class="spinner" aria-hidden="true"></span> Working out what a check of everything would read and cost…</p>
+<% end %>
+
 <h2>Companies and cost</h2>
 <div class="tiles">
   <%= link_to companies_path, class: "tile" do %>
@@ -67,6 +72,8 @@
             <td>
               <% if run.kind == "role" && run.posting %>
                 <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %></span>
+              <% elsif run.kind == "all" %>
+                Everything <span class="muted">(<%= run.total ? pluralize(run.total, "company") : "every watched company" %>)</span>
               <% else %>
                 <%= link_to run.company.name, company_path(run.company) %> <span class="muted">(its careers page)</span>
               <% end %>
@@ -78,7 +85,7 @@
                 <span class="badge gone">Didn't finish</span> <span class="muted small"><%= run.error.to_s.truncate(90) %></span>
               <% else %>
                 <%= run_answer(run) %>
-                <% if run.kind == "company" %><span class="muted small"><%= run.summary.to_s.truncate(90) %></span><% end %>
+                <% if run.kind != "role" %><span class="muted small"><%= run.summary.to_s.truncate(90) %></span><% end %>
               <% end %>
             </td>
             <td class="num"><%= cost(run.cost_usd) if run.status == "done" %></td>

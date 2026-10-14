@@ -1,0 +1,23 @@
+<%# The dashboard's "Check everything": the run under way, or the plan, its ceiling, and the button. %>
+<%= turbo_frame_tag "check_all" do %>
+  <section class="check-now">
+    <% if @run&.active? %>
+      <%= render "check_runs/run", run: @run, poll: false %>
+    <% elsif @plan.companies.zero? %>
+      <p class="muted small">No watched company has a role on record yet: add one, or track a role.</p>
+    <% else %>
+      <% confirm = "Check everything: the careers pages of #{pluralize(@plan.companies, 'company')}, for " \
+                   "#{pluralize(@plan.roles, 'role')}, at most #{cost(@plan.ceiling)}. Go?" %>
+      <%= form_with url: check_all_path, class: "check-form", data: { turbo_frame: "_top", turbo_confirm: confirm } do |form| %>
+        <%= form.submit "Check everything", class: "btn primary" %>
+        <span class="muted small">
+          Reads the careers pages of <%= pluralize(@plan.companies, "company") %>, for <%= pluralize(@plan.roles, "role") %>:
+          <%= @plan.via_board %> through free boards, <%= @plan.reusable %> with earlier reads reused where their roles are
+          unchanged. At most <%= cost(@plan.ceiling) %>, what these pages cost when last read in full; less for every page
+          whose roles are unchanged.
+        </span>
+      <% end %>
+      <%= render "check_runs/run", run: @run, poll: false if @run %>
+    <% end %>
+  </section>
+<% end %>

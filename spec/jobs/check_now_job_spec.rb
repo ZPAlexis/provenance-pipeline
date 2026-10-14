@@ -30,6 +30,18 @@ RSpec.describe CheckNowJob do
     expect(company_run.reload.status).to eq("done")
   end
 
+  it "checks everything for a run over everything, backed up in full by the check itself" do
+    everything = create(:check_run, kind: "all", company: nil)
+    allow(Verifier::CheckAll).to receive(:run!).with(everything)
+      .and_return(Verifier::CheckAll::Outcome.new(summary: "137 companies read.", tally: { written: 3 }, cost_usd: 0.4,
+                                                   run_id: "20261014T120000Z-verify"))
+
+    described_class.perform_now(everything)
+
+    expect(everything.reload).to have_attributes(status: "done", summary: "137 companies read.", cost_usd: 0.4)
+    expect(DatabaseBackup).not_to have_received(:daily)
+  end
+
   it "fails with why when the check stopped or broke, so the page never waits forever" do
     stopped = outcome.dup.tap { |o| o.stopped = "API credit exhausted"; o.summary = "Stopped before a result: API credit exhausted." }
     allow(Verifier::CheckNow).to receive(:role).and_return(stopped)

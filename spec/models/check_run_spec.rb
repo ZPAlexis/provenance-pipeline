@@ -35,6 +35,40 @@ RSpec.describe CheckRun do
     expect(current.reload.status).to eq("running")
   end
 
+  describe "a check of everything" do
+    it "needs no company, and is one at a time" do
+      allow(Verifier::CheckAll).to receive(:plan).and_return(Verifier::CheckAll::Plan.new(targets: [], via_board: 0, reusable: 0, ceiling: 0.42))
+
+      first = described_class.start_all!
+
+      expect(first).to have_attributes(kind: "all", company: nil, ceiling_usd: 0.42, status: "queued")
+      expect(described_class.start_all!).to eq(first)
+      expect(first.target_name).to eq("everything")
+    end
+
+    it "counts its progress from its results file as the worker writes it" do
+      run = create(:check_run, kind: "all", company: nil, run_id: "20261014T120000Z-verify-spec", total: 3)
+      dir = Rails.root.join("tmp/verifier", run.run_id)
+      FileUtils.mkdir_p(dir)
+      dir.join("results.jsonl").write("{}
+{}
+")
+
+      expect(run.progress).to eq(2)
+    ensure
+      FileUtils.rm_rf(dir) if dir
+    end
+
+    it "is cut off only after a batch's time, not a single check's" do
+      long = create(:check_run, kind: "all", company: nil, status: "running", updated_at: 2.hours.ago)
+      lost = create(:check_run, kind: "all", company: nil, status: "running", updated_at: 5.hours.ago)
+
+      described_class.abandon_stale!
+
+      expect([ long.reload.status, lost.reload.status ]).to eq(%w[running failed])
+    end
+  end
+
   it "names what it checks" do
     company = create(:company, name: "Acme")
     role = create(:posting, company: company, role_title: "RevOps Engineer")

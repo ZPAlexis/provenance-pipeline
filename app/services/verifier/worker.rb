@@ -38,6 +38,8 @@ module Verifier
       Rails.root.join("tmp/verifier/#{Time.current.utc.strftime('%Y%m%dT%H%M%SZ')}-#{name}")
     end
 
+    attr_reader :run_dir
+
     def initialize(run_dir:, model: nil, credential_file: CREDENTIAL_FILE, process: Process)
       @run_dir = Pathname.new(run_dir)
       @model = model

@@ -433,12 +433,11 @@ namespace :verifier do
     companies = select_companies.call(Company.watched.where(id: Posting.not_dismissed.select(:company_id))).to_a
     abort "No resolved company has postings to verify." if companies.empty?
 
-    targets = companies.map { |company| Verifier::Targets.verify(company) }
-
     # Pages already read (a passing fresh Test B run): recorded as they are, never paid for twice.
     saved = [] # [run_id, result]: each saved read recorded under the run that made it
+    to_read = companies
     if ENV["RESULTS"].present?
-      wanted = targets.to_h { |t| [ t[:id], t ] }
+      wanted = companies.index_by(&:id)
       ENV["RESULTS"].split(",").map { |dir| Pathname.new(dir.strip) }.each do |dir|
         file = dir.join("results.jsonl")
         abort "No results in #{dir}." unless file.exist?
@@ -452,22 +451,17 @@ namespace :verifier do
       end
       puts "#{saved.size} companies' saved reads are recorded as they are, not read again."
       reused = saved.to_set { |_, result| result["target_id"] }
-      targets = targets.reject { |t| reused.include?(t[:id]) }
+      to_read = companies.reject { |company| reused.include?(company.id) }
     end
 
-    # A ceiling from the record: what each page cost when last read in full. A company read
-    # through its confirmed board costs nothing; a page whose roles are unchanged reuses its
-    # earlier read for nothing; one never verified is priced at the average page read.
-    per_page = LlmCall.where(purpose: "extract").average(:cost_usd).to_f
-    by_id = companies.index_by(&:id)
-    via_board = targets.count { |t| t[:board] }
-    reusable = targets.count { |t| !t[:board] && t[:previous].any? }
-    ceiling = targets.reject { |t| t[:board] }.sum { |t| Verifier::Targets.full_read_cost(by_id[t[:id]]) || per_page }
-    puts "Plan: verify #{targets.sum { |t| t[:postings].size }} postings at #{targets.size} companies' watched pages."
-    puts "  #{via_board} read through a confirmed board (free); #{reusable} have earlier reads to reuse where " \
+    # The plan and its ceiling from the record, as the dashboard's "Check everything" shows them.
+    plan = Verifier::CheckAll.plan(to_read)
+    targets = plan.targets
+    puts "Plan: verify #{plan.roles} postings at #{plan.companies} companies' watched pages."
+    puts "  #{plan.via_board} read through a confirmed board (free); #{plan.reusable} have earlier reads to reuse where " \
          "their role links are unchanged (free when they are, a full read every 14 days)."
     puts format("Estimated cost: at most $%.2f, what these pages cost when last read in full; less for every page " \
-                "whose roles are unchanged, plus about a cent for near-miss checks.", ceiling)
+                "whose roles are unchanged, plus about a cent for near-miss checks.", plan.ceiling)
     next puts("\nNothing run. Run it with GO=1.") unless ENV["GO"].present?
 
     # From here on, verdicts are written: back up first.
@@ -476,17 +470,10 @@ namespace :verifier do
     tally = Hash.new(0)
     invalid = []
     run = nil
-    record = lambda do |results, run_id|
-      ingest = Verifier::Ingest.new(run_id: run_id)
-      results.each do |result|
-        ingest.verification(result).each { |what, count| tally[what] += count }
-      rescue Verifier::Ingest::InvalidResult => e
-        invalid << e.message
-      end
-    end
+    record = ->(results, run_id) { Verifier::CheckAll.record(results, run_id, tally, invalid) }
 
     # The run's credential: verdicts and the evidence behind them, nothing else.
-    Authority.run(Verifier::Ingest::ACTOR, scopes: %w[postings:verify evidence:write], purpose: "verifier:verify",
+    Authority.run(Verifier::Ingest::ACTOR, scopes: Verifier::CheckAll::SCOPES, purpose: "verifier:verify",
                                          ttl: Authority::BATCH) do
       saved.group_by(&:first).each { |run_id, pairs| record.call(pairs.map(&:last), run_id) }
       run = build_worker.call("verify").run(targets, command: "verify", flags: flags) if targets.any?
