@@ -28,6 +28,25 @@
   <% end %>
 </dl>
 
+<h2>Application</h2>
+<% if (application = @role.application) %>
+  <p>
+    <%= stage_badge(application.stage) %> <%= in_stage(application) %>, since <%= application.stage_changed_on %>.
+    <%= link_to "Open its application", application_path(application) %>
+  </p>
+<% else %>
+  <%= form_with url: applications_path, class: "add-form" do |form| %>
+    <%= hidden_field_tag :posting_id, @role.id %>
+    <label>Stage <%= select_tag :stage, stage_options("interested") %></label>
+    <label>On <%= form.date_field :on, value: Date.current, max: Date.current %></label>
+    <label>Note <%= form.text_field :note, placeholder: "Referred by a former colleague", autocomplete: "off" %></label>
+    <%= form.submit "Start an application", class: "btn primary small" %>
+    <% unless @role.tracking == "tracked" %>
+      <p class="muted small">Starting one tracks this role too.</p>
+    <% end %>
+  <% end %>
+<% end %>
+
 <h2>Is it still listed?</h2>
 <%= render "check_runs/panel", record: @role, run: @run %>
 

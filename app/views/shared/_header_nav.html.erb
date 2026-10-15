@@ -1,6 +1,7 @@
 <nav class="site-nav">
   <%= link_to "Provenance Pipeline", root_path, class: "brand" %>
   <%= nav_link "Dashboard", root_path, current: controller_name == "dashboard" %>
+  <%= nav_link "Pipeline", applications_path, current: controller_name == "applications" %>
   <%= nav_link "Roles", roles_path, current: controller_name == "roles" %>
   <%= nav_link "Companies", companies_path, current: controller_name == "companies" %>
   <%= nav_link "Profile", profile_path, current: controller_name == "profiles" %>

@@ -13,6 +13,13 @@ Rails.application.routes.draw do
       patch :dismiss
     end
   end
+  resources :applications, only: %i[index show create] do
+    member do
+      patch :move
+      post :log
+      patch :note
+    end
+  end
   resources :companies, only: %i[index show create] do
     member do
       patch :confirm_page

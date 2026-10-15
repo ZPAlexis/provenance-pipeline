@@ -1,0 +1,54 @@
+<% content_for :title, "Pipeline · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Pipeline</h1>
+    <p class="sub">
+      Your applications, by where they stand. Only you start one or move it: no agent can, whatever it holds. Start one
+      from a role's page.
+    </p>
+  </div>
+</div>
+
+<% if @open.empty? && @closed.empty? %>
+  <p class="empty">No application yet: open a role you track and start one there.</p>
+<% else %>
+  <div class="board">
+    <% Application::OPEN.each do |stage| %>
+      <% cards = @open.fetch(stage, []) %>
+      <section class="column" id="<%= stage %>">
+        <h3><%= Application.stage_label(stage) %> <span class="muted">(<%= cards.size %>)</span></h3>
+        <% cards.each do |application| %>
+          <%= link_to application_path(application), class: "card" do %>
+            <strong><%= application.posting.role_title %></strong>
+            <span class="small"><%= application.company.name %></span>
+            <span class="muted small"><%= in_stage(application).upcase_first %></span>
+            <% if (activity = @latest[application.id]) %>
+              <span class="muted small">Last: <%= activity.kind.humanize.downcase %>, <%= activity.occurred_on.to_fs(:short) %></span>
+            <% end %>
+          <% end %>
+        <% end %>
+      </section>
+    <% end %>
+  </div>
+
+  <h2 id="closed">Closed <span class="muted">(<%= @closed.size %>)</span></h2>
+  <% if @closed.any? %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Role</th><th>Company</th><th>Outcome</th><th>On</th></tr></thead>
+        <tbody>
+          <% @closed.each do |application| %>
+            <tr>
+              <td><%= link_to application.posting.role_title, application_path(application) %></td>
+              <td><%= link_to application.company.name, company_path(application.company) %></td>
+              <td><%= stage_badge(application.stage) %></td>
+              <td class="nowrap"><%= application.stage_changed_on %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="muted small">None closed yet.</p>
+  <% end %>
+<% end %>

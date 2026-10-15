@@ -44,12 +44,14 @@ RSpec.describe Pipeline do
 
     it "may go back a stage, as a correction, and closes it at an outcome" do
       described_class.move!(application, "interested", on: Date.new(2026, 10, 2))
-      described_class.move!(application, "no_response", on: Date.new(2026, 10, 30))
+      described_class.move!(application, "no_response", on: Date.new(2026, 10, 9))
 
       expect(application.reload).to have_attributes(stage: "no_response", open?: false)
       expect(Application.closed).to eq([ application ])
-      expect { described_class.move!(application, "no_response", on: Date.new(2026, 10, 30)) }
+      expect { described_class.move!(application, "no_response", on: Date.new(2026, 10, 9)) }
         .to raise_error(ArgumentError, /already at No response/)
+      expect { described_class.move!(application, "offer", on: Date.current + 1) }
+        .to raise_error(ArgumentError, /a stage is reached on a day that has come/)
     end
   end
 

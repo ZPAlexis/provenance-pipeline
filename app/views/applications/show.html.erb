@@ -1,0 +1,78 @@
+<% role = @application.posting %>
+<% content_for :title, "#{role.role_title} · Pipeline · Provenance Pipeline" %>
+<%# Its forms redirect back here: keep the reader's place, and the notice in view. %>
+<% turbo_refreshes_with method: :replace, scroll: :preserve %>
+<% content_for :floating_flash, true %>
+<div class="page-head">
+  <div>
+    <p class="muted small"><%= link_to "Pipeline", applications_path %> / Application</p>
+    <h1><%= link_to role.role_title, role_path(role) %></h1>
+    <p class="sub"><%= link_to @application.company.name, company_path(@application.company) %><%= " · #{role.location}" if role.location %></p>
+  </div>
+  <div><%= stage_badge(@application.stage) %></div>
+</div>
+
+<dl class="facts">
+  <dt>Stage</dt>
+  <dd><%= Application.stage_label(@application.stage) %>, <%= in_stage(@application) %> (since <%= @application.stage_changed_on %>)</dd>
+  <dt>The role</dt>
+  <dd><%= answer_badge(role.verification_state) %><%= ", checked " if role.last_checked_at %><%= ago(role.last_checked_at) if role.last_checked_at %></dd>
+  <dt>Pay expectation</dt>
+  <dd><%= @application.comp_expectation || tag.span("not noted", class: "muted") %></dd>
+  <dt>Notes</dt>
+  <dd><%= @application.notes ? simple_format(@application.notes, class: "small") : tag.span("none", class: "muted") %></dd>
+</dl>
+
+<h2>Move it</h2>
+<%= form_with url: move_application_path(@application), method: :patch, class: "add-form" do |form| %>
+  <label>To <%= select_tag :stage, stage_options(@application.stage) %></label>
+  <label>On <%= form.date_field :on, value: Date.current, max: Date.current %></label>
+  <label>Note <%= form.text_field :note, placeholder: "Recruiter call booked", autocomplete: "off" %></label>
+  <%= form.submit "Move", class: "btn primary small" %>
+  <p class="muted small">Yours alone: no agent can move an application. The date is when it happened; a correction is fine.</p>
+<% end %>
+
+<h2>Log what happened</h2>
+<%= form_with url: log_application_path(@application), class: "add-form" do |form| %>
+  <label>What <%= select_tag :kind, activity_options %></label>
+  <label>On <%= form.date_field :on, value: Date.current %></label>
+  <label>Summary <%= form.text_field :summary, required: true, placeholder: "Wrote to the recruiter", autocomplete: "off" %></label>
+  <%= form.submit "Log it", class: "btn small" %>
+<% end %>
+
+<h2>Timeline</h2>
+<% if @timeline.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>On</th><th>What</th><th>By</th><th>Note</th></tr></thead>
+      <tbody>
+        <% @timeline.each do |entry| %>
+          <tr>
+            <td class="nowrap"><%= entry.on %></td>
+            <td class="nowrap">
+              <% if entry.stage %>
+                <%= entry.from ? "#{Application.stage_label(entry.from)} → " : "Started at " %><%= stage_badge(entry.stage) %>
+              <% else %>
+                <span class="badge"><%= entry.activity.kind.humanize %></span>
+              <% end %>
+            </td>
+            <td><%= actor_label(entry.actor) %></td>
+            <td class="reason"><%= entry.note %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">Nothing yet.</p>
+<% end %>
+
+<details class="add" <%= "open" if @application.notes.blank? && @application.comp_expectation.blank? %>>
+  <summary class="muted small">Notes and pay expectation</summary>
+  <%= form_with url: note_application_path(@application), method: :patch, class: "add-form" do |form| %>
+    <label>Pay expectation <%= form.text_field :comp_expectation, value: @application.comp_expectation, placeholder: "e.g. 25k a month",
+                                                                   autocomplete: "off" %></label>
+    <label class="wide">Notes <%= form.text_area :notes, value: @application.notes, rows: 3 %></label>
+    <%= form.submit "Keep them", class: "btn small" %>
+  <% end %>
+</details>
