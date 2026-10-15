@@ -10,10 +10,22 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_14_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_15_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  create_table "activities", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "application_id", null: false
+    t.string "kind", null: false
+    t.date "occurred_on", null: false
+    t.text "summary", null: false
+    t.string "logged_by", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["application_id", "occurred_on"], name: "index_activities_on_application_id_and_occurred_on"
+    t.index ["application_id"], name: "index_activities_on_application_id"
+  end
 
   create_table "agent_credentials", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "actor", null: false
@@ -27,6 +39,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_000001) do
     t.datetime "updated_at", null: false
     t.index ["actor", "created_at"], name: "index_agent_credentials_on_actor_and_created_at"
     t.index ["token_digest"], name: "index_agent_credentials_on_token_digest", unique: true
+  end
+
+  create_table "applications", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "posting_id", null: false
+    t.uuid "company_id", null: false
+    t.string "stage", null: false
+    t.date "stage_changed_on", null: false
+    t.string "comp_expectation"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_applications_on_company_id"
+    t.index ["posting_id"], name: "index_applications_on_posting_id", unique: true
+    t.index ["stage"], name: "index_applications_on_stage"
   end
 
   create_table "audit_events", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -215,6 +241,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_000001) do
     t.datetime "updated_at", null: false
   end
 
+  add_foreign_key "activities", "applications"
+  add_foreign_key "applications", "companies"
+  add_foreign_key "applications", "postings"
   add_foreign_key "audit_events", "agent_credentials", column: "credential_id"
   add_foreign_key "check_runs", "companies"
   add_foreign_key "check_runs", "postings", on_delete: :nullify

@@ -3,6 +3,7 @@ class Company < ApplicationRecord
   has_many :page_checks, dependent: :destroy
   has_many :check_runs, dependent: :destroy
   has_many :review_items, dependent: :destroy
+  has_many :applications, dependent: :restrict_with_exception
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 

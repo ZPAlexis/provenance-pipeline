@@ -114,8 +114,8 @@ module Authority
 
   # What no scope grants: the operator's alone, whatever an agent holds.
   HUMAN_ONLY = [
-    "Track or dismiss a role", "Decide a review item", "Edit the search profile", "Ask for a check",
-    "Name a company or set its kind", "Issue or revoke a credential"
+    "Start an application, or move one between stages", "Track or dismiss a role", "Decide a review item",
+    "Edit the search profile", "Ask for a check", "Name a company or set its kind", "Issue or revoke a credential"
   ].freeze
 
   BATCH = 4.hours # a run over many companies
@@ -182,7 +182,8 @@ module Authority
     return if rules.any? { |rule| rule.allows?(record, action, changed) }
 
     what = record.class.model_name.human.downcase
-    "may not #{action} a #{what}#{" (#{changed.sort.join(', ')})" if changed.any?} with #{principal.scopes.join(', ')}"
+    what = "#{what.match?(/\A[aeiou]/) ? 'an' : 'a'} #{what}"
+    "may not #{action} #{what}#{" (#{changed.sort.join(', ')})" if changed.any?} with #{principal.scopes.join(', ')}"
   end
 
   # The log is append-only, and an event in an agent's (or the queue's) name needs its credential (or grant).
