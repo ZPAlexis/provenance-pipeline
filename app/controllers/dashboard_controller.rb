@@ -1,5 +1,6 @@
 class DashboardController < ApplicationController
   def show
+    @applications = Application.group(:stage).count
     @roles = Overview.role_counts
     @tracking = Overview.tracking_counts
     @review = ReviewItem.open.count

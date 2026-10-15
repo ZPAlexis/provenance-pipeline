@@ -336,3 +336,42 @@ code.scope {
   white-space: nowrap;
 }
 .refused { color: var(--gone); }
+
+/* The pipeline (Stage 2a) */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  padding-bottom: 4px;
+}
+.board .column { min-width: 0; }
+.board h3 { margin: 4px 0 8px; }
+.board .card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding: 9px 11px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+}
+.board .card:hover { text-decoration: none; border-color: var(--accent); }
+.add-form input[type="date"], .add-form select, .add-form textarea {
+  padding: 5px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.add-form label.wide { flex-basis: 100%; }
+.add-form textarea { width: 100%; max-width: 600px; }
+@media (max-width: 600px) {
+  .board { grid-template-columns: 1fr; overflow-x: visible; }
+}

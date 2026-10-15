@@ -6,6 +6,23 @@
   </div>
 </div>
 
+<h2>Pipeline</h2>
+<div class="tiles">
+  <% Application::OPEN.each do |stage| %>
+    <%= link_to applications_path(anchor: stage), class: [ "tile", ("live" if stage == "offer" && @applications[stage].to_i.positive?) ] do %>
+      <div class="value"><%= @applications.fetch(stage, 0) %></div>
+      <div class="label"><%= Application.stage_label(stage) %></div>
+    <% end %>
+  <% end %>
+  <%= link_to applications_path(anchor: "closed"), class: "tile" do %>
+    <div class="value"><%= Application::CLOSED.sum { |stage| @applications.fetch(stage, 0) } %></div>
+    <div class="label">Closed</div>
+  <% end %>
+</div>
+<% if @applications.empty? %>
+  <p class="muted small">No application yet: start one from a role's page.</p>
+<% end %>
+
 <h2>Tracked roles</h2>
 <div class="tiles">
   <% [ [ "verified_live", "live" ], [ "not_found", "gone" ], [ "inaccessible", "unsure" ], [ "pending", "" ] ].each do |state, tone| %>

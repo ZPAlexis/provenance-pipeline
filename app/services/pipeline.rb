@@ -10,6 +10,7 @@ module Pipeline
   def start!(posting, stage: "interested", on: Date.current, note: nil, actor: AuditEvent::OPERATOR)
     raise ArgumentError, "#{posting.role_title} already has an application" if posting.application
     stage = known!(stage)
+    reached!(on)
 
     ApplicationRecord.transaction do
       Verifier::Tracking.track!(posting, note: "An application was started.", actor: actor) unless posting.tracking == "tracked"
@@ -23,6 +24,7 @@ module Pipeline
   # Moves an application to a stage, on the date it happened.
   def move!(application, stage, on: Date.current, note: nil, actor: AuditEvent::OPERATOR)
     stage = known!(stage)
+    reached!(on)
     raise ArgumentError, "it is already at #{Application.stage_label(stage)} since #{on}" if
       application.stage == stage && application.stage_changed_on == on
 
@@ -58,5 +60,10 @@ module Pipeline
 
     raise ArgumentError, "unknown stage #{stage.inspect}: one of #{Application::STAGES.join(', ')}"
   end
-  private_class_method :known!
+
+  # A stage is reached on a day that has come; an activity may be booked ahead (an interview next week).
+  def reached!(on)
+    raise ArgumentError, "a stage is reached on a day that has come: #{on} is still ahead" if on > Date.current
+  end
+  private_class_method :known!, :reached!
 end
