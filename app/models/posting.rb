@@ -2,6 +2,8 @@ class Posting < ApplicationRecord
   belongs_to :company
   # A deleted posting leaves its check runs, which name the company too (the key nullifies).
   has_many :check_runs, dependent: nil
+  # A role applied to is never deleted with its application on it.
+  has_one :application, dependent: :restrict_with_exception
   # No `dependent:` on purpose. The audit trail outlives the records it
   # describes: when a record is deleted its events keep target_type and
   # target_id, so its whole history stays queryable by id and no audit event is
