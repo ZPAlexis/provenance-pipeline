@@ -367,6 +367,38 @@ class RelatedResult(BaseModel):
     duration_ms: int = 0
 
 
+class DescribeTarget(BaseModel):
+    """One role whose description is to be read: its own page, when it has one."""
+
+    id: str  # the posting's id
+    url: str | None = None  # its own page at the employer, or on its ATS board
+    label: str | None = None
+
+
+class DescriptionResult(BaseModel):
+    """A role's description, as its own page states it (Stage 2b). Never read by the LLM.
+
+    ok           the description was read: `text` holds it, `content_hash` names it
+    gone         its board or its page says the role is not there (HTTP 404, or a job the API no longer has)
+    blocked      robots.txt keeps us off its page
+    inaccessible the site refused or failed us
+    no_page      the role has no page of its own on record
+    error        our own failure
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["description"] = "description"
+    target_id: str
+    url: str | None = None
+    outcome: Literal["ok", "gone", "blocked", "inaccessible", "no_page", "error"]
+    reason: str | None = None
+    read_via: str | None = None  # "ats_api:greenhouse" (lever, ashby, workday, oracle), or "render"
+    text: str | None = None
+    content_hash: str | None = None  # sha256 of the whitespace-normalized text
+    checked_at: str | None = None
+    duration_ms: int = 0
+
+
 class VerificationResult(BaseModel):
     """A company's page read in full (every page of it that could be), and a verdict per posting.
 

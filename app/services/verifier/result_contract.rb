@@ -118,6 +118,27 @@ module Verifier
       errors
     end
 
+    DESCRIPTION_OUTCOMES = %w[ok gone blocked inaccessible no_page error].freeze
+
+    # A role's description, read from its own page: on ok, its text, a hash naming it, and how it was read.
+    def description_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be description" unless result["kind"] == "description"
+      errors << "target_id is missing" if result["target_id"].blank?
+      outcome = result["outcome"]
+      errors << "unknown outcome #{outcome.inspect}" unless DESCRIPTION_OUTCOMES.include?(outcome)
+      return errors unless outcome == "ok"
+
+      errors << "text is missing" unless result["text"].is_a?(String) && result["text"].strip.present?
+      errors << "content_hash must be a sha256" unless result["content_hash"].to_s.match?(/\Asha256:\h{64}\z/)
+      errors << "read_via must be an ATS API or render" unless result["read_via"].to_s.match?(/\A(ats_api:[a-z]+|render)\z/)
+      errors << "url must be a web address" unless web_url?(result["url"])
+      errors << "checked_at must be an ISO 8601 time" unless iso8601?(result["checked_at"])
+      errors
+    end
+
     # Titles the LLM proposed for a profile, each with its language and why.
     def related_errors(result)
       return [ "not an object" ] unless result.is_a?(Hash)

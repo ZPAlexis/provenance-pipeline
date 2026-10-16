@@ -46,6 +46,8 @@ from verifier.config import DEFAULT_MODEL, DOMAIN_DELAY_SECONDS, MODEL_SETTINGS
 from verifier.contract import (
     BoardResult,
     BoardTarget,
+    DescribeTarget,
+    DescriptionResult,
     MatchResult,
     MatchTarget,
     PageResult,
@@ -75,7 +77,14 @@ _OUTAGE = re.compile(r"^llm_(http_5\d\d|connection_error|rate_limited)$")
 OUTAGE_LIMIT = 3
 
 Result = (
-    PageResult | ResolutionResult | MatchResult | VerificationResult | BoardResult | SuggestionResult | RelatedResult
+    PageResult
+    | ResolutionResult
+    | MatchResult
+    | VerificationResult
+    | BoardResult
+    | SuggestionResult
+    | RelatedResult
+    | DescriptionResult
 )
 
 
@@ -160,6 +169,15 @@ def run_match(targets: list[MatchTarget], out_path: Path, matcher: Matcher, log=
     return _run(targets, out_path, matcher.match, failed, log)
 
 
+def run_describe(targets: list[DescribeTarget], out_path: Path, services: Services, log=sys.stderr) -> RunSummary:
+    from verifier.describe import describe_role
+
+    def failed(target: DescribeTarget, reason: str) -> DescriptionResult:
+        return DescriptionResult(target_id=target.id, url=target.url, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: describe_role(target, services), failed, log)
+
+
 def run_boards(targets: list[BoardTarget], out_path: Path, reader: ServicesReader, log=sys.stderr) -> RunSummary:
     from verifier.boards import find_board
 
@@ -218,7 +236,7 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 
 
 def _pages(result: Result) -> list[PageResult]:
-    if isinstance(result, MatchResult | BoardResult | SuggestionResult | RelatedResult):
+    if isinstance(result, MatchResult | BoardResult | SuggestionResult | RelatedResult | DescriptionResult):
         return []
     return result.checks if isinstance(result, ResolutionResult | VerificationResult) else [result]
 
@@ -230,7 +248,11 @@ def _usages(result: Result) -> list:
 
 
 def _reasons(result: Result) -> list[str | None]:
-    own = [result.reason] if isinstance(result, MatchResult | VerificationResult | RelatedResult) else []
+    own = (
+        [result.reason]
+        if isinstance(result, MatchResult | VerificationResult | RelatedResult | DescriptionResult)
+        else []
+    )
     return [page.reason for page in _pages(result)] + own
 
 
@@ -240,6 +262,9 @@ def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, resu
     if isinstance(result, RelatedResult):
         found = f"{len(result.proposals)} titles proposed" if result.outcome == "ok" else f"error, {result.reason}"
         return f"{target.id}: {found} {timing}"
+    if isinstance(result, DescriptionResult):
+        read = f"{len(result.text or '')} characters via {result.read_via}" if result.outcome == "ok" else result.reason
+        return f"{target.label or target.id}: {result.outcome}, {read} {timing}"
     if isinstance(result, SuggestionResult):
         if result.outcome != "ok":
             return f"{target.label or target.id}: {result.outcome}, {result.reason} {timing}"
@@ -289,6 +314,9 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("boards", parents=[common], help="find free boards listing the same roles as LLM-read pages")
     commands.add_parser("suggest", parents=[common], help="weigh stored roles against a search profile")
     commands.add_parser("related", parents=[common], help="propose titles in the same area as a profile's")
+    commands.add_parser(
+        "describe", parents=[common], help="read roles' descriptions from their own pages, never by the LLM"
+    )
     args = parser.parse_args(argv)
 
     model = {
@@ -299,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         "boards": BoardTarget,
         "suggest": SuggestTarget,
         "related": RelateTarget,
+        "describe": DescribeTarget,
     }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
@@ -358,6 +387,8 @@ def main(argv: list[str] | None = None) -> int:
                 summary = run_resolve(targets, args.out, resolver)
             elif args.command == "boards":
                 summary = run_boards(targets, args.out, ServicesReader(services))
+            elif args.command == "describe":
+                summary = run_describe(targets, args.out, services)
             elif args.command in ("verify", "check"):
                 matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=args.model))
                 run_command = run_verify if args.command == "verify" else run_check

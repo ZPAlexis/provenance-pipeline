@@ -28,6 +28,10 @@ from verifier.config import (
 _LINKS_JS = """() => Array.from(document.querySelectorAll('a[href]'))
   .map(a => [(a.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 200), a.href])"""
 _EMBED_SRCS_JS = """() => Array.from(document.querySelectorAll('iframe[src], script[src]')).map(e => e.src)"""
+# The page's main content, where it marks one: the longest of its <main>, <article>, and role="main"
+# elements (what a role's own page puts its description in); empty when it marks none.
+_MAIN_TEXT_JS = """() => Array.from(document.querySelectorAll('main, article, [role="main"]'))
+  .map(e => e.innerText || '').sort((a, b) => b.length - a.length)[0] || ''"""
 # The page's main heading: its first non-empty h1, else what it says it is to links shared (og:title).
 _HEADING_JS = """() => {
   const h1 = Array.from(document.querySelectorAll('h1'))
@@ -74,6 +78,7 @@ class RenderedPage:
     heading: str = ""  # its first h1, else its og:title: what a role's own page names it
     urls: list[str] = field(default_factory=list)  # final, frame, and embed URLs: where a known ATS shows up
     load_more_clicks: int = 0  # how many times a "load more" button was clicked before reading
+    main_text: str = ""  # its <main> or <article>, when it marks one: a role's own page's description
 
     @property
     def content_hash(self) -> str:
@@ -162,8 +167,9 @@ def _read(page: Page, status: int | None) -> RenderedPage:
 
     try:
         heading = page.evaluate(_HEADING_JS)
+        main_text = page.evaluate(_MAIN_TEXT_JS)
     except PlaywrightError:
-        heading = ""
+        heading, main_text = "", ""
     return RenderedPage(
         final_url=page.url,
         status=status,
@@ -172,6 +178,7 @@ def _read(page: Page, status: int | None) -> RenderedPage:
         text="\n\n".join(text for text in texts if text.strip()),
         links=_dedupe_links(links),  # all of them; the prompt decides how many the model sees
         urls=[url for url in dict.fromkeys(urls) if url and not url.startswith(("about:", "javascript:"))],
+        main_text=main_text,
     )
 
 
