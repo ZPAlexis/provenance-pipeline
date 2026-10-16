@@ -2,9 +2,6 @@
 # application's page, and its forms. Every write goes through Pipeline, audited
 # as the operator's; no agent can make any of them.
 class ApplicationsController < ApplicationController
-  # One line of an application's timeline: a stage it reached, or an activity.
-  Entry = Data.define(:on, :at, :stage, :from, :activity, :note, :actor)
-
   before_action :find_application, only: %i[show move log note]
 
   def index
@@ -16,7 +13,7 @@ class ApplicationsController < ApplicationController
   end
 
   def show
-    @timeline = timeline(@application)
+    @timeline = Pipeline.timeline(@application)
   end
 
   def create
@@ -63,19 +60,5 @@ class ApplicationsController < ApplicationController
     redirect_to application_path(@application), notice: yield, status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     redirect_to application_path(@application), alert: e.message.upcase_first, status: :see_other
-  end
-
-  # Its stage changes (from the audit log) and its activities, newest first.
-  def timeline(application)
-    moves = application.audit_events.where("changes_made ? 'stage'").map do |event|
-      Entry.new(on: Date.parse(event.changes_made.dig("stage_changed_on", 1).to_s), at: event.occurred_at,
-                stage: event.changes_made.dig("stage", 1), from: event.changes_made.dig("stage", 0), activity: nil,
-                note: event.reasoning, actor: event.actor)
-    end
-    activities = application.activities.map do |activity|
-      Entry.new(on: activity.occurred_on, at: activity.created_at, stage: nil, from: nil, activity: activity,
-                note: activity.summary, actor: activity.logged_by)
-    end
-    (moves + activities).sort_by { |entry| [ entry.on, entry.at ] }.reverse
   end
 end

@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1 complete.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Next: Stage 2, the pipeline system. See [Build stages](#build-stages).
+> **Status: Stage 1 complete; Stage 2 under way.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Stage 2 has begun with the pipeline itself: an application per role, moved through its stages by the operator alone (no agent scope allows it, and an agent that tries is refused on the record), with what happened along the way. Next: each role's description and the operator's resume, then a draft agent. See [Build stages](#build-stages).
 
 ---
 
@@ -93,7 +93,7 @@ Before 1.3 every agent write went through an audited service under a named actor
 | Review agent (planned) | `review:recommend` (write a recommendation on an open item) | Decide an item, or make the write it recommends |
 | Activity logger (Stage 2) | `activities:write`, `applications:read` | Change stage |
 | Draft agent (Stage 2) | `drafts:write` | Send anything, or finalize a draft |
-| **— no agent —** | `applications:advance_stage`; today, tracking a role and deciding a review item | **Human-only by design** |
+| **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); tracking a role; deciding a review item | **Human-only by design** |
 
 The last row is the point: the most consequential write is withheld from every agent. Read and enrich is safe to automate; drafting is safe-with-review; stage advancement and anything outbound is human-gated.
 
@@ -128,6 +128,11 @@ postings      company_id, role_title, location, posting_url, job_url, posted_on,
 
 search_profiles  name, titles, excluded_words, places, work_modes, levels
                  (what the operator is looking for: lists, edited on a page)
+
+applications  posting_id (one per role), company_id, stage, stage_changed_on,
+              comp_expectation, notes (the operator's alone to start or move)
+
+activities    application_id, kind, occurred_on, summary, logged_by
 
 page_checks   company_id, run_id, purpose (resolution | verification), step,
               url, final_url, outcome, reason, read_via, ats_vendor, ats_board,
@@ -165,6 +170,7 @@ Notes on a few choices:
 - **A repeat read is paid for only when the roles may have changed.** A page that links to exactly the role pages it did last time reuses that read's listings, and its check names the read it reused (`reused_from_id`); listings are read in full again once 14 days old (`listings_read_at`). A company whose free ATS board lists at least 90% of its page's roles has that board recorded beside the page (`board_*`, with the evidence) and read in its place for 30 days; the page stays the one on record.
 - **Only the operator tracks a role.** A posting is `suggested` (proposed by the suggester, with why in `fit`), `tracked` (on the operator's watch list), or `dismissed` (declined for good: never checked or suggested again); the agent may suggest, never track. A suggestion the operator never acted on is withdrawn when it no longer fits the profile or its check found it gone: deleted, with its whole record kept in its last audit event. `job_url` is the role's own page at the employer, learned from the listing it matched, so the next check finds the role by its link before its title; `posting_url` stays where it was found.
 - **Whether a list was read whole is the worker's own answer,** kept on each verification run's first check (`complete`): a role missing from part of a list has not closed, so what changed and the replays of Test B read it rather than guess.
+- **An application's history is its audit log.** Each stage change records the stage and the date it happened (the operator's, not when it was typed), so velocity and conversion are measured from the record, not a copy of it.
 - **A credential is never deleted,** so every agent write can be traced to the run behind it. A refused write is an audit event too (`denied`), with what it tried.
 - **The review queue is worked out from the record.** Each open item is a question the record asks now (one per question about one company or role), raised by the agent whose read led to it and closed by the operator's decision or when its evidence resolves, all audited. `evidence_key` fingerprints what was seen: an item left as is is raised again only when it changes.
 - **Careers-page resolution is recorded beside the page:** how it was found, how sure we are (`high`, `medium`, `low`, or `confirmed` by a person), a held candidate, or why it failed. A low-confidence find waits in `resolution_candidate_url` and is never watched until a person confirms it.
@@ -201,7 +207,12 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 
 **Build order was 1.2 → 1.5 → 1.3 → 1.4.** Capture needs only 1.2, so it shipped first to make the tool usable early; 1.3's check sits where every write passes, at the model layer, so it covered capture, suggestions and the review queue without reworking them. Monitoring is human-triggered first, so nothing waits on a host or a scheduler.
 
-**Stage 2 — Pipeline system.** Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents.
+**Stage 2 — Pipeline system** (in progress). Applications/activities/drafts, CRUD and review UI, MCP server exposing scoped tools, additional agents. In slices:
+
+- **2a — Applications** ✅ one per role, started from its page (tracking it if it wasn't), moved through Interested, Applied, Screening, Interviewing, Offer and Accepted, or closed as Rejected, Withdrawn or No response, by the operator alone, each change dated and noted; what happened along the way logged; a pipeline page by stage, and `applications:` commands.
+- 2b — Each role's description text, and the operator's resume (database only): what the drafting and scoring agents read.
+- 2c — A draft agent: cover letters and outreach from the profile, the resume and the description, under `drafts:write`; the operator edits and approves; nothing is ever sent.
+- 2d — The MCP server, grown from a read-only one, adding scoped write tools behind the same credential check; contacts and an activity logger with it.
 
 **Stage 3 — Governance completion.** Full audit views, a review queue for drafts, analytics.
 
@@ -263,6 +274,11 @@ bin/rails review:list                            # what waits for your judgment,
 DECISION=leave NOTE="why" bin/rails "review:decide[item_id]"  # decide one item, as on the Review page
 bin/rails agents:credentials                     # credentials agent runs held, what each wrote and was refused
 NOTE="why" bin/rails "agents:revoke[credential_id]"  # stop a run: its next write is refused
+bin/rails applications:list                      # the pipeline by stage, each application's id (STAGE= to filter)
+STAGE=applied bin/rails "applications:start[posting_id]"  # start one for a role (ON=, NOTE=); only you can
+STAGE=interviewing bin/rails "applications:move[id]"      # move it, on the day it happened (ON=, NOTE=)
+KIND=call SUMMARY="..." bin/rails "applications:log[id]"  # log what happened (ON=)
+bin/rails "applications:show[id]"                # its stage, the role's answer, and its timeline
 ```
 
 ### Suggestions
@@ -296,7 +312,7 @@ Boot the server:
 bin/rails server
 ```
 
-It serves the operator's pages at `http://localhost:3000`: a dashboard (where the tracked roles stand, "Check everything" with its plan, ceiling and progress, recent checks and verdict changes, API credit spent), what changed since a check of everything, the roles (tracked, suggested with why, dismissed, filtered by answer), each role's history and the checks behind it, the companies watched, the search profile with a preview of what it would suggest, and the Review page: the questions waiting for the operator, by kind, each naming its company and role and decided with a button; a check asked from one is followed on the item until it says whether it settled it; and the Agents page: each agent's scopes, the credentials its runs held, with what each wrote, and every refused write. From them the operator adds a company or a role by its link, confirms or sets a company's careers page, tracks or dismisses a role with a note on the record, finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
+It serves the operator's pages at `http://localhost:3000`: the pipeline (applications by stage, each with a page to move it, log what happened, and read its timeline), a dashboard (where applications and the tracked roles stand, "Check everything" with its plan, ceiling and progress, recent checks and verdict changes, API credit spent), what changed since a check of everything, the roles (tracked, suggested with why, dismissed, filtered by answer), each role's history and the checks behind it, the companies watched, the search profile with a preview of what it would suggest, and the Review page: the questions waiting for the operator, by kind, each naming its company and role and decided with a button; a check asked from one is followed on the item until it says whether it settled it; and the Agents page: each agent's scopes, the credentials its runs held, with what each wrote, and every refused write. From them the operator adds a company or a role by its link, confirms or sets a company's careers page, tracks or dismisses a role with a note on the record, finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
 
 ## Note on data
 
