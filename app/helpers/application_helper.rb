@@ -16,6 +16,7 @@ module ApplicationHelper
 
   # A finished check run's answer: the role's verdict, or that a company was checked.
   def run_answer(run)
+    return tag.span(run.answer == "read" ? "Read" : "Not read", class: [ "badge", run.answer == "read" ? "live" : "unsure" ]) if run.kind == "describe"
     return tag.span("Checked", class: "badge live") if run.kind != "role"
 
     run.answer ? answer_badge(run.answer) : tag.span("Couldn't confirm", class: "badge unsure")

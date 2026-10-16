@@ -32,7 +32,9 @@ class RolesController < ApplicationController
   def show
     @role = Posting.includes(:company).find_by(id: params[:id]) or return withdrawn
     CheckRun.abandon_stale!
-    @run = @role.check_runs.newest_first.first
+    @run = @role.check_runs.where(kind: "role").newest_first.first
+    @describe_run = @role.check_runs.where(kind: "describe").newest_first.first
+    @descriptions = @role.role_descriptions.newest_first.to_a
     @history = @role.audit_events.order(occurred_at: :desc).includes(:credential)
     # The checks whose matching said something about this role, newest first.
     @checks = @role.company.page_checks.where("matches @> ?", [ { posting_id: @role.id } ].to_json)

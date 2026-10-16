@@ -375,3 +375,18 @@ code.scope {
 @media (max-width: 600px) {
   .board { grid-template-columns: 1fr; overflow-x: visible; }
 }
+
+/* A role's description (Stage 2b) */
+
+details.description { margin: 6px 0 10px; }
+details.description > summary { cursor: pointer; }
+.description-text {
+  white-space: pre-line;
+  max-width: 760px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}

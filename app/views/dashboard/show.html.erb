@@ -87,7 +87,9 @@
           <tr>
             <td><%= ago(run.created_at) %></td>
             <td>
-              <% if run.kind == "role" && run.posting %>
+              <% if run.kind == "describe" && run.posting %>
+                <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %> (its description)</span>
+              <% elsif run.kind == "role" && run.posting %>
                 <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %></span>
               <% elsif run.kind == "all" %>
                 Everything <span class="muted">(<%= run.total ? pluralize(run.total, "company") : "every watched company" %>)</span>

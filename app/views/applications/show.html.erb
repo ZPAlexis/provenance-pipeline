@@ -17,6 +17,14 @@
   <dd><%= Application.stage_label(@application.stage) %>, <%= in_stage(@application) %> (since <%= @application.stage_changed_on %>)</dd>
   <dt>The role</dt>
   <dd><%= answer_badge(role.verification_state) %><%= ", checked " if role.last_checked_at %><%= ago(role.last_checked_at) if role.last_checked_at %></dd>
+  <dt>Description</dt>
+  <dd>
+    <% if (description = role.role_descriptions.newest_first.first) %>
+      <%= number_with_delimiter(description.words) %> words, read <%= description.first_read_at.to_date %> · <%= link_to "read it on the role's page", role_path(role) %>
+    <% else %>
+      <span class="muted">not read yet</span> · <%= link_to "the role's page", role_path(role) %> reads it
+    <% end %>
+  </dd>
   <dt>Pay expectation</dt>
   <dd><%= @application.comp_expectation || tag.span("not noted", class: "muted") %></dd>
   <dt>Notes</dt>

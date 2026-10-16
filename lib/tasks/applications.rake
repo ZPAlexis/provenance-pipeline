@@ -58,6 +58,11 @@ namespace :applications do
     puts "Backed up to #{DatabaseBackup.call}"
     application = Pipeline.start!(role, stage: at, on: on, note: ENV["NOTE"])
     puts "#{role.company.name} / #{role.role_title}: started at #{Application.stage_label(at)} on #{on} (#{application.id})"
+    # Its description, for the drafting to come: read now, since a command has no background queue (free, never the LLM).
+    if role.job_url
+      read = Verifier::Descriptions.read!(role, purpose: "describe: #{role.role_title} at #{role.company.name}").sole
+      puts "  Its description: #{read.summary}"
+    end
   rescue ArgumentError => e
     abort e.message.upcase_first
   end

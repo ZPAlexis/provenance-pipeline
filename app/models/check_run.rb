@@ -1,12 +1,12 @@
 # A check the operator asked for from the pages, run in the background (CheckNowJob):
-# one role, one company, or everything (1.4). The page polls it until it is done.
+# one role, one company, everything (1.4), or a role's description read (2b). The page polls it until it is done.
 # Evidence and changes are recorded as for any check, under run_id; this row is the
 # request and its outcome.
 class CheckRun < ApplicationRecord
   belongs_to :company, optional: true # none for everything
   belongs_to :posting, optional: true
 
-  KINDS = %w[role company all].freeze
+  KINDS = %w[role company all describe].freeze
   STATUSES = %w[queued running done failed].freeze
   ACTIVE = %w[queued running].freeze
   # Longer than any check takes (a ten-page list read by the LLM, or a 2,000-role
@@ -18,7 +18,7 @@ class CheckRun < ApplicationRecord
   validates :kind, inclusion: { in: KINDS }
   validates :status, inclusion: { in: STATUSES }
   validates :requested_by, presence: true
-  validates :posting, presence: true, if: -> { kind == "role" }
+  validates :posting, presence: true, if: -> { kind.in?(%w[role describe]) }
   validates :company, presence: true, unless: -> { kind == "all" }
 
   scope :active, -> { where(status: ACTIVE) }
@@ -44,10 +44,18 @@ class CheckRun < ApplicationRecord
   def self.start_for!(record, requested_by: AuditEvent::OPERATOR)
     abandon_stale!
     role = record.is_a?(Posting)
-    runs = role ? where(posting: record) : where(company: record, kind: "company")
+    runs = role ? where(posting: record, kind: "role") : where(company: record, kind: "company")
     runs.active.first || create!(
       kind: role ? "role" : "company", company: role ? record.company : record, posting: (record if role),
       requested_by: requested_by, ceiling_usd: Verifier::CheckNow.ceiling(record)
+    ).tap { |run| CheckNowJob.perform_later(run) }
+  end
+
+  # A role's description read (2b), or the read already under way: free, so no ceiling.
+  def self.start_describe!(posting, requested_by: AuditEvent::OPERATOR)
+    abandon_stale!
+    where(kind: "describe", posting: posting).active.first || create!(
+      kind: "describe", company: posting.company, posting: posting, requested_by: requested_by, ceiling_usd: 0
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
@@ -72,6 +80,7 @@ class CheckRun < ApplicationRecord
   def target_name
     case kind
     when "role" then "#{posting&.role_title || 'a withdrawn role'} at #{company.name}"
+    when "describe" then "the description of #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "all" then "everything"
     else company.name
     end

@@ -56,6 +56,14 @@ class WhatChanged
 
   def lists = @lists ||= Verifier::ListChange.since(@from)
 
+  # Descriptions that changed (a role edited or reposted): each new version of a role read before.
+  def descriptions
+    @descriptions ||= RoleDescription.where(first_read_at: @from..)
+                                     .where("EXISTS (SELECT 1 FROM role_descriptions earlier WHERE earlier.posting_id = " \
+                                            "role_descriptions.posting_id AND earlier.first_read_at < role_descriptions.first_read_at)")
+                                     .order(first_read_at: :desc).preload(posting: :company).to_a
+  end
+
   def questions = @questions ||= ReviewItem.where(created_at: @from..).order(created_at: :desc).preload(:company, :subject).to_a
 
   def refused = @refused ||= events.denied.to_a
@@ -66,7 +74,8 @@ class WhatChanged
       "No longer listed" => verdicts.fetch("not_found", []).size, "Listed" => verdicts.fetch("verified_live", []).size,
       "Couldn't confirm" => verdicts.fetch("inaccessible", []).size, "New suggestions" => suggested.size,
       "Suggestions withdrawn" => withdrawn.size, "Pages changed a lot" => lists.size, "Careers pages" => careers_pages.size,
-      "Boards" => boards.size, "New review questions" => questions.size, "Refused writes" => refused.size
+      "Boards" => boards.size, "Descriptions changed" => descriptions.size, "New review questions" => questions.size,
+      "Refused writes" => refused.size
     }
   end
 end
