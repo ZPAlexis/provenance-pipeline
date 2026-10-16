@@ -42,6 +42,17 @@ RSpec.describe CheckNowJob do
     expect(DatabaseBackup).not_to have_received(:daily)
   end
 
+  it "reads a role's description for a description run, free, and says what it found" do
+    described = create(:check_run, kind: "describe", company: company, posting: create(:posting, company: company))
+    read = Verifier::Descriptions::Read.new(posting: described.posting, outcome: "ok", summary: "Read: 480 words through Ashby's job API.",
+                                            version: nil, new_version: true)
+    allow(Verifier::Descriptions).to receive(:read!).and_return([ read ])
+
+    described_class.perform_now(described)
+
+    expect(described.reload).to have_attributes(status: "done", answer: "read", summary: /480 words/, cost_usd: 0)
+  end
+
   it "fails with why when the check stopped or broke, so the page never waits forever" do
     stopped = outcome.dup.tap { |o| o.stopped = "API credit exhausted"; o.summary = "Stopped before a result: API credit exhausted." }
     allow(Verifier::CheckNow).to receive(:role).and_return(stopped)

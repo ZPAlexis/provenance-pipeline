@@ -584,6 +584,30 @@ namespace :verifier do
          "(never matched live, or the listing they matched had no link)."
   end
 
+  desc "Read roles' descriptions from their own pages: free, never the LLM (2b). One role by its id, or " \
+       "ROLES=applications (every role applied to) or ROLES=tracked (every tracked role with a page of its own). " \
+       "Usage: bin/rails \"verifier:describe[posting_id]\" or ROLES=applications bin/rails verifier:describe [LIMIT=n]"
+  task :describe, [ :id ] => :environment do |_task, args|
+    roles =
+      if args[:id].present?
+        [ Posting.includes(:company).find_by(id: args[:id]) || abort("No role #{args[:id].inspect}: its id is on its page.") ]
+      else
+        scope = { "applications" => Posting.where(id: Application.select(:posting_id)),
+                  "tracked" => Posting.tracked.where.not(job_url: nil) }.fetch(ENV["ROLES"].to_s) do
+          abort "Name a role (verifier:describe[posting_id]), or ROLES=applications or ROLES=tracked."
+        end
+        scope.includes(:company).order(:created_at).limit(ENV["LIMIT"].presence&.to_i).to_a
+      end
+    abort "No role to read." if roles.empty?
+
+    DatabaseBackup.daily
+    puts "Reading #{roles.size == 1 ? 'its description' : "#{roles.size} roles' descriptions"} (free, never the LLM)."
+    reads = Verifier::Descriptions.read!(roles, purpose: "verifier:describe", worker: build_worker.call("describe"))
+    reads.each { |read| puts "  #{read.posting.company.name} / #{read.posting.role_title}: #{read.summary}" }
+    tally = reads.map(&:outcome).tally
+    puts "\n#{tally.map { |outcome, count| "#{outcome}: #{count}" }.join(' · ')}; #{reads.count(&:new_version)} new versions."
+  end
+
   desc "What changed since a check of everything, as the What changed page shows it: verdicts, suggestions made and " \
        "withdrawn, lists that changed a lot, careers pages, boards, new review questions, refused writes. Read-only. " \
        "[FROM=check_run_id] (by default, since the check before the latest ended)"
@@ -619,6 +643,13 @@ namespace :verifier do
     { "Careers pages" => changes.careers_pages, "Boards" => changes.boards }.each do |heading, events|
       puts "\n#{heading} (#{events.size})" if events.any?
       events.each { |event| puts line.call(event, "#{event.target&.name}: #{helpers.company_change(event)}") }
+    end
+    if changes.descriptions.any?
+      puts "\nDescriptions changed (#{changes.descriptions.size})"
+      changes.descriptions.each do |version|
+        puts "  #{version.first_read_at.utc.strftime('%m-%d %H:%M')}  #{version.posting.company.name} / #{version.posting.role_title}: " \
+             "now #{version.words} words"
+      end
     end
     if changes.questions.any?
       puts "\nNew review questions (#{changes.questions.size})"

@@ -8,8 +8,19 @@ module Verifier
   module Descriptions
     SCOPES = %w[evidence:write].freeze
 
-    # What one role's read found, in a sentence: what is shown and said.
-    Read = Data.define(:posting, :outcome, :summary, :version, :new_version)
+    # What one role's read found, in a sentence: what is shown and said. Answers a
+    # check run as a check's outcome does (CheckNowJob): read or not, and free.
+    Read = Data.define(:posting, :outcome, :summary, :version, :new_version) do
+      def finished? = outcome != "error"
+
+      def answer = outcome == "ok" ? "read" : outcome
+
+      def tally = {}
+
+      def cost_usd = 0.0
+
+      def run_id = version&.run_id
+    end
 
     module_function
 
@@ -67,11 +78,14 @@ module Verifier
     end
 
     WHY_NOT = {
-      "gone" => "Its board or its page no longer has it (%s).", "blocked" => "Its robots.txt keeps us off its page (%s).",
+      "gone" => "Its board or its page no longer has it (%s).", "blocked" => "Its robots.txt keeps us off its page.",
       "inaccessible" => "Its page could not be read (%s).", "no_page" => NO_PAGE, "error" => "The read failed (%s)."
     }.freeze
 
-    def why_not(result) = format(WHY_NOT.fetch(result["outcome"]), result["reason"])
+    def why_not(result)
+      said = WHY_NOT.fetch(result["outcome"])
+      said.include?("%s") ? format(said, result["reason"]) : said
+    end
 
     def stopped(run) = "Stopped before it was read: #{run.stopped || 'no result written'}."
   end

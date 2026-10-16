@@ -1,0 +1,40 @@
+<%# A role's description (2b): as its own page states it, version by version, read without the LLM. %>
+<% latest = descriptions.first %>
+<section class="check-now">
+  <% if latest %>
+    <p class="muted small">
+      <%= number_with_delimiter(latest.words) %> words, read through <%= latest.read_through %> on <%= latest.first_read_at.to_date %>
+      <%= "(seen the same on #{latest.last_read_at.to_date})" if latest.last_read_at.to_date != latest.first_read_at.to_date %>
+      · <%= outside_link(latest.url, label: "its page") %>
+    </p>
+    <details class="description">
+      <summary class="muted small">Show it</summary>
+      <div class="description-text"><%= latest.text %></div>
+    </details>
+    <% if descriptions.size > 1 %>
+      <p class="muted small">
+        <%= pluralize(descriptions.size, "version") %>: it changed on <%= descriptions[0...-1].map { |version| version.first_read_at.to_date }.join(", ") %>.
+      </p>
+      <details class="description">
+        <summary class="muted small">Earlier versions</summary>
+        <% descriptions.drop(1).each do |version| %>
+          <p class="muted small">Read <%= version.first_read_at.to_date %> (<%= number_with_delimiter(version.words) %> words)</p>
+          <div class="description-text"><%= version.text %></div>
+        <% end %>
+      </details>
+    <% end %>
+  <% end %>
+
+  <% if role.job_url.blank? %>
+    <p class="muted small"><%= Verifier::Descriptions::NO_PAGE %></p>
+  <% elsif !run&.active? %>
+    <%= form_with url: check_runs_path, class: "check-form" do |form| %>
+      <%= hidden_field_tag :posting_id, role.id %>
+      <%= hidden_field_tag :describe, 1 %>
+      <%= form.submit latest ? "Read it again" : "Read its description", class: "btn small" %>
+      <span class="muted small">Free: through its board's job API, or its own page rendered; never the LLM.</span>
+    <% end %>
+  <% end %>
+  <%# The latest read, while it runs or when it read nothing (why not); a read that worked shows above. %>
+  <%= render "check_runs/run", run: run, poll: false if run && (run.active? || run.answer != "read") %>
+</section>

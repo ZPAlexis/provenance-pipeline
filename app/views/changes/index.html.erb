@@ -121,6 +121,26 @@
   </div>
 <% end %>
 
+<% if (descriptions = @changes.descriptions).any? %>
+  <h2 id="descriptions-changed">Descriptions changed <span class="muted">(<%= descriptions.size %>)</span></h2>
+  <p class="muted small">A role whose own page now says something else: often edited or reposted. Earlier versions are on its page.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Read</th><th>Role</th><th>Company</th><th class="num">Words now</th></tr></thead>
+      <tbody>
+        <% descriptions.each do |version| %>
+          <tr>
+            <td><%= ago(version.first_read_at) %></td>
+            <td><%= link_to version.posting.role_title, role_path(version.posting) %></td>
+            <td><%= link_to version.posting.company.name, company_path(version.posting.company) %></td>
+            <td class="num"><%= number_with_delimiter(version.words) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
 <% if (questions = @changes.questions).any? %>
   <h2 id="new-review-questions">New review questions <span class="muted">(<%= questions.size %>)</span></h2>
   <div class="table-wrap">

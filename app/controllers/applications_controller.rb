@@ -19,6 +19,7 @@ class ApplicationsController < ApplicationController
   def create
     role = Posting.includes(:company).find(params[:posting_id])
     application = Pipeline.start!(role, stage: params[:stage], on: day, note: params[:note])
+    CheckRun.start_describe!(role) if role.job_url # what the drafting to come reads: free, in the background
     redirect_to application_path(application), notice: "Application started at #{Application.stage_label(application.stage)}.",
                                                status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e

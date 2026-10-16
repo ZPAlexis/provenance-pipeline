@@ -12,6 +12,10 @@ class CheckNowJob < ApplicationJob
     outcome =
       case check_run.kind
       when "all" then Verifier::CheckAll.run!(check_run)
+      when "describe"
+        role = check_run.posting
+        Verifier::Descriptions.read!(role, purpose: "describe: #{role.role_title} at #{role.company.name}",
+                                           issued_by: check_run.requested_by).sole
       when "role" then Verifier::CheckNow.role(check_run.posting)
       else Verifier::CheckNow.company(check_run.company)
       end
