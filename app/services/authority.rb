@@ -52,11 +52,13 @@ module Authority
       ]
     },
     "evidence:write" => {
-      about: "Page checks and LLM calls: what was read, how, and what it cost.",
+      about: "Page checks, LLM calls, and roles' descriptions: what was read, how, and what it cost.",
       rules: [
         Rule.new(model: "PageCheck", actions: %i[create]),
         Rule.new(model: "PageCheck", actions: %i[update], attributes: %w[matches complete]),
-        Rule.new(model: "LlmCall", actions: %i[create])
+        Rule.new(model: "LlmCall", actions: %i[create]),
+        Rule.new(model: "RoleDescription", actions: %i[create]),
+        Rule.new(model: "RoleDescription", actions: %i[update], attributes: %w[last_read_at])
       ]
     },
     "postings:suggest" => {

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_15_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_16_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -230,6 +230,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_000001) do
     t.index ["subject_type", "subject_id"], name: "index_review_items_on_subject_type_and_subject_id"
   end
 
+  create_table "role_descriptions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "posting_id", null: false
+    t.text "text", null: false
+    t.string "content_hash", null: false
+    t.string "read_via", null: false
+    t.string "url", null: false
+    t.string "run_id", null: false
+    t.datetime "first_read_at", null: false
+    t.datetime "last_read_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["posting_id", "first_read_at"], name: "index_role_descriptions_on_posting_id_and_first_read_at"
+    t.index ["posting_id"], name: "index_role_descriptions_on_posting_id"
+  end
+
   create_table "search_profiles", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.string "name", null: false
     t.string "titles", default: [], null: false, array: true
@@ -252,4 +267,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_15_000001) do
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify
   add_foreign_key "postings", "companies"
   add_foreign_key "review_items", "companies", on_delete: :cascade
+  add_foreign_key "role_descriptions", "postings", on_delete: :cascade
 end
