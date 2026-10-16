@@ -4,6 +4,9 @@
 # that tries is refused on the record. Stage dates are the operator's own (when
 # it happened, not when it was typed), kept in each change's audit event.
 module Pipeline
+  # One line of an application's timeline: a stage it reached, or an activity.
+  Entry = Data.define(:on, :at, :stage, :from, :activity, :note, :actor)
+
   module_function
 
   # Starts an application for a role, tracking the role if it isn't already.
@@ -52,6 +55,20 @@ module Pipeline
       AuditEvent.record_write!(application, actor: actor, reasoning: "Notes kept by hand.")
     end
     application
+  end
+
+  # Its stage changes (from the audit log, with the dates the operator gave) and its activities, newest first.
+  def timeline(application)
+    moves = application.audit_events.where("changes_made ? 'stage'").map do |event|
+      Entry.new(on: Date.parse(event.changes_made.dig("stage_changed_on", 1).to_s), at: event.occurred_at,
+                stage: event.changes_made.dig("stage", 1), from: event.changes_made.dig("stage", 0), activity: nil,
+                note: event.reasoning, actor: event.actor)
+    end
+    activities = application.activities.map do |activity|
+      Entry.new(on: activity.occurred_on, at: activity.created_at, stage: nil, from: nil, activity: activity,
+                note: activity.summary, actor: activity.logged_by)
+    end
+    (moves + activities).sort_by { |entry| [ entry.on, entry.at ] }.reverse
   end
 
   def known!(stage)
