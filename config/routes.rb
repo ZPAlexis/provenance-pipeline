@@ -35,6 +35,8 @@ Rails.application.routes.draw do
   resource :profile, only: %i[show update] do
     patch :preview
     patch :related
+    patch :resume
+    delete :resume, action: :remove_resume
   end
   get "review", to: "review_items#index", as: :review
   resources :review_items, only: [] do

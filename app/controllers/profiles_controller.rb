@@ -4,6 +4,26 @@
 class ProfilesController < ApplicationController
   def show
     @profile = SearchProfile.current || SearchProfile.new(work_modes: SearchProfile::WORK_MODES)
+    @resumes = @profile.persisted? ? @profile.resumes.newest_first.to_a : []
+  end
+
+  # The resume pasted below the profile (2b): a new version when its text changed, audited by size and hash.
+  def resume
+    profile = SearchProfile.current or return redirect_to(profile_path, alert: "Save the profile first: the resume is kept with it.",
+                                                                        status: :see_other)
+    kept = Resumes.keep!(profile, text: params[:resume_text])
+    redirect_to profile_path(anchor: "resume"), status: :see_other,
+                                                notice: kept ? "Resume kept: #{kept.words} words." : "The same resume as now: nothing changed."
+  rescue ArgumentError => e
+    redirect_to profile_path(anchor: "resume"), alert: "Not kept: #{e.message}.", status: :see_other
+  end
+
+  def remove_resume
+    profile = SearchProfile.current
+    removed = profile ? Resumes.remove!(profile) : raise(ArgumentError, "there is no resume to remove")
+    redirect_to profile_path(anchor: "resume"), notice: "Resume removed, with all #{removed} of its versions.", status: :see_other
+  rescue ArgumentError => e
+    redirect_to profile_path(anchor: "resume"), alert: "#{e.message.upcase_first}.", status: :see_other
   end
 
   def update

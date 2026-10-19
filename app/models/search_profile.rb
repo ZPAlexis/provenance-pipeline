@@ -13,6 +13,9 @@ class SearchProfile < ApplicationRecord
 
   attribute :name, :string, default: "Main"
 
+  # The operator's resume, version by version (2b): kept through Resumes, never in the repo.
+  has_many :resumes, dependent: nil # the key cascades
+
   validates :name, presence: true
   validates :titles, presence: { message: "need at least one: a role fits when its title holds every word of one" }
   validate :known_values

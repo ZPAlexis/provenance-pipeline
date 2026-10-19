@@ -73,6 +73,32 @@
   </div>
 <% end %>
 
+<h2 id="resume">Resume</h2>
+<p class="muted small">
+  What the drafting agent to come reads, with each role's description. Pasted as plain text or Markdown, and held in this
+  database only: never in the repository, its fixtures, or its seeds. Every version is kept; the record of each names its
+  size and a hash, never its text.
+</p>
+<% if @profile.persisted? %>
+  <% current = @resumes.first %>
+  <% if current %>
+    <p class="small">
+      Kept <%= ago(current.created_at) %>: <%= number_with_delimiter(current.words) %> words<%= ", #{pluralize(@resumes.size - 1, 'earlier version')}" if @resumes.size > 1 %>.
+    </p>
+  <% end %>
+  <%= form_with url: resume_profile_path, method: :patch, class: "add-form" do |form| %>
+    <label class="wide">Its text <%= form.text_area :resume_text, value: current&.text, rows: 12, required: true,
+                                                                  placeholder: "Paste your resume here, as text" %></label>
+    <%= form.submit current ? "Keep this version" : "Keep it", class: "btn primary small" %>
+  <% end %>
+  <% if current %>
+    <%= button_to "Remove it, with every version", resume_profile_path, method: :delete, class: "btn small",
+                                                                         data: { turbo_confirm: "Remove the resume and all its versions?" } %>
+  <% end %>
+<% else %>
+  <p class="muted small">Save the profile above first: the resume is kept with it.</p>
+<% end %>
+
 <%= turbo_frame_tag "profile-preview" do %>
   <p class="muted">
     Preview weighs the profile above, saved or not, against every watched company's roles as its page last listed them.
