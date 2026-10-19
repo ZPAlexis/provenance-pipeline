@@ -52,17 +52,37 @@ module Pipeline
   def note!(application, notes:, comp_expectation:, actor: AuditEvent::OPERATOR)
     ApplicationRecord.transaction do
       application.update!(notes: notes.to_s.strip.presence, comp_expectation: comp_expectation.to_s.strip.presence)
-      AuditEvent.record_write!(application, actor: actor, reasoning: "Notes kept by hand.")
+      AuditEvent.record_write!(application, actor: actor, reasoning: "Notes saved by hand.")
     end
     application
   end
 
+  # An activity corrected: its kind, date, or summary. Returns nil when nothing changed.
+  def edit_activity!(activity, kind:, summary:, on:, actor: AuditEvent::OPERATOR)
+    ApplicationRecord.transaction do
+      activity.update!(kind: kind, summary: summary.to_s.strip, occurred_on: on)
+      AuditEvent.record_write!(activity, actor: actor, reasoning: "Edited by hand.") && activity
+    end
+  end
+
+  # An activity taken off the timeline; its audit record keeps all it said.
+  def delete_activity!(activity, actor: AuditEvent::OPERATOR)
+    ApplicationRecord.transaction do
+      AuditEvent.record_destroy!(activity, actor: actor, reasoning: "Deleted by hand.")
+      activity.destroy!
+    end
+  end
+
   # Its stage changes (from the audit log, with the dates the operator gave) and its activities, newest first.
+  # A move on the same day as the stage before it records no date (only what changed is audited): it
+  # carries the date before, so the history is walked in order.
   def timeline(application)
-    moves = application.audit_events.where("changes_made ? 'stage'").map do |event|
-      Entry.new(on: Date.parse(event.changes_made.dig("stage_changed_on", 1).to_s), at: event.occurred_at,
-                stage: event.changes_made.dig("stage", 1), from: event.changes_made.dig("stage", 0), activity: nil,
-                note: event.reasoning, actor: event.actor)
+    on = nil
+    moves = application.audit_events.where("changes_made ? 'stage'").order(:occurred_at).map do |event|
+      dated = event.changes_made.dig("stage_changed_on", 1)
+      on = Date.iso8601(dated.to_s) if dated
+      Entry.new(on: on || event.occurred_at.to_date, at: event.occurred_at, stage: event.changes_made.dig("stage", 1),
+                from: event.changes_made.dig("stage", 0), activity: nil, note: event.reasoning, actor: event.actor)
     end
     activities = application.activities.map do |activity|
       Entry.new(on: activity.occurred_on, at: activity.created_at, stage: nil, from: nil, activity: activity,

@@ -390,3 +390,36 @@ details.description > summary { cursor: pointer; }
   border-radius: 8px;
   overflow-wrap: anywhere;
 }
+
+/* An application's path through its stages (Stage 2a): Salesforce-style chevrons */
+
+.stage-path { display: flex; gap: 3px; margin: 10px 0 18px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.stage-path a {
+  flex: 1 0 auto;
+  min-width: 96px;
+  padding: 8px 18px 8px 22px;
+  text-align: center;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--idle-bg);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%);
+}
+.stage-path a:first-child { padding-left: 14px; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); }
+.stage-path a:hover { text-decoration: none; filter: brightness(0.96); }
+.stage-path a.done { background: var(--live-bg); color: var(--live); }
+.stage-path a.done::before { content: "✓ "; }
+.stage-path a.current { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.stage-path a.won { background: var(--live); color: var(--accent-text); font-weight: 600; }
+.stage-path a.lost { background: var(--gone-bg); color: var(--gone); font-weight: 600; }
+details.row-edit { display: inline-block; vertical-align: top; }
+details.row-edit > summary { list-style: none; cursor: pointer; }
+details.row-edit > summary::-webkit-details-marker { display: none; }
+details.row-edit[open] { display: block; margin-bottom: 6px; }
+td form.button_to { display: inline-block; }
+@media (max-width: 600px) {
+  /* Every step in view: the others shortened, the current one and the outcome given the room. */
+  .stage-path a { flex: 1 1 0; min-width: 0; padding: 7px 6px 7px 14px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .stage-path a:first-child { padding-left: 8px; }
+  .stage-path a.current, .stage-path a.won, .stage-path a.lost { flex-grow: 3; }
+}

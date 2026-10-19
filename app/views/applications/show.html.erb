@@ -12,6 +12,13 @@
   <div><%= stage_badge(@application.stage) %></div>
 </div>
 
+<nav class="stage-path" aria-label="Where it stands">
+  <% stage_path(@application, @timeline).each do |step| %>
+    <%= link_to step.label, application_path(@application, stage: step.stage, anchor: "move"), class: step.state,
+                            title: step.state == "current" ? "Where it stands now" : "Move it here" %>
+  <% end %>
+</nav>
+
 <dl class="facts">
   <dt>Stage</dt>
   <dd><%= Application.stage_label(@application.stage) %>, <%= in_stage(@application) %> (since <%= @application.stage_changed_on %>)</dd>
@@ -25,15 +32,11 @@
       <span class="muted">not read yet</span> · <%= link_to "the role's page", role_path(role) %> reads it
     <% end %>
   </dd>
-  <dt>Pay expectation</dt>
-  <dd><%= @application.comp_expectation || tag.span("not noted", class: "muted") %></dd>
-  <dt>Notes</dt>
-  <dd><%= @application.notes ? simple_format(@application.notes, class: "small") : tag.span("none", class: "muted") %></dd>
 </dl>
 
-<h2>Move it</h2>
+<h2 id="move">Move it</h2>
 <%= form_with url: move_application_path(@application), method: :patch, class: "add-form" do |form| %>
-  <label>To <%= select_tag :stage, stage_options(@application.stage) %></label>
+  <label>To <%= select_tag :stage, stage_options(Application::STAGES.include?(params[:stage]) ? params[:stage] : @application.stage) %></label>
   <label>On <%= form.date_field :on, value: Date.current, max: Date.current %></label>
   <label>Note <%= form.text_field :note, placeholder: "Recruiter call booked", autocomplete: "off" %></label>
   <%= form.submit "Move", class: "btn primary small" %>
@@ -52,7 +55,7 @@
 <% if @timeline.any? %>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>On</th><th>What</th><th>By</th><th>Note</th></tr></thead>
+      <thead><tr><th>On</th><th>What</th><th>By</th><th>Note</th><th></th></tr></thead>
       <tbody>
         <% @timeline.each do |entry| %>
           <tr>
@@ -66,6 +69,21 @@
             </td>
             <td><%= actor_label(entry.actor) %></td>
             <td class="reason"><%= entry.note %></td>
+            <td class="nowrap">
+              <% if (activity = entry.activity) %>
+                <details class="row-edit">
+                  <summary class="btn small">Edit</summary>
+                  <%= form_with url: application_activity_path(@application, activity), method: :patch, class: "add-form" do |form| %>
+                    <label>What <%= select_tag :kind, activity_options(activity.kind) %></label>
+                    <label>On <%= form.date_field :on, value: activity.occurred_on %></label>
+                    <label>Summary <%= form.text_field :summary, value: activity.summary, required: true, autocomplete: "off" %></label>
+                    <%= form.submit "Save", class: "btn primary small" %>
+                  <% end %>
+                </details>
+                <%= button_to "Delete", application_activity_path(@application, activity), method: :delete, class: "btn small",
+                                                                                            data: { turbo_confirm: "Delete this activity from the timeline?" } %>
+              <% end %>
+            </td>
           </tr>
         <% end %>
       </tbody>
@@ -75,12 +93,11 @@
   <p class="empty">Nothing yet.</p>
 <% end %>
 
-<details class="add" <%= "open" if @application.notes.blank? && @application.comp_expectation.blank? %>>
-  <summary class="muted small">Notes and pay expectation</summary>
-  <%= form_with url: note_application_path(@application), method: :patch, class: "add-form" do |form| %>
-    <label>Pay expectation <%= form.text_field :comp_expectation, value: @application.comp_expectation, placeholder: "e.g. 25k a month",
-                                                                   autocomplete: "off" %></label>
-    <label class="wide">Notes <%= form.text_area :notes, value: @application.notes, rows: 3 %></label>
-    <%= form.submit "Keep them", class: "btn small" %>
-  <% end %>
-</details>
+<h2 id="notes">Notes and pay expectation</h2>
+<%= form_with url: note_application_path(@application), method: :patch, class: "add-form" do |form| %>
+  <label>Pay expectation <%= form.text_field :comp_expectation, value: @application.comp_expectation, placeholder: "e.g. 25k a month",
+                                                                 autocomplete: "off" %></label>
+  <label class="wide">Notes <%= form.text_area :notes, value: @application.notes, rows: 4,
+                                                       placeholder: "Who you spoke to, what matters to them, what to ask next" %></label>
+  <%= form.submit "Save notes", class: "btn small" %>
+<% end %>
