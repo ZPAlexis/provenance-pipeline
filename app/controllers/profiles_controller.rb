@@ -13,15 +13,15 @@ class ProfilesController < ApplicationController
                                                                         status: :see_other)
     kept = Resumes.keep!(profile, text: params[:resume_text])
     redirect_to profile_path(anchor: "resume"), status: :see_other,
-                                                notice: kept ? "Resume kept: #{kept.words} words." : "The same resume as now: nothing changed."
+                                                notice: kept ? "Resume saved: #{kept.words} words." : "Nothing to save: it is the same text as now."
   rescue ArgumentError => e
-    redirect_to profile_path(anchor: "resume"), alert: "Not kept: #{e.message}.", status: :see_other
+    redirect_to profile_path(anchor: "resume"), alert: "Not saved: #{e.message}.", status: :see_other
   end
 
   def remove_resume
     profile = SearchProfile.current
     removed = profile ? Resumes.remove!(profile) : raise(ArgumentError, "there is no resume to remove")
-    redirect_to profile_path(anchor: "resume"), notice: "Resume removed, with all #{removed} of its versions.", status: :see_other
+    redirect_to profile_path(anchor: "resume"), notice: "Resume deleted, with all #{removed} of its saved versions.", status: :see_other
   rescue ArgumentError => e
     redirect_to profile_path(anchor: "resume"), alert: "#{e.message.upcase_first}.", status: :see_other
   end

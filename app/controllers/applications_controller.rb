@@ -2,6 +2,8 @@
 # application's page, and its forms. Every write goes through Pipeline, audited
 # as the operator's; no agent can make any of them.
 class ApplicationsController < ApplicationController
+  include DayParam
+
   before_action :find_application, only: %i[show move log note]
 
   def index
@@ -43,7 +45,7 @@ class ApplicationsController < ApplicationController
   def note
     act do
       Pipeline.note!(@application, notes: params[:notes], comp_expectation: params[:comp_expectation])
-      "Notes kept."
+      "Notes saved."
     end
   end
 
@@ -52,9 +54,6 @@ class ApplicationsController < ApplicationController
   def find_application
     @application = Application.includes(:company, :posting, :activities).find(params[:id])
   end
-
-  # The day it happened, as the operator says; today when not given.
-  def day = params[:on].present? ? Date.iso8601(params[:on]) : Date.current
 
   # Makes the write in the block, then back to the application with what it did, or why not.
   def act

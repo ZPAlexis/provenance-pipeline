@@ -7,20 +7,20 @@ RSpec.describe "The resume", type: :request do
 
   it "is kept with the profile, version by version, its record naming its size and hash, never its text" do
     patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, eight years." }
-    expect(flash[:notice]).to eq("Resume kept: 6 words.")
+    expect(flash[:notice]).to eq("Resume saved: 6 words.")
 
     patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, eight years." }
-    expect(flash[:notice]).to eq("The same resume as now: nothing changed.")
+    expect(flash[:notice]).to eq("Nothing to save: it is the same text as now.")
 
     patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, nine years, Portuguese." }
 
     expect(profile.resumes.newest_first.map(&:words)).to eq([ 7, 6 ])
-    expect(resume_events.map(&:reasoning)).to eq([ "Resume kept on the Profile page: 6 words.",
-                                                   "Resume replaced on the Profile page: 7 words." ])
+    expect(resume_events.map(&:reasoning)).to eq([ "Resume saved on the Profile page: 6 words.",
+                                                   "Resume changed on the Profile page: 7 words." ])
     expect(resume_events.map { |event| event.changes_made.to_json }.join).not_to include("eight", "nine", "Alex")
 
     get profile_path
-    expect(response.body).to include("7 words", "1 earlier version", "Portuguese")
+    expect(response.body).to include("7 words", "1 earlier version", "Portuguese", "Save changes", "Delete resume")
   end
 
   it "is removed whole, with every version, the record keeping only sizes and hashes" do
@@ -29,7 +29,7 @@ RSpec.describe "The resume", type: :request do
 
     delete resume_profile_path
 
-    expect(flash[:notice]).to eq("Resume removed, with all 2 of its versions.")
+    expect(flash[:notice]).to eq("Resume deleted, with all 2 of its saved versions.")
     expect(Resume.count).to eq(0)
     expect(resume_events.where(action: "destroy").count).to eq(2)
     expect(resume_events.map { |event| event.changes_made.to_json }.join).not_to include("First", "Second")
@@ -47,6 +47,6 @@ RSpec.describe "The resume", type: :request do
 
     SearchProfile.create!(titles: [ "Sales Engineer" ])
     patch resume_profile_path, params: { resume_text: "   " }
-    expect(flash[:alert]).to eq("Not kept: paste the resume's text first.")
+    expect(flash[:alert]).to eq("Not saved: paste the resume's text first.")
   end
 end

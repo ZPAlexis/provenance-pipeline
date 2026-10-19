@@ -75,25 +75,32 @@
 
 <h2 id="resume">Resume</h2>
 <p class="muted small">
-  What the drafting agent to come reads, with each role's description. Pasted as plain text or Markdown, and held in this
-  database only: never in the repository, its fixtures, or its seeds. Every version is kept; the record of each names its
-  size and a hash, never its text.
+  Paste your resume as plain text or Markdown and save it: the drafting agent to come reads it, with each role's description.
+  Each time you save a changed text, the one before is kept as an earlier version below. It is held in this database only:
+  never in the repository, its fixtures, or its seeds. The record of each save names its size and a hash, never its text.
 </p>
 <% if @profile.persisted? %>
-  <% current = @resumes.first %>
+  <% current, *earlier = @resumes %>
   <% if current %>
-    <p class="small">
-      Kept <%= ago(current.created_at) %>: <%= number_with_delimiter(current.words) %> words<%= ", #{pluralize(@resumes.size - 1, 'earlier version')}" if @resumes.size > 1 %>.
-    </p>
+    <p class="small">Saved <%= ago(current.created_at) %>: <%= number_with_delimiter(current.words) %> words.</p>
   <% end %>
   <%= form_with url: resume_profile_path, method: :patch, class: "add-form" do |form| %>
-    <label class="wide">Its text <%= form.text_area :resume_text, value: current&.text, rows: 12, required: true,
-                                                                  placeholder: "Paste your resume here, as text" %></label>
-    <%= form.submit current ? "Keep this version" : "Keep it", class: "btn primary small" %>
+    <label class="wide">Your resume <%= form.text_area :resume_text, value: current&.text, rows: 12, required: true,
+                                                                     placeholder: "Paste your resume here, as text" %></label>
+    <%= form.submit current ? "Save changes" : "Save resume", class: "btn primary small" %>
+  <% end %>
+  <% if earlier.any? %>
+    <details class="description">
+      <summary class="muted small"><%= pluralize(earlier.size, "earlier version") %></summary>
+      <% earlier.each do |version| %>
+        <p class="muted small">Saved <%= version.created_at.to_date %> (<%= number_with_delimiter(version.words) %> words)</p>
+        <div class="description-text"><%= version.text %></div>
+      <% end %>
+    </details>
   <% end %>
   <% if current %>
-    <%= button_to "Remove it, with every version", resume_profile_path, method: :delete, class: "btn small",
-                                                                         data: { turbo_confirm: "Remove the resume and all its versions?" } %>
+    <%= button_to "Delete resume", resume_profile_path, method: :delete, class: "btn small",
+                                   data: { turbo_confirm: "Delete your resume, and every earlier version of it? This can't be undone." } %>
   <% end %>
 <% else %>
   <p class="muted small">Save the profile above first: the resume is kept with it.</p>

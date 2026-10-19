@@ -19,6 +19,7 @@ Rails.application.routes.draw do
       post :log
       patch :note
     end
+    resources :activities, only: %i[update destroy]
   end
   resources :companies, only: %i[index show create] do
     member do

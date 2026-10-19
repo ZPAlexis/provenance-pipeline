@@ -21,7 +21,7 @@ module Resumes
       AuditEvent.record!(
         actor: actor, action: "create", target: resume,
         changes_made: { "content_hash" => [ current&.content_hash, resume.content_hash ], "words" => [ current&.words, resume.words ] },
-        reasoning: "Resume #{current ? 'replaced' : 'kept'} on the Profile page: #{resume.words} words."
+        reasoning: "Resume #{current ? 'changed' : 'saved'} on the Profile page: #{resume.words} words."
       )
       resume
     end
@@ -36,7 +36,7 @@ module Resumes
       versions.each do |resume|
         AuditEvent.record!(actor: actor, action: "destroy", target: resume,
                            changes_made: { "content_hash" => [ resume.content_hash, nil ], "words" => [ resume.words, nil ] },
-                           reasoning: "Resume removed on the Profile page, with all #{versions.size} of its versions.")
+                           reasoning: "Resume deleted on the Profile page, with all #{versions.size} of its versions.")
         resume.destroy!
       end
     end

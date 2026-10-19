@@ -50,6 +50,58 @@ RSpec.describe "Pipeline", type: :request do
       expect(application.reload).to have_attributes(stage: "screening", stage_changed_on: Date.new(2026, 10, 12))
     end
 
+    # Found 2026-10-19: a move on the same day as the stage before records no date, and the page broke on it.
+    it "shows a move made the same day as the stage before, dated as that stage was" do
+      started = Pipeline.start!(create(:posting, company: company, role_title: "GTM Engineer", tracking: "tracked"),
+                                stage: "interested", on: Date.new(2026, 10, 15))
+      Pipeline.move!(started, "withdrawn", on: Date.new(2026, 10, 15), note: "Not for me.")
+
+      get application_path(started)
+
+      expect(response).to have_http_status(:success)
+      expect(response.body).to include("2026-10-15", "Not for me.")
+    end
+
+    it "shows where it stands as a path, each stage a step to move it to" do
+      Pipeline.move!(application, "interviewing", on: Date.new(2026, 10, 12))
+
+      get application_path(application)
+
+      path = response.body[%r{<nav class="stage-path".*?</nav>}m]
+      expect(path.scan(/class="(\w+)"/).flatten).to eq(%w[done done done current ahead ahead])
+      expect(path).to include("Interviewing", "Accepted", "stage=offer#move")
+
+      get application_path(application, stage: "offer")
+      expect(response.body).to include(%(<option selected="selected" value="offer">Offer</option>))
+    end
+
+    it "closes its path at the outcome, from the stage it closed at" do
+      Pipeline.move!(application, "rejected", on: Date.new(2026, 10, 12))
+
+      get application_path(application)
+
+      path = response.body[%r{<nav class="stage-path".*?</nav>}m]
+      expect(path.scan(/class="(\w+)"/).flatten).to eq(%w[done done ahead ahead ahead lost])
+      expect(path).to include("Rejected")
+    end
+
+    it "edits and deletes an activity, each audited, the deleted one's record keeping what it said" do
+      activity = Pipeline.log!(application, kind: "email", summary: "Wrote to the recruiter.", on: Date.new(2026, 10, 2))
+
+      patch application_activity_path(application, activity), params: { kind: "call", summary: "Called the recruiter.", on: "2026-10-03" }
+      expect(flash[:notice]).to eq("Activity saved.")
+      expect(activity.reload).to have_attributes(kind: "call", summary: "Called the recruiter.", occurred_on: Date.new(2026, 10, 3))
+
+      patch application_activity_path(application, activity), params: { kind: "call", summary: "Called the recruiter.", on: "2026-10-03" }
+      expect(flash[:notice]).to start_with("Nothing to save")
+
+      delete application_activity_path(application, activity)
+      expect(flash[:notice]).to eq("Activity deleted.")
+      expect(Activity.exists?(activity.id)).to be(false)
+      expect(AuditEvent.find_by!(target_type: "Activity", target_id: activity.id, action: "destroy").changes_made)
+        .to include("summary" => [ "Called the recruiter.", nil ])
+    end
+
     it "says why a move was refused" do
       patch move_application_path(application), params: { stage: "hired" }
 
