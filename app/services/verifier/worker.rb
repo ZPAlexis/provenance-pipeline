@@ -15,7 +15,7 @@ module Verifier
 
     RESULT_SCHEMA_VERSION = 2
 
-    COMMANDS = %w[extract resolve match verify check boards suggest related describe].freeze
+    COMMANDS = %w[extract resolve match verify check boards suggest related describe draft].freeze
 
     # Exit codes from workers/verifier/src/verifier/cli.py for a run that
     # stopped early on purpose, keeping every result it finished.
@@ -61,6 +61,7 @@ module Verifier
     # suggest: targets from Verifier::Targets.suggest, one SuggestionResult each; nothing fetched, no LLM.
     # related: one search profile's titles, one RelatedResult with titles proposed by one LLM call.
     # describe: targets from Verifier::Descriptions.target, one DescriptionResult each; never calls the LLM.
+    # draft: targets from Drafts.target, one DraftResult each: one LLM call, nothing fetched, nothing sent.
     def run(targets, command: "extract", flags: [])
       raise ArgumentError, "unknown worker command #{command.inspect}" unless COMMANDS.include?(command)
 

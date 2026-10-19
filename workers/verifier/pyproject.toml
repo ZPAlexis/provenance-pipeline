@@ -39,5 +39,6 @@ target-version = "py313"
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-# The system prompt is prose sent to the model; wrapping it would change the prompt.
+# The system prompts are prose sent to the model; wrapping them would change the prompts.
 "src/verifier/extract.py" = ["E501"]
+"src/verifier/draft.py" = ["E501"]

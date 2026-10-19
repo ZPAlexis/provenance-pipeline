@@ -52,7 +52,7 @@ class Listing(BaseModel):
 class LlmUsage(BaseModel):
     model: str  # the model the API reports having served
     settings: dict = Field(default_factory=dict)  # request settings, e.g. effort
-    purpose: Literal["extract", "resolve", "match", "relate"] = "extract"
+    purpose: Literal["extract", "resolve", "match", "relate", "draft"] = "extract"
     # A hash over the system prompt, output schema, and limits that produced this call.
     prompt_version: str = ""
     input_tokens: int = 0
@@ -396,6 +396,65 @@ class DescriptionResult(BaseModel):
     text: str | None = None
     content_hash: str | None = None  # sha256 of the whitespace-normalized text
     checked_at: str | None = None
+    duration_ms: int = 0
+
+
+DraftKind = Literal["cover_letter", "outreach"]
+
+
+class DraftTarget(BaseModel):
+    """One draft to write (Stage 2c): an application's role, and what is on record for it."""
+
+    id: str  # the application's
+    kind: DraftKind
+    label: str | None = None  # for progress output only
+    role_title: str
+    company: str
+    location: str | None = None
+    description: str  # as the role's own page states it
+    resume: str
+    # The search profile: what they are looking for.
+    titles: list[str] = Field(default_factory=list)
+    places: list[str] = Field(default_factory=list)
+    work_modes: list[str] = Field(default_factory=list)
+    notes: str | None = None  # the operator's notes on the application
+    guidance: str | None = None  # the operator's: anything to stress in this draft
+    language: str | None = None  # None: the language the description is written in
+
+
+class ResumeLine(BaseModel):
+    line: int  # its number among the resume's non-blank lines, from 1
+    text: str  # the line itself, as the resume has it
+    used_for: str  # what in the role it answers
+
+
+class Gap(BaseModel):
+    asks: str  # what the role asks for
+    note: str  # what the resume shows instead, or that it shows nothing for it
+
+
+class DraftResult(BaseModel):
+    """A cover letter or outreach note, for the operator to edit and approve: never sent.
+
+    ok     written: `body` holds it, `drew_on` the resume lines it rests on, `gaps`
+           what the role asks for that the resume doesn't show
+    error  the call failed or its answer was unusable: `reason` says which
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["draft"] = "draft"
+    target_id: str
+    draft_kind: DraftKind
+    outcome: Literal["ok", "error"] = "ok"
+    reason: str | None = None
+    language: str | None = None  # the language it is written in, named in English
+    subject: str | None = None  # an outreach note's subject line
+    body: str | None = None
+    drew_on: list[ResumeLine] = Field(default_factory=list)
+    gaps: list[Gap] = Field(default_factory=list)
+    notes: str | None = None  # the drafter's note to the operator
+    dropped_lines: int = 0  # line numbers it named that the resume doesn't have
+    llm: LlmUsage | None = None
     duration_ms: int = 0
 
 

@@ -159,6 +159,39 @@ module Verifier
       errors
     end
 
+    # A cover letter or outreach note: on ok, its text, its language, the resume lines it rests on and its gaps.
+    def draft_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be draft" unless result["kind"] == "draft"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "unknown draft_kind #{result['draft_kind'].inspect}" unless Draft::KINDS.include?(result["draft_kind"])
+      errors << "unknown outcome #{result['outcome'].inspect}" unless %w[ok error].include?(result["outcome"])
+      errors.concat(llm_errors(result["llm"]).map { |error| "llm #{error}" }) if result["llm"]
+      errors << "llm purpose must be draft" if result["llm"].is_a?(Hash) && result["llm"]["purpose"] != "draft"
+      return errors unless result["outcome"] == "ok"
+
+      errors << "body is missing" unless result["body"].is_a?(String) && result["body"].strip.present?
+      errors << "language is missing" unless result["language"].is_a?(String) && result["language"].present?
+      errors << "subject must be text or null" unless result["subject"].nil? || result["subject"].is_a?(String)
+      errors << "dropped_lines must be a count" unless count?(result["dropped_lines"])
+      drew_on, gaps = result["drew_on"], result["gaps"]
+      return errors << "drew_on and gaps must be lists" unless drew_on.is_a?(Array) && gaps.is_a?(Array)
+
+      drew_on.each_with_index do |point, index|
+        next if point.is_a?(Hash) && point["line"].is_a?(Integer) && point["line"].positive? &&
+                %w[text used_for].all? { |key| point[key].is_a?(String) }
+
+        errors << "drew_on #{index + 1} must have a line number, its text, and what it answers"
+      end
+      gaps.each_with_index do |gap, index|
+        errors << "gap #{index + 1} must say what the role asks and a note" unless gap.is_a?(Hash) &&
+                                                                                 %w[asks note].all? { |key| gap[key].is_a?(String) }
+      end
+      errors
+    end
+
     RULED_OUT = %w[excluded level place work_mode].freeze
     FIT_NOTES = %w[work_mode_not_stated place_not_stated level_not_stated].freeze
     WORK_MODES = [ *SearchProfile::WORK_MODES, "unknown" ].freeze

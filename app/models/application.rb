@@ -10,6 +10,7 @@ class Application < ApplicationRecord
   belongs_to :posting
   belongs_to :company
   has_many :activities, dependent: :destroy
+  has_many :drafts, dependent: :destroy
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 

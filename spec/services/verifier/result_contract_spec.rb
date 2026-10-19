@@ -139,6 +139,30 @@ RSpec.describe Verifier::ResultContract do
     end
   end
 
+  describe ".draft_errors" do
+    def draft(**overrides)
+      { "kind" => "draft", "target_id" => "a1", "draft_kind" => "cover_letter", "outcome" => "ok", "language" => "English",
+        "subject" => nil, "body" => "Dear team,", "drew_on" => [ { "line" => 2, "text" => "Eight years.", "used_for" => "seniority" } ],
+        "gaps" => [ { "asks" => "Spanish", "note" => "None shown." } ], "dropped_lines" => 0,
+        "llm" => { "model" => "claude-opus-5-5", "purpose" => "draft", "prompt_version" => "d1", "input_tokens" => 1,
+                   "output_tokens" => 1, "cost_usd" => 0.01 }, **overrides }
+    end
+
+    it "accepts a draft with its text, its language, the lines it rests on and its gaps" do
+      expect(described_class.draft_errors(draft)).to be_empty
+      expect(described_class.draft_errors(draft("outcome" => "error", "reason" => "llm_refusal", "body" => nil))).to be_empty
+    end
+
+    it "refuses one missing its text or language, citing a line that isn't one, or written for another purpose" do
+      errors = described_class.draft_errors(draft("draft_kind" => "memo", "body" => " ", "language" => nil,
+                                                  "drew_on" => [ { "line" => "2", "text" => "x", "used_for" => "y" } ],
+                                                  "gaps" => [ { "asks" => "Spanish" } ], "llm" => draft["llm"].merge("purpose" => "extract")))
+      expect(errors).to eq([ 'unknown draft_kind "memo"', "llm purpose must be draft", "body is missing", "language is missing",
+                             "drew_on 1 must have a line number, its text, and what it answers",
+                             "gap 1 must say what the role asks and a note" ])
+    end
+  end
+
   describe ".suggestion_errors" do
     def fit(**overrides)
       { "listing_index" => 0, "listing" => { "title" => "Solutions Engineer" }, "title" => "Solutions Engineer",
