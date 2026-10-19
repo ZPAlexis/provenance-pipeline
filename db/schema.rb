@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_16_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_19_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -124,6 +124,38 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_000002) do
     t.index ["enrichment"], name: "index_companies_on_enrichment", using: :gin
     t.index ["name"], name: "index_companies_on_name"
     t.index ["resolution_status"], name: "index_companies_on_resolution_status"
+  end
+
+  create_table "drafts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "application_id", null: false
+    t.string "kind", null: false
+    t.string "status", default: "draft", null: false
+    t.string "language", null: false
+    t.string "asked_language"
+    t.text "guidance"
+    t.string "subject"
+    t.text "body", null: false
+    t.string "written_subject"
+    t.text "written_body", null: false
+    t.jsonb "drew_on", default: [], null: false
+    t.jsonb "gaps", default: [], null: false
+    t.text "notes"
+    t.integer "dropped_lines", default: 0, null: false
+    t.uuid "resume_id"
+    t.string "resume_hash", null: false
+    t.uuid "role_description_id"
+    t.string "description_hash", null: false
+    t.uuid "llm_call_id"
+    t.string "run_id", null: false
+    t.datetime "edited_at"
+    t.datetime "approved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["application_id", "created_at"], name: "index_drafts_on_application_id_and_created_at"
+    t.index ["application_id"], name: "index_drafts_on_application_id"
+    t.index ["llm_call_id"], name: "index_drafts_on_llm_call_id"
+    t.index ["resume_id"], name: "index_drafts_on_resume_id"
+    t.index ["role_description_id"], name: "index_drafts_on_role_description_id"
   end
 
   create_table "llm_calls", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -272,6 +304,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_16_000002) do
   add_foreign_key "audit_events", "agent_credentials", column: "credential_id"
   add_foreign_key "check_runs", "companies"
   add_foreign_key "check_runs", "postings", on_delete: :nullify
+  add_foreign_key "drafts", "applications", on_delete: :cascade
+  add_foreign_key "drafts", "llm_calls"
+  add_foreign_key "drafts", "resumes", on_delete: :nullify
+  add_foreign_key "drafts", "role_descriptions", on_delete: :nullify
   add_foreign_key "llm_calls", "page_checks"
   add_foreign_key "page_checks", "companies"
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify

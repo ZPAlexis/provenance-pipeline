@@ -1,4 +1,4 @@
-"""`verifier extract|resolve|match|verify|check|boards|suggest|related --targets targets.json --out results.jsonl`
+"""`verifier COMMAND --targets targets.json --out results.jsonl`, where COMMAND is one of:
 
 extract  checks each careers page and extracts its listings: one PageResult per target.
 resolve  finds each company's careers page: one ResolutionResult per target,
@@ -16,6 +16,12 @@ suggest  weighs a company's stored roles against a search profile: one
          SuggestionResult per company. Nothing is fetched; never calls the LLM.
 related  proposes titles in the same area as a search profile's, for the
          operator to pick from: one RelatedResult per profile, one LLM call each.
+describe reads each role's description from its own page: its board's job API,
+         or the page rendered. One DescriptionResult per role; never calls the LLM.
+draft    writes a cover letter or an outreach note from what is on record (the
+         resume, the role's description, the profile): one DraftResult per
+         target, one LLM call each, with Opus 5.5 unless --model names another.
+         Nothing is fetched, and nothing is ever sent.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -42,12 +48,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from verifier.config import DEFAULT_MODEL, DOMAIN_DELAY_SECONDS, MODEL_SETTINGS
+from verifier.config import DEFAULT_MODEL, DOMAIN_DELAY_SECONDS, DRAFT_MODEL, MODEL_SETTINGS
 from verifier.contract import (
     BoardResult,
     BoardTarget,
     DescribeTarget,
     DescriptionResult,
+    DraftResult,
+    DraftTarget,
     MatchResult,
     MatchTarget,
     PageResult,
@@ -85,6 +93,7 @@ Result = (
     | SuggestionResult
     | RelatedResult
     | DescriptionResult
+    | DraftResult
 )
 
 
@@ -203,6 +212,15 @@ def run_related(targets: list[RelateTarget], out_path: Path, proposer, log=sys.s
     return _run(targets, out_path, lambda target: related(target, proposer), failed, log)
 
 
+def run_draft(targets: list[DraftTarget], out_path: Path, drafter, log=sys.stderr) -> RunSummary:
+    from verifier.draft import draft
+
+    def failed(target: DraftTarget, reason: str) -> DraftResult:
+        return DraftResult(target_id=target.id, draft_kind=target.kind, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: draft(target, drafter), failed, log)
+
+
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
     summary = RunSummary()
     outage_streak = 0
@@ -236,21 +254,27 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 
 
 def _pages(result: Result) -> list[PageResult]:
-    if isinstance(result, MatchResult | BoardResult | SuggestionResult | RelatedResult | DescriptionResult):
+    if isinstance(
+        result, MatchResult | BoardResult | SuggestionResult | RelatedResult | DescriptionResult | DraftResult
+    ):
         return []
     return result.checks if isinstance(result, ResolutionResult | VerificationResult) else [result]
 
 
 def _usages(result: Result) -> list:
     usages = [page.llm for page in _pages(result) if page.llm]
-    extra = result.llm if isinstance(result, MatchResult | RelatedResult) else getattr(result, "match_llm", None)
+    extra = (
+        result.llm
+        if isinstance(result, MatchResult | RelatedResult | DraftResult)
+        else getattr(result, "match_llm", None)
+    )
     return usages + [extra] if extra else usages
 
 
 def _reasons(result: Result) -> list[str | None]:
     own = (
         [result.reason]
-        if isinstance(result, MatchResult | VerificationResult | RelatedResult | DescriptionResult)
+        if isinstance(result, MatchResult | VerificationResult | RelatedResult | DescriptionResult | DraftResult)
         else []
     )
     return [page.reason for page in _pages(result)] + own
@@ -265,6 +289,12 @@ def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, resu
     if isinstance(result, DescriptionResult):
         read = f"{len(result.text or '')} characters via {result.read_via}" if result.outcome == "ok" else result.reason
         return f"{target.label or target.id}: {result.outcome}, {read} {timing}"
+    if isinstance(result, DraftResult):
+        if result.outcome != "ok":
+            return f"{target.label or target.id}: error, {result.reason} {timing}"
+        words = len((result.body or "").split())
+        drawn = f"{len(result.drew_on)} resume lines, {len(result.gaps)} gaps"
+        return f"{target.label or target.id}: {result.draft_kind} in {result.language}, {words} words, {drawn} {timing}"
     if isinstance(result, SuggestionResult):
         if result.outcome != "ok":
             return f"{target.label or target.id}: {result.outcome}, {result.reason} {timing}"
@@ -299,7 +329,9 @@ def main(argv: list[str] | None = None) -> int:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--targets", type=Path, required=True, help='JSON file: {"targets": [...]}')
     common.add_argument("--out", type=Path, required=True, help="JSONL file to append results to")
-    common.add_argument("--model", default=DEFAULT_MODEL, choices=sorted(MODEL_SETTINGS))
+    common.add_argument(
+        "--model", choices=sorted(MODEL_SETTINGS), help=f"default {DEFAULT_MODEL}; {DRAFT_MODEL} for draft"
+    )
     common.add_argument("--delay", type=float, default=DOMAIN_DELAY_SECONDS, help="seconds between requests to a host")
 
     parser = argparse.ArgumentParser(prog="verifier")
@@ -317,7 +349,9 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser(
         "describe", parents=[common], help="read roles' descriptions from their own pages, never by the LLM"
     )
+    commands.add_parser("draft", parents=[common], help="write cover letters and outreach notes; never sends them")
     args = parser.parse_args(argv)
+    llm_model = args.model or (DRAFT_MODEL if args.command == "draft" else DEFAULT_MODEL)
 
     model = {
         "resolve": ResolveTarget,
@@ -328,6 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         "suggest": SuggestTarget,
         "related": RelateTarget,
         "describe": DescribeTarget,
+        "draft": DraftTarget,
     }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
@@ -344,18 +379,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{summary.targets}/{len(targets)} companies, {summary.fits} fit ({summary.new} new)", file=sys.stderr)
         return _exit_code(summary)
 
+    if args.command == "draft":
+        # Nothing is fetched: one LLM call per draft, from what Rails sent.
+        from verifier.draft import LlmDrafter
+
+        summary = run_draft(targets, args.out, LlmDrafter(model=llm_model))
+        print(f"\n{summary.targets}/{len(targets)} drafts, est. ${summary.cost_usd:.4f}", file=sys.stderr)
+        return _exit_code(summary)
+
     from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher, LlmTitleProposer
     from verifier.match import Matcher
 
     if args.command == "related":
         # Nothing is fetched: one LLM call per profile.
-        summary = run_related(targets, args.out, LlmTitleProposer(model=args.model))
+        summary = run_related(targets, args.out, LlmTitleProposer(model=llm_model))
         print(f"\n{summary.targets}/{len(targets)} profiles, est. ${summary.cost_usd:.4f}", file=sys.stderr)
         return _exit_code(summary)
 
     if args.command == "match":
         # Nothing is fetched: the listings were read before, and stored.
-        matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=args.model))
+        matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=llm_model))
         summary = run_match(targets, args.out, matcher)
         print(
             f"\n{summary.targets}/{len(targets)} companies, verdicts {summary.verdicts}, "
@@ -380,17 +423,17 @@ def main(argv: list[str] | None = None) -> int:
                 http=http,
                 robots=RobotsPolicy(http),
                 throttle=HostThrottle(args.delay),
-                extractor=LlmExtractor(model=args.model),
+                extractor=LlmExtractor(model=llm_model),
             )
             if args.command == "resolve":
-                resolver = Resolver(ServicesReader(services), link_picker=LlmLinkPicker(model=args.model))
+                resolver = Resolver(ServicesReader(services), link_picker=LlmLinkPicker(model=llm_model))
                 summary = run_resolve(targets, args.out, resolver)
             elif args.command == "boards":
                 summary = run_boards(targets, args.out, ServicesReader(services))
             elif args.command == "describe":
                 summary = run_describe(targets, args.out, services)
             elif args.command in ("verify", "check"):
-                matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=args.model))
+                matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=llm_model))
                 run_command = run_verify if args.command == "verify" else run_check
                 summary = run_command(targets, args.out, services, matcher)
             else:

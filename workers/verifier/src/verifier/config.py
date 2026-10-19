@@ -32,19 +32,30 @@ DEFAULT_MODEL = "claude-haiku-4-5"
 MAX_OUTPUT_TOKENS = 64_000
 
 # Request settings per model. Haiku 4.5 rejects `effort`, so it gets none; the
-# rungs above it run at low effort. Recorded on every result.
+# rungs above it run at low effort. Opus 5.5 always thinks (thinking can't be
+# turned off on it), so effort is its one control: set to medium, its own
+# default, explicitly, so the record says so. Recorded on every result.
 MODEL_SETTINGS: dict[str, dict] = {
     "claude-haiku-4-5": {},
     "claude-sonnet-5": {"output_config": {"effort": "low"}},
     "claude-opus-5": {"output_config": {"effort": "low"}},
+    "claude-opus-5-5": {"output_config": {"effort": "medium"}},
 }
 
+# Cover letters and outreach (Stage 2c) are written by Opus 5.5, the operator's
+# choice for writing quality; every other call keeps DEFAULT_MODEL. Its thinking
+# counts toward max_tokens, so this bounds a draft's worst case: about $0.32 of
+# output, where a draft takes 2-4k tokens.
+DRAFT_MODEL = "claude-opus-5-5"
+DRAFT_MAX_OUTPUT_TOKENS = 16_000
+
 # USD per million tokens (input, output), from the API reference as cached
-# 2026-06-24. Used only to estimate what a run cost.
+# 2026-06-24 (Opus 5.5: 2026-10-19). Used only to estimate what a run cost.
 PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5": (1.00, 5.00),
     "claude-sonnet-5": (2.00, 10.00),
     "claude-opus-5": (5.00, 25.00),
+    "claude-opus-5-5": (4.00, 20.00),
 }
 
 

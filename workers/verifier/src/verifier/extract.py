@@ -195,7 +195,7 @@ class _LlmCaller:
         self._client_factory = client_factory
         self._client: anthropic.Anthropic | None = None
 
-    def _call(self, *, system, content, schema, output_model, purpose, version):
+    def _call(self, *, system, content, schema, output_model, purpose, version, max_tokens=MAX_OUTPUT_TOKENS):
         extra = {key: value for key, value in self.settings.items() if key != "output_config"}
         output_config = {**self.settings.get("output_config", {}), "format": {"type": "json_schema", "schema": schema}}
         try:
@@ -203,7 +203,7 @@ class _LlmCaller:
             # by the SDK well below the model's own output limit.
             with self._client_or_raise().messages.stream(
                 model=self.model,
-                max_tokens=MAX_OUTPUT_TOKENS,
+                max_tokens=max_tokens,
                 system=system,
                 messages=[{"role": "user", "content": content}],
                 output_config=output_config,

@@ -34,6 +34,10 @@ module Authority
   VERDICT = %w[verification_state roles_listed_count work_mode last_checked_at job_url].freeze
   # A suggestion, and one still: a new record's stored value is its column default, so it is not asked.
   SUGGESTED = ->(posting) { posting.tracking == "suggested" && (posting.new_record? || posting.tracking_in_database == "suggested") }
+  # A draft as the drafter wrote it: not approved, and not edited (Stage 2c).
+  AS_WRITTEN = lambda do |draft|
+    draft.status == "draft" && draft.approved_at.nil? && draft.edited_at.nil? && !draft.edited?
+  end
 
   # What each scope lets its holder write. Reads are not scoped here: 2.3's MCP server scopes them.
   SCOPES = {
@@ -84,6 +88,13 @@ module Authority
         Rule.new(model: "Posting", actions: %i[update], except: %w[tracking company_id])
       ]
     },
+    "drafts:write" => {
+      about: "Write a new draft for the operator to edit and approve, and record the LLM call that wrote it. Never edit, "              "approve, or send one.",
+      rules: [
+        Rule.new(model: "Draft", actions: %i[create], only_if: AS_WRITTEN),
+        Rule.new(model: "LlmCall", actions: %i[create], only_if: ->(call) { call.purpose == "draft" })
+      ]
+    },
     "review:keep" => {
       about: "Review items kept in step with the record: raised, restated, and closed when what was seen resolves. " \
              "Never decided.",
@@ -101,7 +112,8 @@ module Authority
     "agent:verifier" => { about: "Finds each watched company's careers page, reads it in full, and records whether each role " \
                                  "on record is still listed.", scopes: %w[companies:enrich postings:verify evidence:write] },
     "agent:suggester" => { about: "Proposes the roles on watched pages that fit the search profile.", scopes: %w[postings:suggest] },
-    "agent:clay_importer" => { about: "Imports Clay CSV exports, the seed data.", scopes: %w[companies:import postings:import] }
+    "agent:clay_importer" => { about: "Imports Clay CSV exports, the seed data.", scopes: %w[companies:import postings:import] },
+    "agent:drafter" => { about: "Drafts cover letters and outreach notes from the resume, the role's description and the "                                 "profile, for the operator to edit and approve. Sends nothing.", scopes: %w[drafts:write] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.
@@ -116,8 +128,9 @@ module Authority
 
   # What no scope grants: the operator's alone, whatever an agent holds.
   HUMAN_ONLY = [
-    "Start an application, or move one between stages", "Track or dismiss a role", "Decide a review item",
-    "Edit the search profile or the resume", "Ask for a check", "Name a company or set its kind", "Issue or revoke a credential"
+    "Start an application, or move one between stages", "Edit or approve a draft", "Track or dismiss a role",
+    "Decide a review item", "Edit the search profile or the resume", "Ask for a check", "Name a company or set its kind",
+    "Issue or revoke a credential"
   ].freeze
 
   BATCH = 4.hours # a run over many companies
