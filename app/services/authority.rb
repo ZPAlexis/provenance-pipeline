@@ -117,7 +117,7 @@ module Authority
   # What no scope grants: the operator's alone, whatever an agent holds.
   HUMAN_ONLY = [
     "Start an application, or move one between stages", "Track or dismiss a role", "Decide a review item",
-    "Edit the search profile", "Ask for a check", "Name a company or set its kind", "Issue or revoke a credential"
+    "Edit the search profile or the resume", "Ask for a check", "Name a company or set its kind", "Issue or revoke a credential"
   ].freeze
 
   BATCH = 4.hours # a run over many companies
