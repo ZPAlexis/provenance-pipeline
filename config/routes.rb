@@ -20,6 +20,7 @@ Rails.application.routes.draw do
       patch :note
     end
     resources :activities, only: %i[update destroy]
+    resources :drafts, only: %i[create update destroy]
   end
   resources :companies, only: %i[index show create] do
     member do

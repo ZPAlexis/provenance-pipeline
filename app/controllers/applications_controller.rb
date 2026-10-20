@@ -16,12 +16,14 @@ class ApplicationsController < ApplicationController
 
   def show
     @timeline = Pipeline.timeline(@application)
+    @drafts = @application.drafts.includes(:llm_call).newest_first.to_a
+    @draft_run = @application.posting.check_runs.where(kind: "draft").newest_first.first
   end
 
   def create
     role = Posting.includes(:company).find(params[:posting_id])
     application = Pipeline.start!(role, stage: params[:stage], on: day, note: params[:note])
-    CheckRun.start_describe!(role) if role.job_url # what the drafting to come reads: free, in the background
+    CheckRun.start_describe!(role) if role.job_url # what the drafter reads: free, in the background
     redirect_to application_path(application), notice: "Application started at #{Application.stage_label(application.stage)}.",
                                                status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e

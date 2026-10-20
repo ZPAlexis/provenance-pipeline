@@ -1,0 +1,120 @@
+<%# An application's drafts (2c): written by the drafter from what is on record, then yours to edit,
+    approve, copy, or delete. Nothing is sent from here. %>
+<% needs = Drafts.missing(application) %>
+<% resume = SearchProfile.current&.resumes&.newest_first&.first %>
+<% description = application.posting.role_descriptions.newest_first.first %>
+<h2 id="drafts">Drafts</h2>
+<section class="check-now">
+  <% if needs.any? %>
+    <p class="muted small">
+      Drafting needs <%= needs.to_sentence %> first:
+      <%= link_to "the Profile page", profile_path(anchor: "resume") unless resume %><%= " · " if !resume && !description %><%= link_to "the role's page", role_path(application.posting) unless description %>.
+    </p>
+  <% elsif !run&.active? %>
+    <% estimate = Drafts.estimate %>
+    <%= form_with url: application_drafts_path(application), class: "add-form",
+                  data: { turbo_confirm: "Opus 5.5 writes it from your resume and the role's description: about #{cost(estimate)}. Write it?" } do |form| %>
+      <label>What <%= select_tag :kind, options_for_select(Draft::LABELS.invert), id: "draft_kind" %></label>
+      <label>Language <%= text_field_tag :language, nil, list: "draft-languages", placeholder: "As its description", maxlength: Drafts::MAX_LANGUAGE,
+                                                         autocomplete: "off" %></label>
+      <datalist id="draft-languages"><% %w[English Portuguese Spanish].each do |language| %><option value="<%= language %>"></option><% end %></datalist>
+      <label class="wide">Anything to stress <%= text_field_tag :guidance, nil, maxlength: Drafts::MAX_GUIDANCE, autocomplete: "off",
+                                                                 placeholder: "Optional: the discovery work, or that you can start in November" %></label>
+      <%= form.submit "Write it", class: "btn primary small" %>
+      <p class="muted small">
+        Opus 5.5 writes it from your resume (saved <%= resume.created_at.to_date %>), the role's description (read <%= description.first_read_at.to_date %>),
+        your profile and your notes above, claiming only what your resume shows: about <%= cost(estimate) %>. You edit it and approve it; nothing is ever sent.
+      </p>
+    <% end %>
+  <% end %>
+  <%# The latest run, while it writes or when it wrote nothing (why not); a draft it wrote shows below. %>
+  <%= render "check_runs/run", run: run, poll: false if run && (run.active? || run.answer != "drafted") %>
+</section>
+
+<% drafts.each do |draft| %>
+  <section class="draft" id="<%= dom_id(draft) %>" data-controller="copy">
+    <div class="draft-head">
+      <strong><%= draft.label %></strong>
+      <%= tag.span(draft.approved? ? "Approved" : "Draft", class: [ "badge", ("live" if draft.approved?) ]) %>
+      <span class="muted small">
+        <%= draft.language %> · <%= pluralize(draft.words, "word") %> · written <%= ago(draft.created_at) %><% if draft.edited? %> · edited by you<% end %>
+        <% if draft.approved? %> · approved <%= ago(draft.approved_at) %><% end %>
+      </span>
+    </div>
+
+    <%= form_with url: application_draft_path(application, draft), method: :patch, id: dom_id(draft, :edit), class: "draft-form" do |form| %>
+      <% if draft.kind == "outreach" %>
+        <label>Subject <%= form.text_field :subject, value: draft.subject, autocomplete: "off", data: { copy_target: "subject" } %></label>
+      <% end %>
+      <label><%= draft.kind == "outreach" ? "Note" : "Letter" %>
+        <%# Tall enough for the whole text at desktop width (about 90 characters a line), and no taller than a screen. %>
+        <%= form.text_area :body, value: draft.body, rows: draft.body.lines.sum { |line| [ (line.length / 90.0).ceil, 1 ].max }.clamp(8, 30),
+                                  data: { copy_target: "body" } %></label>
+    <% end %>
+    <div class="draft-actions">
+      <button type="submit" form="<%= dom_id(draft, :edit) %>" class="btn small">Save changes</button>
+      <% unless draft.approved? %>
+        <button type="submit" form="<%= dom_id(draft, :edit) %>" name="approve" value="1" class="btn primary small">Save and approve</button>
+      <% end %>
+      <% if draft.kind == "outreach" %>
+        <button type="button" class="btn small" data-action="copy#copy" data-copy-field-param="subject">Copy subject</button>
+      <% end %>
+      <button type="button" class="btn small" data-action="copy#copy" data-copy-field-param="body">Copy <%= draft.kind == "outreach" ? "note" : "letter" %></button>
+      <%= button_to "Delete", application_draft_path(application, draft), method: :delete, class: "btn small",
+                              data: { turbo_confirm: "Delete this #{draft.label.downcase}? Its record keeps its size and hash, not its text." } %>
+    </div>
+    <p class="muted small">
+      <%= draft.approved? ? "Approved: copy it and send it yourself. Nothing is sent from here; a change returns it to a draft." :
+                            "Yours to edit. Approve it once it says what you'll send; nothing is sent from here." %>
+    </p>
+
+    <% if draft.gaps.any? %>
+      <div class="gaps">
+        <p class="small"><strong>What the role asks for that your resume doesn't show</strong> (left out of the draft)</p>
+        <ul class="small">
+          <% draft.gaps.each do |gap| %>
+            <li><strong><%= gap["asks"] %></strong>: <%= gap["note"] %></li>
+          <% end %>
+        </ul>
+      </div>
+    <% else %>
+      <p class="muted small">It found nothing the role asks for that your resume doesn't show.</p>
+    <% end %>
+    <% if draft.notes.present? %>
+      <p class="small"><span class="muted">Its note:</span> <%= draft.notes %></p>
+    <% end %>
+    <% if draft.dropped_lines.positive? %>
+      <p class="small warn">It named <%= pluralize(draft.dropped_lines, "line") %> your resume doesn't have; they were left out of what it drew on.</p>
+    <% end %>
+    <details class="description">
+      <summary class="muted small">What it drew on: <%= pluralize(draft.drew_on.size, "line") %> of your resume</summary>
+      <ul class="small drew-on">
+        <% draft.drew_on.each do |point| %>
+          <li><span class="muted">[<%= point["line"] %>]</span> <%= point["text"] %> <span class="muted">· <%= point["used_for"] %></span></li>
+        <% end %>
+      </ul>
+    </details>
+
+    <% written_by = AuditEvent.find_by(target: draft, action: "create") %>
+    <% call = draft.llm_call %>
+    <p class="muted small">
+      Written by the drafter<%= " with #{call.model}#{" at #{call.settings.dig('output_config', 'effort')} effort" if call.settings.dig('output_config', 'effort')} for #{cost(call.cost_usd)}" if call %>,
+      from your resume <%= draft.resume ? "saved #{draft.resume.created_at.to_date}" : "(since deleted)" %>
+      and the role's description <%= draft.role_description ? "read #{draft.role_description.first_read_at.to_date}" : "(no longer on record)" %>
+      <% if written_by&.credential %> · <%= link_to "its credential", agent_credential_path(written_by.credential) %><% end %>
+    </p>
+    <% asked = [ draft.asked_language, ("to stress “#{draft.guidance}”" if draft.guidance.present?) ].compact %>
+    <% if asked.any? %>
+      <% said = "You asked for #{asked.to_sentence}" %>
+      <p class="muted small"><%= said.end_with?("”") ? said : "#{said}." %></p>
+    <% end %>
+    <% stale = [ ("your resume" if resume && resume.content_hash != draft.resume_hash),
+                 ("the role's description" if description && description.content_hash != draft.description_hash) ].compact %>
+    <% if stale.any? %>
+      <p class="small warn">
+        <%= stale.to_sentence.upcase_first %> <%= stale.one? ? "has" : "have" %> changed since it was written: a new draft reads
+        <%= stale.one? ? "it as it is" : "them as they are" %> now.
+      </p>
+    <% end %>
+  </section>
+<% end %>

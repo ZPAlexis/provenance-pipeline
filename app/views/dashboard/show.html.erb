@@ -89,6 +89,9 @@
             <td>
               <% if run.kind == "describe" && run.posting %>
                 <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %> (its description)</span>
+              <% elsif run.kind == "draft" && run.posting&.application %>
+                <%= link_to run.posting.role_title, application_path(run.posting.application, anchor: "drafts") %>
+                <span class="muted">at <%= run.company.name %> (<%= Draft::A_LABEL.fetch(run.request["kind"], "a draft") %>)</span>
               <% elsif run.kind == "role" && run.posting %>
                 <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %></span>
               <% elsif run.kind == "all" %>

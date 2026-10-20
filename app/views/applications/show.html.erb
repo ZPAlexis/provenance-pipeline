@@ -32,6 +32,12 @@
       <span class="muted">not read yet</span> · <%= link_to "the role's page", role_path(role) %> reads it
     <% end %>
   </dd>
+  <dt>Drafts</dt>
+  <dd>
+    <% approved = @drafts.count(&:approved?) %>
+    <%= @drafts.any? ? "#{pluralize(@drafts.size, 'draft')}#{", #{approved} approved" if approved.positive?}" : tag.span("none yet", class: "muted") %>
+    · <%= link_to @drafts.any? ? "see them" : "write one", "#drafts" %>
+  </dd>
 </dl>
 
 <h2 id="move">Move it</h2>
@@ -101,3 +107,5 @@
                                                        placeholder: "Who you spoke to, what matters to them, what to ask next" %></label>
   <%= form.submit "Save notes", class: "btn small" %>
 <% end %>
+
+<%= render "drafts", application: @application, drafts: @drafts, run: @draft_run %>

@@ -1,5 +1,6 @@
-# Runs a check the operator asked for from the pages (a role, a company, or
-# everything), and keeps its outcome on the CheckRun the page polls. One at a time: development runs jobs on a single
+# Runs a check the operator asked for from the pages (a role, a company,
+# everything, a description read, or a draft written), and keeps its outcome on
+# the CheckRun the page polls. One at a time: development runs jobs on a single
 # in-process thread, so politeness per site holds across checks.
 class CheckNowJob < ApplicationJob
   queue_as :default
@@ -16,6 +17,10 @@ class CheckNowJob < ApplicationJob
         role = check_run.posting
         Verifier::Descriptions.read!(role, purpose: "describe: #{role.role_title} at #{role.company.name}",
                                            issued_by: check_run.requested_by).sole
+      when "draft"
+        asked = check_run.request
+        Drafts.write!(check_run.posting.application, kind: asked["kind"], language: asked["language"],
+                                                     guidance: asked["guidance"], issued_by: check_run.requested_by)
       when "role" then Verifier::CheckNow.role(check_run.posting)
       else Verifier::CheckNow.company(check_run.company)
       end

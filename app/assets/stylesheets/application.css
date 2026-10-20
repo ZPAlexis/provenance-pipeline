@@ -423,3 +423,25 @@ td form.button_to { display: inline-block; }
   .stage-path a:first-child { padding-left: 8px; }
   .stage-path a.current, .stage-path a.won, .stage-path a.lost { flex-grow: 3; }
 }
+
+/* An application's drafts (Stage 2c): written by the drafter, edited and approved by the operator, never sent */
+
+.draft { margin: 12px 0 18px; padding: 12px 14px; max-width: 900px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 8px; }
+.draft-form label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-weight: 600; font-size: 13px; }
+.draft-form input[type="text"], .draft-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font: 400 14px/1.5 var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.draft-form textarea { resize: vertical; }
+.draft-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 6px; }
+.draft-actions form.button_to { display: inline-block; }
+.draft .gaps ul, .draft ul.drew-on { margin: 4px 0 8px; padding-left: 20px; }
+.draft .gaps li, .draft ul.drew-on li { margin-bottom: 3px; }
+.warn { color: var(--unsure); }
