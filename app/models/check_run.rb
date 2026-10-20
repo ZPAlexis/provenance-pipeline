@@ -1,12 +1,13 @@
 # A check the operator asked for from the pages, run in the background (CheckNowJob):
-# one role, one company, everything (1.4), or a role's description read (2b). The page polls it until it is done.
+# one role, one company, everything (1.4), a role's description read (2b), or a
+# draft written for its application (2c). The page polls it until it is done.
 # Evidence and changes are recorded as for any check, under run_id; this row is the
 # request and its outcome.
 class CheckRun < ApplicationRecord
   belongs_to :company, optional: true # none for everything
   belongs_to :posting, optional: true
 
-  KINDS = %w[role company all describe].freeze
+  KINDS = %w[role company all describe draft].freeze
   STATUSES = %w[queued running done failed].freeze
   ACTIVE = %w[queued running].freeze
   # Longer than any check takes (a ten-page list read by the LLM, or a 2,000-role
@@ -18,7 +19,7 @@ class CheckRun < ApplicationRecord
   validates :kind, inclusion: { in: KINDS }
   validates :status, inclusion: { in: STATUSES }
   validates :requested_by, presence: true
-  validates :posting, presence: true, if: -> { kind.in?(%w[role describe]) }
+  validates :posting, presence: true, if: -> { kind.in?(%w[role describe draft]) }
   validates :company, presence: true, unless: -> { kind == "all" }
 
   scope :active, -> { where(status: ACTIVE) }
@@ -59,6 +60,16 @@ class CheckRun < ApplicationRecord
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
+  # A draft for `application` (2c), or the one already being written: one at a time per
+  # application, with what a draft costs on the record. `request` is what to write.
+  def self.start_draft!(application, kind:, language: nil, guidance: nil, requested_by: AuditEvent::OPERATOR)
+    abandon_stale!
+    where(kind: "draft", posting: application.posting).active.first || create!(
+      kind: "draft", company: application.company, posting: application.posting, requested_by: requested_by,
+      ceiling_usd: Drafts.estimate, request: { "kind" => kind, "language" => language, "guidance" => guidance }
+    ).tap { |run| CheckNowJob.perform_later(run) }
+  end
+
   # Everything checked at once, or the run already under way: one at a time.
   def self.start_all!(requested_by: AuditEvent::OPERATOR)
     abandon_stale!
@@ -81,6 +92,7 @@ class CheckRun < ApplicationRecord
     case kind
     when "role" then "#{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "describe" then "the description of #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
+    when "draft" then "#{Draft::A_LABEL.fetch(request['kind'])} for #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "all" then "everything"
     else company.name
     end

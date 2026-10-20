@@ -53,6 +53,22 @@ RSpec.describe CheckNowJob do
     expect(described.reload).to have_attributes(status: "done", answer: "read", summary: /480 words/, cost_usd: 0)
   end
 
+  it "writes a draft for a draft run, as it was asked, and keeps what it cost" do
+    application = create(:application, posting: create(:posting, company: company))
+    asked = create(:check_run, kind: "draft", company: company, posting: application.posting,
+                               request: { "kind" => "outreach", "language" => "Portuguese", "guidance" => "Discovery." })
+    written = Drafts::Written.new(application: application, draft: Draft.new, summary: "Outreach note in Portuguese: 96 words.",
+                                  cost_usd: 0.061, run_id: "20261019T120000Z-draft")
+    allow(Drafts).to receive(:write!).and_return(written)
+
+    described_class.perform_now(asked)
+
+    expect(Drafts).to have_received(:write!).with(application, kind: "outreach", language: "Portuguese", guidance: "Discovery.",
+                                                               issued_by: "human:operator")
+    expect(asked.reload).to have_attributes(status: "done", answer: "drafted", summary: /96 words/, cost_usd: 0.061,
+                                            run_id: "20261019T120000Z-draft")
+  end
+
   it "fails with why when the check stopped or broke, so the page never waits forever" do
     stopped = outcome.dup.tap { |o| o.stopped = "API credit exhausted"; o.summary = "Stopped before a result: API credit exhausted." }
     allow(Verifier::CheckNow).to receive(:role).and_return(stopped)

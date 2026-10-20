@@ -6,6 +6,7 @@ class Draft < ApplicationRecord
   KINDS = %w[cover_letter outreach].freeze
   STATUSES = %w[draft approved].freeze
   LABELS = { "cover_letter" => "Cover letter", "outreach" => "Outreach note" }.freeze
+  A_LABEL = { "cover_letter" => "a cover letter", "outreach" => "an outreach note" }.freeze
 
   belongs_to :application
   belongs_to :resume, optional: true # nil once the resume is deleted; resume_hash still names it

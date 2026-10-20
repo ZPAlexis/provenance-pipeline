@@ -49,7 +49,9 @@ module Drafts
   def write!(application, kind:, language: nil, guidance: nil, worker: Verifier::Worker.new(run_dir: Verifier::Worker.dir_for("draft")),
              issued_by: AuditEvent::OPERATOR)
     language, guidance = language.to_s.strip.presence, guidance.to_s.strip.presence
-    check_request!(application, kind, language, guidance)
+    why = refusal(application, kind:, language:, guidance:)
+    raise ArgumentError, why if why
+
     profile = SearchProfile.current
     resume = profile.resumes.newest_first.first
     description = application.posting.role_descriptions.newest_first.first
@@ -65,13 +67,15 @@ module Drafts
     end
   end
 
-  def check_request!(application, kind, language, guidance)
-    raise ArgumentError, "unknown kind of draft #{kind.inspect}" unless Draft::KINDS.include?(kind)
-    raise ArgumentError, "a language is named in a few words, not #{language.size} characters" if language && language.size > MAX_LANGUAGE
-    raise ArgumentError, "what to stress fits in #{MAX_GUIDANCE} characters" if guidance && guidance.size > MAX_GUIDANCE
+  # Why a draft can't be written as asked, in words; nil when it can. Asked before a run is queued, and again when it runs.
+  def refusal(application, kind:, language: nil, guidance: nil)
+    language, guidance = language.to_s.strip, guidance.to_s.strip
+    return "unknown kind of draft #{kind.inspect}" unless Draft::KINDS.include?(kind)
+    return "a language is named in a few words, not #{language.size} characters" if language.size > MAX_LANGUAGE
+    return "what to stress fits in #{MAX_GUIDANCE} characters" if guidance.size > MAX_GUIDANCE
 
     needs = missing(application)
-    raise ArgumentError, "drafting needs #{needs.to_sentence} first" if needs.any?
+    "drafting needs #{needs.to_sentence} first" if needs.any?
   end
 
   # The run's one result through the contract, then kept: its LLM call whatever came of it (billed all the same), and the draft.
@@ -163,5 +167,5 @@ module Drafts
 
   def counted(count, what) = "#{count} #{what.pluralize(count)}"
 
-  private_class_method :check_request!, :record, :record_call, :facts, :changed, :counted
+  private_class_method :record, :record_call, :facts, :changed, :counted
 end
