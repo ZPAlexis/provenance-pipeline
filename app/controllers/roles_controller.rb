@@ -7,11 +7,13 @@ class RolesController < ApplicationController
   def index
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "tracked"
     @answer = params[:answer] if ANSWERS.include?(params[:answer])
-    @counts = Posting.group(:tracking).count
-    roles = Posting.where(tracking: @tab)
+    @q = params[:q].to_s.strip.presence
+    found = Posting.matching(@q) # every role when nothing is typed
+    @counts = found.group(:tracking).count
+    roles = found.where(tracking: @tab)
     @answer_counts = roles.group(:verification_state).count
     roles = roles.where(verification_state: @answer) if @answer
-    @roles = roles.joins(:company).includes(:company).order("companies.name", :role_title)
+    @roles = roles.includes(:company).order("companies.name", :role_title)
   end
 
   # "Add a role": its own page at the employer and its title, tracked as the operator's
@@ -46,6 +48,20 @@ class RolesController < ApplicationController
   def track = decide(:track!, "tracked")
 
   def dismiss = decide(:dismiss!, "dismissed")
+
+  # Several roles dismissed at once, under one note, each audited on its own: all or none.
+  # Backed up first (at most daily), since undoing many is many clicks.
+  def dismiss_many
+    roles = Posting.includes(:company).where(id: Array(params[:ids])).to_a
+    return redirect_back_or_to(roles_path, alert: "Select the roles to dismiss first.", status: :see_other) if roles.empty?
+
+    DatabaseBackup.daily
+    ApplicationRecord.transaction { roles.each { |role| Verifier::Tracking.dismiss!(role, note: params[:note]) } }
+    redirect_back_or_to roles_path, notice: "#{roles.size} #{'role'.pluralize(roles.size)} dismissed: never checked or suggested again.",
+                                    status: :see_other
+  rescue ArgumentError => e
+    redirect_back_or_to roles_path, alert: "None dismissed: #{e.message}.", status: :see_other
+  end
 
   private
 

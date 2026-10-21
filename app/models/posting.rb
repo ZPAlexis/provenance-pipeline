@@ -90,6 +90,8 @@ class Posting < ApplicationRecord
   scope :tracked, -> { where(tracking: "tracked") }
   scope :suggested, -> { where(tracking: "suggested") }
   scope :not_dismissed, -> { where.not(tracking: "dismissed") }
+  # Roles whose title, company or place hold every word typed (the Roles page's Find).
+  scope :matching, ->(text) { Searchable.narrow(joins(:company), text, %w[postings.role_title postings.location companies.name]) }
   scope :live, -> { where(verification_state: "verified_live") }
   scope :remote, -> { where(work_mode: "remote") }
   scope :from_slice, ->(slice) { where(source_slice: slice) }

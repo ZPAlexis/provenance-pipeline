@@ -70,6 +70,12 @@ class Company < ApplicationRecord
   scope :needing_careers_page, -> { where(careers_page_url: nil) }
   scope :unresolved, -> { where(resolution_status: nil) }
   scope :resolution_candidates, -> { where(resolution_status: "candidate") }
+  # Companies whose name or domain, or the place of one of their roles, hold every word typed (the Companies page's Find):
+  # a company has no place of its own on record, so "Brazil" finds those with a role there.
+  scope :matching, lambda { |text|
+    places = "(SELECT string_agg(postings.location, ' ') FROM postings WHERE postings.company_id = companies.id)"
+    Searchable.narrow(all, text, [ "companies.name", "companies.domain", places ])
+  }
   # Companies whose page is watched for roles. An aggregator's listings belong to
   # other employers: its own page says nothing about them.
   scope :watched, -> { where(resolution_status: "resolved", kind: [ nil, *KINDS - [ "aggregator" ] ]) }

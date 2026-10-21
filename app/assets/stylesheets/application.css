@@ -194,7 +194,9 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 .watch { display: flex; gap: 6px; align-items: flex-start; }
 .watch details > summary { list-style: none; }
 .watch details > summary::-webkit-details-marker { display: none; }
-.watch details[open] > summary { border-color: var(--accent); }
+/* Opened, a decision shows only its note, its button and Cancel: never a second button of the same name. */
+.watch details[open] > summary { display: none; }
+.watch:has(details[open]) > details:not([open]) { display: none; }
 .watch-form { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
 .watch-form input[type="text"] {
   width: 200px;
@@ -440,8 +442,28 @@ td form.button_to { display: inline-block; }
   border-radius: 6px;
 }
 .draft-form textarea { resize: vertical; }
-.draft-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 6px; }
-.draft-actions form.button_to { display: inline-block; }
 .draft .gaps ul, .draft ul.drew-on { margin: 4px 0 8px; padding-left: 20px; }
 .draft .gaps li, .draft ul.drew-on li { margin-bottom: 3px; }
 .warn { color: var(--unsure); }
+
+/* A row of buttons, a button_to's form among them */
+
+.button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.button-row form.button_to { display: inline-block; margin: 0; }
+.btn.quiet { background: none; border-color: transparent; color: var(--muted); }
+.btn.quiet:hover { color: var(--text); border-color: var(--line); }
+
+/* Find, and acting on many roles at once */
+
+.find-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.find-form input[type="search"], .bulk-form input[type="text"] {
+  width: 260px;
+  max-width: 100%;
+  padding: 4px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.bulk-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
