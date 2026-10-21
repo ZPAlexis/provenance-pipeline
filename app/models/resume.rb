@@ -1,5 +1,5 @@
 # One version of the operator's resume (Stage 2b), pasted on the Profile page:
-# what the drafting agent to come reads. Personal data, held in this database
+# what the drafter reads (Drafts). Personal data, held in this database
 # only. Kept and removed through Resumes, which audits each version by its size
 # and hash, never its text.
 class Resume < ApplicationRecord

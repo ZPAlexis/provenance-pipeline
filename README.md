@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1 complete; Stage 2 under way.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Stage 2 has begun with the pipeline itself: an application per role, moved through its stages by the operator alone (no agent scope allows it, and an agent that tries is refused on the record), with what happened along the way. Each role's description is read from its own page, free and never by the LLM, and kept version by version; the operator's resume is held with the profile, in the database only. Next: a draft agent. See [Build stages](#build-stages).
+> **Status: Stage 1 complete; Stage 2 under way.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Stage 2 has begun with the pipeline itself: an application per role, moved through its stages by the operator alone (no agent scope allows it, and an agent that tries is refused on the record), with what happened along the way. Each role's description is read from its own page, free and never by the LLM, and kept version by version; the operator's resume is held with the profile, in the database only. A draft agent writes cover letters and outreach notes from them, claiming only what the resume shows and flagging what the role asks that it doesn't; the operator edits and approves each one, and nothing is ever sent. Next: the MCP server. See [Build stages](#build-stages).
 
 ---
 
@@ -86,14 +86,14 @@ Before 1.3 every agent write went through an audited service under a named actor
 
 | Agent | Granted | Explicitly cannot |
 |---|---|---|
-| Verifier (research) | `companies:enrich` (a careers page, how it was found, a free board, a suggested kind), `postings:verify` (verdicts and what a check observed; a title only while pending), `evidence:write` (page checks, LLM calls) | Track or dismiss a role, name a company or set its kind, decide a review item |
+| Verifier (research) | `companies:enrich` (a careers page, how it was found, a free board, a suggested kind), `postings:verify` (verdicts and what a check observed; a title only while pending), `evidence:write` (page checks, LLM calls, roles' descriptions) | Track or dismiss a role, name a company or set its kind, decide a review item |
 | Suggester | `postings:suggest` (propose a role, refresh or withdraw it while it is still a suggestion) | Track or dismiss a role, or touch one the operator decided on |
 | Clay importer | `companies:import`, `postings:import` (the seed data) | Set a role's tracking, or rename a company on record |
 | Review queue (a system grant) | `review:keep` (raise, restate, and close what resolved) | Decide an item |
 | Review agent (planned) | `review:recommend` (write a recommendation on an open item) | Decide an item, or make the write it recommends |
 | Activity logger (Stage 2) | `activities:write`, `applications:read` | Change stage |
-| Draft agent (Stage 2) | `drafts:write` | Send anything, or finalize a draft |
-| **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); tracking a role; deciding a review item | **Human-only by design** |
+| Draft agent | `drafts:write` (a new draft as it wrote it, and the LLM call that wrote it) | Edit or approve a draft, or send anything |
+| **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); editing or approving a draft; tracking a role; deciding a review item | **Human-only by design** |
 
 The last row is the point: the most consequential write is withheld from every agent. Read and enrich is safe to automate; drafting is safe-with-review; stage advancement and anything outbound is human-gated.
 
@@ -140,6 +140,14 @@ role_descriptions  posting_id, text, content_hash, read_via, url, run_id,
 resumes       search_profile_id, text, content_hash (one row per version;
               audited by size and hash, never the text)
 
+drafts        application_id, kind (cover_letter | outreach), status
+              (draft | approved), language, asked_language, guidance,
+              subject, body (as it stands), written_subject, written_body
+              (as the drafter wrote it), drew_on (jsonb: resume lines),
+              gaps (jsonb), notes, dropped_lines, resume_id, resume_hash,
+              role_description_id, description_hash, llm_call_id, run_id,
+              edited_at, approved_at (audited by size and hash, never the text)
+
 page_checks   company_id, run_id, purpose (resolution | verification), step,
               url, final_url, outcome, reason, read_via, ats_vendor, ats_board,
               listing_count, stated_total, listings (jsonb snapshot),
@@ -157,7 +165,7 @@ review_items  kind, company_id, subject (polymorphic: the company or one role),
 agent_credentials  actor, scopes, token_digest, purpose, issued_by,
                    expires_at, revoked_at (one per agent run)
 
-llm_calls     page_check_id, run_id, purpose (extract | resolve | match), model,
+llm_calls     page_check_id, run_id, purpose (extract | resolve | match | relate | draft), model,
               settings, prompt_version, input_tokens, output_tokens, cost_usd
 
 audit_events  actor, action, target (polymorphic), changes_made (jsonb),
@@ -177,6 +185,7 @@ Notes on a few choices:
 - **Only the operator tracks a role.** A posting is `suggested` (proposed by the suggester, with why in `fit`), `tracked` (on the operator's watch list), or `dismissed` (declined for good: never checked or suggested again); the agent may suggest, never track. A suggestion the operator never acted on is withdrawn when it no longer fits the profile or its check found it gone: deleted, with its whole record kept in its last audit event. `job_url` is the role's own page at the employer, learned from the listing it matched, so the next check finds the role by its link before its title; `posting_url` stays where it was found.
 - **Whether a list was read whole is the worker's own answer,** kept on each verification run's first check (`complete`): a role missing from part of a list has not closed, so what changed and the replays of Test B read it rather than guess.
 - **An application's history is its audit log.** Each stage change records the stage and the date it happened (the operator's, not when it was typed), so velocity and conversion are measured from the record, not a copy of it.
+- **A draft keeps what it was written from.** The resume and description versions it read are linked and hashed (a hash outlives a deleted resume), its LLM call names the model, settings, prompt version and cost, and the text as the drafter wrote it stays beside the operator's edits. Its audit events name its size and hash, never its text: a draft is the resume paraphrased.
 - **A credential is never deleted,** so every agent write can be traced to the run behind it. A refused write is an audit event too (`denied`), with what it tried.
 - **The review queue is worked out from the record.** Each open item is a question the record asks now (one per question about one company or role), raised by the agent whose read led to it and closed by the operator's decision or when its evidence resolves, all audited. `evidence_key` fingerprints what was seen: an item left as is is raised again only when it changes.
 - **Careers-page resolution is recorded beside the page:** how it was found, how sure we are (`high`, `medium`, `low`, or `confirmed` by a person), a held candidate, or why it failed. A low-confidence find waits in `resolution_candidate_url` and is never watched until a person confirms it.
@@ -217,7 +226,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 
 - **2a — Applications** ✅ one per role, started from its page (tracking it if it wasn't), moved through Interested, Applied, Screening, Interviewing, Offer and Accepted, or closed as Rejected, Withdrawn or No response, by the operator alone, each change dated and noted; what happened along the way logged; a pipeline page by stage, and `applications:` commands.
 - **2b — Descriptions and the resume** ✅ each role's description read from its own page (through its board's job API, or the page rendered; never the LLM), when an application starts or when asked, kept as versions, a change shown in what changed; the operator's resume pasted on the Profile page, kept as versions in the database only.
-- 2c — A draft agent: cover letters and outreach from the profile, the resume and the description, under `drafts:write`; the operator edits and approves; nothing is ever sent.
+- **2c — The draft agent** ✅ a cover letter or an outreach note for an application, written by Opus 5.5 from the resume, the role's description, the profile and the operator's notes, in the description's language unless another is asked: it claims only what the resume shows, cites the resume lines it drew on, and lists what the role asks that the resume doesn't show. Written in the background from the application's page, where the operator edits, approves and copies it; nothing is ever sent. `drafts:` commands.
 - 2d — The MCP server, grown from a read-only one, adding scoped write tools behind the same credential check; contacts and an activity logger with it.
 
 **Stage 3 — Governance completion.** Full audit views, a review queue for drafts, analytics.
@@ -286,6 +295,10 @@ STAGE=applied bin/rails "applications:start[posting_id]"  # start one for a role
 STAGE=interviewing bin/rails "applications:move[id]"      # move it, on the day it happened (ON=, NOTE=)
 KIND=call SUMMARY="..." bin/rails "applications:log[id]"  # log what happened (ON=)
 bin/rails "applications:show[id]"                # its stage, the role's answer, and its timeline
+KIND=cover_letter bin/rails "drafts:write[application_id]"  # a draft by the drafter (LANGUAGE=, STRESS=); Opus 5.5, ~6 cents
+bin/rails drafts:list                            # drafts, newest first, with where each stands and its cost (APPLICATION=)
+bin/rails "drafts:show[id]"                      # its text, its gaps, the resume lines it drew on, what it was written from
+bin/rails "drafts:approve[id]"                   # approve it as it stands; nothing is sent
 ```
 
 ### Suggestions
@@ -293,6 +306,18 @@ bin/rails "applications:show[id]"                # its stage, the role's answer,
 A search profile (the Profile page) says what the operator is looking for: titles, excluded words, the places they can work, work modes, and levels. The worker's `suggest` command weighs every watched company's roles, as its page last listed them, against it: no page is fetched and the LLM is never called. A role fits when its title holds every word of one of the profile's titles, in any order, and none of an excluded one; when it is open to one of the places (a role in São Paulo, or open to Latin America, is open to Brazil; a region on the profile takes roles open to it, never every role inside it); and when its work mode and the level its title states are among those sought. What a role does not state (no place, no work mode, no level) still fits, marked. Each role comes back with its reasoning; Preview shows it all, the roles left out included, and writes nothing.
 
 The suggester (`agent:suggester`) then writes each fitting role that is not already on record as a suggestion, matched against every role on record the way verification matches (its link, then its title), so a role the operator tracks or dismissed is never proposed again. It refreshes when the profile is saved, from **Find suggestions** on the Roles page, after every check now, and after `verifier:verify`. A suggestion the operator never acted on is withdrawn when it stops fitting, or when its check finds it gone from the whole list; one missing from a read that may be partial stays.
+
+### Drafts
+
+An application's page writes a cover letter or a short outreach note for it (the drafter, `agent:drafter`). The worker's `draft` command makes one structured call to Claude Opus 5.5, at medium effort, with what is on record alone: the operator's newest resume, the role's newest description, the search profile, and the operator's notes on the application. The description and the resume are data, never instructions; the operator's "anything to stress" is theirs.
+
+- **Only what the resume shows.** No experience, skill, employer, figure or date the resume doesn't state, no total worked out from its dates, and no employer described beyond what the resume says of it. What the role asks for that the resume doesn't show is left out and listed as a gap.
+- **Cited by line.** The resume goes to the model with its lines numbered, and the draft names the lines it drew on by number, as listings name links: each maps back to the resume's exact text, and a number the resume doesn't have is dropped and counted.
+- **In the role's language** (the description's), unless another is asked.
+- **Never sent.** The operator edits it, approves it (an edit after that returns it to a draft), and copies it out; only the operator can edit or approve one.
+- **Written in the background**, one at a time per application, with what a draft costs on the record shown first (about 6 cents each so far). The run's targets file holds the whole resume, so it is removed when the run ends.
+
+The drafter is the one agent with no free path: writing the draft is the model's work. Without an API key a draft run stops and says so; everything else keeps working.
 
 ### The review queue
 
