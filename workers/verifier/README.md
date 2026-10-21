@@ -1,6 +1,6 @@
 # verifier
 
-The Python worker behind Stages 1.2 and 1.5. It never touches the database: Rails writes a targets file, runs the worker, validates every result against a fixed contract, and records it through one audited write path, under a credential issued for that run with only the scopes it needs (Stage 1.3). One JSON result per target, appended as it goes, so a run that stops early keeps everything it finished.
+The Python worker behind Stages 1.2, 1.5 and 2. It never touches the database: Rails writes a targets file, runs the worker, validates every result against a fixed contract, and records it through one audited write path, under a credential issued for that run with only the scopes it needs (Stage 1.3). One JSON result per target, appended as it goes, so a run that stops early keeps everything it finished.
 
 ```bash
 uv run verifier extract --targets targets.json --out results.jsonl   # read careers pages, list their roles
@@ -11,9 +11,11 @@ uv run verifier check   --targets roles.json --out results.jsonl     # is one ro
 uv run verifier boards  --targets companies.json --out results.jsonl # find free boards listing the same roles (no LLM)
 uv run verifier suggest --targets companies.json --out results.jsonl # weigh stored roles against a search profile (no fetch, no LLM)
 uv run verifier describe --targets roles.json --out results.jsonl   # read roles' descriptions from their own pages (no LLM)
+uv run verifier related --targets profile.json --out results.jsonl   # propose titles in the same area as a profile's (one LLM call)
+uv run verifier draft   --targets drafts.json --out results.jsonl    # write a cover letter or outreach note (one LLM call, never sent)
 ```
 
-Every command takes `--model` (default `claude-haiku-4-5`) and `--delay` (seconds between requests to one host, default 5). `verify`, `check`, and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards`, `suggest` and `describe` never call the LLM. The browser and the LLM client are imported only by the commands that use them: from a checkout under `/mnt` in WSL the LLM client alone takes about 15 seconds to import, and `suggest` starts in about one. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
+Every command takes `--model` (default `claude-haiku-4-5`; `claude-opus-5-5` for `draft`) and `--delay` (seconds between requests to one host, default 5). `verify`, `check`, and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards`, `suggest` and `describe` never call the LLM. The browser and the LLM client are imported only by the commands that use them: from a checkout under `/mnt` in WSL the LLM client alone takes about 15 seconds to import, and `suggest` starts in about one. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
 
 Exit codes: 0 finished; 2 bad input; 3 stopped, API credit exhausted; 4 stopped, credential missing or rejected; 5 stopped, the LLM service kept failing.
 
@@ -88,6 +90,12 @@ What a role does not state is never held against it: it fits, with a note (`plac
 
 `describe` takes one role per target, by its own page. A role on Greenhouse, Lever, Ashby, Workday, or Oracle Cloud is read through that board's job endpoint: free, exact, and nothing rendered (Workday's and Oracle's, the ones the company's own site calls, answer to its robots.txt and are spaced like any request to that host). Any other is rendered and its main text kept as it is: its `<main>` or `<article>` when the page marks one, else all its text. HTML becomes text with the standard library, a line per block and list items as dashes; a text over 60,000 characters is cut, and says so. Each result says `ok` (with the text and a hash), `gone` (a 404, or no longer on its board), `blocked`, `inaccessible`, or `no_page`. Rails keeps one row per distinct text, so a changed description is a new version.
 
+## Writing a draft
+
+`draft` takes one draft per target: its kind (`cover_letter` or `outreach`), the role, its description, the resume, the search profile, the operator's notes and guidance, and the language asked (none: the description's own). It fetches nothing and makes one structured-output call to Claude Opus 5.5 at medium effort (`DRAFT_MODEL`): its thinking can't be turned off on that model, so effort is the control, and 16k `max_tokens` bounds a draft's worst case at about $0.32 where one costs about $0.06. The prompt fences everything on record between markers as data, the operator's guidance aside, and puts one rule above the rest: claim only what the resume shows, with figures only as it states them (no years added up) and an employer only as it describes it.
+
+The resume's non-blank lines are numbered in the prompt, and the draft names the lines it drew on by number, as listings name links: each maps back to the line's exact text, and a number the resume doesn't have is dropped and counted (`dropped_lines`). The result carries the text (and an outreach note's subject), the language it was written in, those lines with what each answers, the gaps (what the role asks that the resume doesn't show), a note to the operator, and the call's usage. A refusal, a cut-off or an unusable answer is an `error` that keeps what it cost. Progress output names the draft's kind, language and size, never its text.
+
 ## Paying for a read only when something may have changed
 
 Claude's reading of rendered pages is nearly all of a run's cost, so verification avoids it in two ways, both decided by free signals:
@@ -97,7 +105,7 @@ Claude's reading of rendered pages is nearly all of a run's cost, so verificatio
 
 ## Code map
 
-`cli` runs a command over its targets; the orchestrators do one job each: `resolve` (finding the careers page), `verify` (reading it in full and matching), `check` (one role now), `describe` (a role's description), `boards` (the board search), `match` (posting against listings), `profiles` (which stored roles fit a search profile, and why). Under them: `pipeline` (one page read: robots, render, ATS API, extraction, reuse), `render`, `extract` (the LLM steps), `ats` (vendors, their APIs, whose board a board is), `robots`, `politeness`. `contract` is the boundary with Rails; `config` holds the model, limits, and delays; `errors` holds why a whole run stops early.
+`cli` runs a command over its targets; the orchestrators do one job each: `resolve` (finding the careers page), `verify` (reading it in full and matching), `check` (one role now), `describe` (a role's description), `draft` (a cover letter or outreach note), `related` (titles near a profile's), `boards` (the board search), `match` (posting against listings), `profiles` (which stored roles fit a search profile, and why). Under them: `pipeline` (one page read: robots, render, ATS API, extraction, reuse), `render`, `extract` (the LLM steps), `ats` (vendors, their APIs, whose board a board is), `robots`, `politeness`. `contract` is the boundary with Rails; `config` holds the model, limits, and delays; `errors` holds why a whole run stops early.
 
 **Helpers several modules share live in a neutral module, never inside an orchestrator:** `titles` (what a title is, word by word, and the level of experience it states: matching, board overlap, check now, and search profiles share one meaning of a title), `links` (whether two addresses name the same role or page), and `places` (what a location names, and whether a role there is open to where someone can work: a role in São Paulo, or open to Latin America, is open to Brazil). A change there changes every caller on purpose.
 
