@@ -51,7 +51,7 @@
         <%= form.text_area :body, value: draft.body, rows: draft.body.lines.sum { |line| [ (line.length / 90.0).ceil, 1 ].max }.clamp(8, 30),
                                   data: { copy_target: "body" } %></label>
     <% end %>
-    <div class="draft-actions">
+    <div class="button-row">
       <button type="submit" form="<%= dom_id(draft, :edit) %>" class="btn small">Save changes</button>
       <% unless draft.approved? %>
         <button type="submit" form="<%= dom_id(draft, :edit) %>" name="approve" value="1" class="btn primary small">Save and approve</button>

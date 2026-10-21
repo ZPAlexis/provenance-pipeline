@@ -8,8 +8,10 @@ class CompaniesController < ApplicationController
 
   def index
     @view = VIEWS.key?(params[:view]) ? params[:view] : "watched"
-    @counts = VIEWS.transform_values { |filter| filter.call(Company.all).count }
-    @companies = VIEWS.fetch(@view).call(Company.order(:name))
+    @q = params[:q].to_s.strip.presence
+    found = Company.matching(@q) # every company when nothing is typed
+    @counts = VIEWS.transform_values { |filter| filter.call(found).count }
+    @companies = VIEWS.fetch(@view).call(found.order(:name))
     # Per company: its roles still in play by answer, and when it was last verified.
     @roles = Posting.not_dismissed.group(:company_id, :verification_state).count
     @last_checked = PageCheck.where(purpose: "verification").group(:company_id).maximum(:checked_at)

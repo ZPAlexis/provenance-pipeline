@@ -29,14 +29,17 @@
 
 <nav class="tabs">
   <% { "watched" => "Watched", "candidates" => "To confirm", "unresolved" => "No page yet", "all" => "All" }.each do |view, label| %>
-    <%= link_to companies_path(view: view), class: ("current" if view == @view) do %>
+    <%= link_to companies_path(view: view, q: @q), class: ("current" if view == @view) do %>
       <%= label %> <span class="count"><%= @counts.fetch(view) %></span>
     <% end %>
   <% end %>
 </nav>
 
+<%= render "shared/find", url: companies_path, keep: { view: @view }, value: @q, clear: companies_path(view: @view),
+                          placeholder: "Name, domain, or a place it hires in" %>
+
 <% if @companies.empty? %>
-  <p class="empty">None.</p>
+  <p class="empty"><%= @q ? "No company here matches “#{@q}”." : "None." %></p>
 <% else %>
   <div class="table-wrap">
     <table>

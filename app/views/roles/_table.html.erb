@@ -2,6 +2,9 @@
   <table>
     <thead>
       <tr>
+        <% if local_assigns[:bulk] %>
+          <th><input type="checkbox" aria-label="Select every role listed" data-bulk-target="all" data-action="bulk#all"></th>
+        <% end %>
         <th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th>
         <% if local_assigns[:fit] %><th>Why suggested</th><% else %><th>Own page</th><% end %>
         <th>Watch list</th>
@@ -10,6 +13,10 @@
     <tbody>
       <% roles.each do |role| %>
         <tr>
+          <% if local_assigns[:bulk] %>
+            <td><input type="checkbox" name="ids[]" value="<%= role.id %>" form="bulk-dismiss" aria-label="Select <%= role.role_title %>"
+                       data-bulk-target="box" data-action="bulk#count"></td>
+          <% end %>
           <td><%= link_to role.role_title, role_path(role) %></td>
           <td><%= link_to role.company.name, company_path(role.company) %></td>
           <td class="muted"><%= role.location %></td>

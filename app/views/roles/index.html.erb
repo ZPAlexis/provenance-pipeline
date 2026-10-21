@@ -46,18 +46,21 @@
 
 <nav class="tabs">
   <% RolesController::TABS.each do |tab| %>
-    <%= link_to roles_path(tab: tab), class: ("current" if tab == @tab) do %>
+    <%= link_to roles_path(tab: tab, q: @q), class: ("current" if tab == @tab) do %>
       <%= tab.capitalize %> <span class="count"><%= @counts.fetch(tab, 0) %></span>
     <% end %>
   <% end %>
 </nav>
 
+<%= render "shared/find", url: roles_path, keep: { tab: @tab, answer: @answer }, value: @q,
+                          clear: roles_path(tab: @tab, answer: @answer), placeholder: "Title, company, or place" %>
+
 <nav class="filters" aria-label="Filter by answer">
-  <%= link_to roles_path(tab: @tab), class: [ "filter", ("current" if @answer.nil?) ] do %>
+  <%= link_to roles_path(tab: @tab, q: @q), class: [ "filter", ("current" if @answer.nil?) ] do %>
     All <span class="count"><%= @answer_counts.values.sum %></span>
   <% end %>
   <% RolesController::ANSWERS.each do |state| %>
-    <%= link_to roles_path(tab: @tab, answer: state),
+    <%= link_to roles_path(tab: @tab, answer: state, q: @q),
                 class: [ "filter", answer_tone(state), ("current" if state == @answer) ] do %>
       <%= answer_label(state) %> <span class="count"><%= @answer_counts.fetch(state, 0) %></span>
     <% end %>
@@ -65,7 +68,21 @@
 </nav>
 
 <% if @roles.any? %>
-  <%= render "table", roles: @roles, fit: @tab == "suggested" %>
+  <% bulk = @tab != "dismissed" %>
+  <%= tag.div(data: { controller: ("bulk" if bulk) }) do %>
+    <% if bulk %>
+      <%= form_with url: dismiss_many_roles_path, method: :patch, id: "bulk-dismiss", class: "bulk-form",
+                    data: { turbo_confirm: "Dismiss the selected roles? They are never checked or suggested again, until you track one by hand." } do |form| %>
+        <span class="muted small" data-bulk-target="count">None selected</span>
+        <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why dismiss them",
+                                   placeholder: "Why dismiss them?" %>
+        <%= form.submit "Dismiss selected", class: "btn small", disabled: true, data: { bulk_target: "submit" } %>
+      <% end %>
+    <% end %>
+    <%= render "table", roles: @roles, fit: @tab == "suggested", bulk: bulk %>
+  <% end %>
+<% elsif @q %>
+  <p class="empty">No <%= @tab %> role<%= " #{answer_label(@answer).downcase}" if @answer %> matches “<%= @q %>”.</p>
 <% elsif @answer %>
   <p class="empty">No <%= @tab %> role is <%= answer_label(@answer).downcase %>.</p>
 <% else %>

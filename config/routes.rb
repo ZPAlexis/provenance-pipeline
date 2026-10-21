@@ -12,6 +12,7 @@ Rails.application.routes.draw do
       patch :track
       patch :dismiss
     end
+    patch :dismiss_many, on: :collection
   end
   resources :applications, only: %i[index show create] do
     member do

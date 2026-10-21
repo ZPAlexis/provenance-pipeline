@@ -84,11 +84,17 @@
   <% if current %>
     <p class="small">Saved <%= ago(current.created_at) %>: <%= number_with_delimiter(current.words) %> words.</p>
   <% end %>
-  <%= form_with url: resume_profile_path, method: :patch, class: "add-form" do |form| %>
+  <%= form_with url: resume_profile_path, method: :patch, id: "resume-form", class: "add-form" do |form| %>
     <label class="wide">Your resume <%= form.text_area :resume_text, value: current&.text, rows: 12, required: true,
                                                                      placeholder: "Paste your resume here, as text" %></label>
-    <%= form.submit current ? "Save changes" : "Save resume", class: "btn primary small" %>
   <% end %>
+  <div class="button-row">
+    <button type="submit" form="resume-form" class="btn primary small"><%= current ? "Save changes" : "Save resume" %></button>
+    <% if current %>
+      <%= button_to "Delete resume", resume_profile_path, method: :delete, class: "btn small",
+                                     data: { turbo_confirm: "Delete your resume, and every earlier version of it? This can't be undone." } %>
+    <% end %>
+  </div>
   <% if earlier.any? %>
     <details class="description">
       <summary class="muted small"><%= pluralize(earlier.size, "earlier version") %></summary>
@@ -97,10 +103,6 @@
         <div class="description-text"><%= version.text %></div>
       <% end %>
     </details>
-  <% end %>
-  <% if current %>
-    <%= button_to "Delete resume", resume_profile_path, method: :delete, class: "btn small",
-                                   data: { turbo_confirm: "Delete your resume, and every earlier version of it? This can't be undone." } %>
   <% end %>
 <% else %>
   <p class="muted small">Save the profile above first: the resume is kept with it.</p>

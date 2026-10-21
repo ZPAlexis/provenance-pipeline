@@ -1,0 +1,10 @@
+<%# Find: narrows a list to the records holding every word typed, case and accents set aside. A GET form
+    drops its action's query, so what else the list is narrowed by goes in hidden fields (keep). %>
+<%= form_with url: url, method: :get, class: "find-form", role: "search" do %>
+  <% keep.compact_blank.each do |name, value| %>
+    <%= hidden_field_tag name, value, id: nil %>
+  <% end %>
+  <%= search_field_tag :q, value, placeholder: placeholder, "aria-label": placeholder, autocomplete: "off" %>
+  <button type="submit" class="btn small">Find</button>
+  <%= link_to "Clear", clear, class: "small" if value %>
+<% end %>
