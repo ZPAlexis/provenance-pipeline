@@ -16,12 +16,51 @@ RSpec.describe "What the client saved, on the application's page", type: :reques
   # As the save tools save them: as agent:assistant, under a credential for the call.
   def assistant(&block) = as_agent("agent:assistant", &block)
 
-  it "says how to get a resume review until there is one, and offers only the drafter's kinds in the app" do
+  it "offers a resume review in the app or from your own client, and only the drafter's kinds of draft" do
     get application_path(application)
 
-    expect(response.body).to include("Resume reviews", "None yet. In Claude Desktop, pick the Resume review prompt")
+    expect(response.body).to include("Resume reviews", "Or ask your own Claude client for one through MCP (the Resume review prompt)")
     expect(response.body).to include("<option value=\"cover_letter\">Cover letter</option>", "<option value=\"outreach\">Outreach note</option>")
     expect(response.body).not_to include("<option value=\"tailored_resume\">")
+  end
+
+  describe "the in-app review" do
+    include ActiveJob::TestHelper
+
+    it "is offered with what it costs, and queued in the background in the language asked, one at a time" do
+      get application_path(application)
+      expect(response.body).to include("Review my resume", "about $0.070", "Opus 5.5 weighs your resume")
+
+      expect { post application_resume_reviews_path(application), params: { language: " Portuguese " } }.to have_enqueued_job(CheckNowJob)
+      expect(CheckRun.sole).to have_attributes(kind: "review", posting: role, ceiling_usd: 0.07, request: { "language" => "Portuguese" })
+      post application_resume_reviews_path(application)
+      expect(CheckRun.count).to eq(1)
+
+      get application_path(application)
+      expect(response.body).to include("Waiting for the check before it to finish").and(not_include("Review my resume"))
+      get root_path
+      expect(response.body).to include("(a resume review)", "/applications/#{application.id}#reviews")
+    end
+
+    it "is refused before anything is queued without a resume" do
+      Resume.delete_all
+
+      post application_resume_reviews_path(application)
+
+      expect(flash[:alert]).to start_with("Not reviewed: reviewing needs a resume, saved on the Profile page")
+      expect(CheckRun.count).to eq(0)
+    end
+
+    it "shows the drafter's review with its model and cost" do
+      call = LlmCall.create!(run_id: "r", purpose: "review", model: "claude-opus-5-5", settings: { "output_config" => { "effort" => "medium" } },
+                             prompt_version: "12a32d559f0c", input_tokens: 4_000, output_tokens: 2_000, cost_usd: 0.056, called_at: Time.current)
+      application.resume_reviews.create!(language: "English", gaps: [ { "asks" => "Spanish", "note" => "Not shown." } ], resume: resume,
+                                         resume_hash: resume.content_hash, description_hash: "h", written_by: "agent:drafter", llm_call: call)
+
+      get application_path(application)
+
+      expect(response.body).to include("Written by the in-app drafter with claude-opus-5-5 at medium effort for $0.056")
+    end
   end
 
   it "shows a review with its strengths and lines, its gaps, suggestions and note, and who wrote it" do

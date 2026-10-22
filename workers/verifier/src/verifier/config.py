@@ -42,10 +42,10 @@ MODEL_SETTINGS: dict[str, dict] = {
     "claude-opus-5-5": {"output_config": {"effort": "medium"}},
 }
 
-# Cover letters and outreach (Stage 2c) are written by Opus 5.5, the operator's
-# choice for writing quality; every other call keeps DEFAULT_MODEL. Its thinking
-# counts toward max_tokens, so this bounds a draft's worst case: about $0.32 of
-# output, where a draft takes 2-4k tokens.
+# Cover letters and outreach (Stage 2c) and resume reviews (2d) are written by
+# Opus 5.5, the operator's choice for writing quality; every other call keeps
+# DEFAULT_MODEL. Its thinking counts toward max_tokens, so this bounds a draft's
+# or a review's worst case: about $0.32 of output, where one takes 2-4k tokens.
 DRAFT_MODEL = "claude-opus-5-5"
 DRAFT_MAX_OUTPUT_TOKENS = 16_000
 

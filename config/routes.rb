@@ -22,7 +22,7 @@ Rails.application.routes.draw do
     end
     resources :activities, only: %i[update destroy]
     resources :drafts, only: %i[create update destroy]
-    resources :resume_reviews, only: :destroy
+    resources :resume_reviews, only: %i[create destroy]
   end
   resources :companies, only: %i[index show create] do
     member do

@@ -1,8 +1,8 @@
 # Writing rules
 
-The rules every piece of writing about an application keeps, in one place: the worker's `draft` command builds its
-system prompt from them (a change here changes its prompt version), and the MCP server's prompts hand them to the
-operator's own Claude client. Each section below is read by its heading; its text is used as written.
+The rules every piece of writing about an application keeps, in one place: the worker's `draft` and `review` commands
+build their system prompts from them (a change here changes their prompt versions), and the MCP server's prompts hand
+them to the operator's own Claude client. Each section below is read by its heading; its text is used as written.
 
 ## grounding
 

@@ -113,6 +113,6 @@
   <%= form.submit "Save notes", class: "btn small" %>
 <% end %>
 
-<%= render "reviews", application: @application, reviews: @reviews %>
+<%= render "reviews", application: @application, reviews: @reviews, run: @review_run %>
 
 <%= render "drafts", application: @application, drafts: @drafts, run: @draft_run %>

@@ -18,6 +18,7 @@ module ApplicationHelper
   def run_answer(run)
     return tag.span(run.answer == "read" ? "Read" : "Not read", class: [ "badge", run.answer == "read" ? "live" : "unsure" ]) if run.kind == "describe"
     return tag.span(run.answer == "drafted" ? "Drafted" : "Not drafted", class: [ "badge", run.answer == "drafted" ? "live" : "unsure" ]) if run.kind == "draft"
+    return tag.span(run.answer == "reviewed" ? "Reviewed" : "Not reviewed", class: [ "badge", run.answer == "reviewed" ? "live" : "unsure" ]) if run.kind == "review"
     return tag.span("Checked", class: "badge live") if run.kind != "role"
 
     run.answer ? answer_badge(run.answer) : tag.span("Couldn't confirm", class: "badge unsure")

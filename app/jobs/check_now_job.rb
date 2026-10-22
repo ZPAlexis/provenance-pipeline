@@ -1,5 +1,5 @@
 # Runs a check the operator asked for from the pages (a role, a company,
-# everything, a description read, or a draft written), and keeps its outcome on
+# everything, a description read, a draft or a review written), and keeps its outcome on
 # the CheckRun the page polls. One at a time: development runs jobs on a single
 # in-process thread, so politeness per site holds across checks.
 class CheckNowJob < ApplicationJob
@@ -17,6 +17,8 @@ class CheckNowJob < ApplicationJob
         role = check_run.posting
         Verifier::Descriptions.read!(role, purpose: "describe: #{role.role_title} at #{role.company.name}",
                                            issued_by: check_run.requested_by).sole
+      when "review"
+        ResumeReviews.write!(check_run.posting.application, language: check_run.request["language"], issued_by: check_run.requested_by)
       when "draft"
         asked = check_run.request
         Drafts.write!(check_run.posting.application, kind: asked["kind"], language: asked["language"],

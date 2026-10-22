@@ -139,6 +139,29 @@ RSpec.describe Verifier::ResultContract do
     end
   end
 
+  describe ".review_errors" do
+    def review(**overrides)
+      { "kind" => "review", "target_id" => "a1", "outcome" => "ok", "language" => "English", "dropped_lines" => 0, "note" => "Fit.",
+        "strengths" => [ { "point" => "Discovery", "lines" => [ { "line" => 3, "text" => "Ran discovery." } ] } ],
+        "gaps" => [ { "asks" => "Spanish", "note" => "None." } ], "suggestions" => [ { "change" => "Lead with it", "lines" => [] } ],
+        "llm" => { "model" => "claude-opus-5-5", "purpose" => "review", "prompt_version" => "r1", "input_tokens" => 1,
+                   "output_tokens" => 1, "cost_usd" => 0.01 }, **overrides }
+    end
+
+    it "accepts a review whose points carry their lines with their text" do
+      expect(described_class.review_errors(review)).to be_empty
+      expect(described_class.review_errors(review("outcome" => "error", "reason" => "llm_refusal", "strengths" => nil))).to be_empty
+    end
+
+    it "refuses one missing its language, with a line that isn't one, or written for another purpose" do
+      errors = described_class.review_errors(review("language" => "", "suggestions" => [ { "change" => "x", "lines" => [ 3 ] } ],
+                                                    "llm" => review["llm"].merge("purpose" => "draft")))
+      expect(errors).to eq([ "llm purpose must be review", "language is missing",
+                             "suggestion 1 must say its change and its lines with their text" ])
+      expect(described_class.review_errors(review("gaps" => "none"))).to include("strengths, gaps and suggestions must be lists")
+    end
+  end
+
   describe ".draft_errors" do
     def draft(**overrides)
       { "kind" => "draft", "target_id" => "a1", "draft_kind" => "cover_letter", "outcome" => "ok", "language" => "English",

@@ -192,6 +192,37 @@ module Verifier
       errors
     end
 
+    # A resume review: on ok, its language, and its strengths, gaps and suggestions, each line it names with its text.
+    def review_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be review" unless result["kind"] == "review"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "unknown outcome #{result['outcome'].inspect}" unless %w[ok error].include?(result["outcome"])
+      errors.concat(llm_errors(result["llm"]).map { |error| "llm #{error}" }) if result["llm"]
+      errors << "llm purpose must be review" if result["llm"].is_a?(Hash) && result["llm"]["purpose"] != "review"
+      return errors unless result["outcome"] == "ok"
+
+      errors << "language is missing" unless result["language"].is_a?(String) && result["language"].present?
+      errors << "dropped_lines must be a count" unless count?(result["dropped_lines"])
+      lists = result.values_at("strengths", "gaps", "suggestions")
+      return errors << "strengths, gaps and suggestions must be lists" unless lists.all?(Array)
+
+      { "strengths" => "point", "suggestions" => "change" }.each do |list, said|
+        result[list].each_with_index do |item, index|
+          next if item.is_a?(Hash) && item[said].is_a?(String) && item["lines"].is_a?(Array) &&
+                  item["lines"].all? { |line| line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) }
+
+          errors << "#{list.singularize} #{index + 1} must say its #{said} and its lines with their text"
+        end
+      end
+      result["gaps"].each_with_index do |gap, index|
+        errors << "gap #{index + 1} must say what the role asks and a note" unless gap.is_a?(Hash) && %w[asks note].all? { |key| gap[key].is_a?(String) }
+      end
+      errors
+    end
+
     RULED_OUT = %w[excluded level place work_mode].freeze
     FIT_NOTES = %w[work_mode_not_stated place_not_stated level_not_stated].freeze
     WORK_MODES = [ *SearchProfile::WORK_MODES, "unknown" ].freeze
