@@ -328,7 +328,9 @@ The drafter is the one agent with no free path: writing the draft is the model's
 - **Every read tool's call runs inside a read-only transaction,** so no read can write, and a tool's inputs (they come from a model) reach SQL only as bound parameters.
 - **A save tool writes as `agent:assistant`,** under a credential issued for that one call with only that tool's scopes, revoked when it ends: checked at every write and audited like any agent's. A write its scopes don't allow comes back to the client as a refusal, kept on the record.
 - **stdout carries the protocol,** and nothing else writes there. Rails boots in the background, so the server answers a client's first request at once; times are UTC; an answer is cut at 20,000 characters, and says so.
-- **Tools so far:** `get_company_status` (a company by its name, domain, or a link on its site: its careers page and how it was found, its roles by answer with dismissed ones apart, its last check, its applications).
+- **Tools:** `get_company_status` (a company by its name, domain, or a link on its site: its careers page and how it was found, its roles by answer with dismissed ones apart, its last check, its applications); `list_applications` (where each stands, what is written for it, its id); `get_application_materials` (what any writing about an application starts from: the role, its description, the resume numbered by line exactly as the in-app drafter numbers it, the profile, the notes, what is already written, the record's text fenced as data); `get_draft` (a draft in full, with what it rests on and whether its inputs changed since); `get_writing_rules`.
+- **Prompts,** picked in the client with an application (completed as it is typed): `cover_letter`, `outreach_note`, `resume_review`, `tailored_resume`. Each carries the writing rules and the application's materials, so the client writes at once, and keeps the rules through every change asked of it.
+- **The writing rules live in one file,** [`writing_rules.md`](workers/verifier/src/verifier/writing_rules.md): the worker's drafter builds its prompt from it, and the server's prompts hand it to the client. Only what the resume shows, figures as it states them, an employer as it describes it, gaps listed rather than claimed.
 - **Layout:** `mcp/server.rb` (the entry point), `mcp/provenance_mcp.rb` (the shared parts and rules), one file per tool in `mcp/tools/` (a `ReadTool` or `SaveTool` subclass with an `answer`), specs in `spec/mcp/` (each tool as the server calls it, and the whole server over stdio). `mcp/run.sh` starts it from a client on Windows, through WSL.
 
 **Registering it with Claude Desktop** (Settings → Developer → Edit Config), on the machine that holds the database, with the repo's path inside WSL:
@@ -345,6 +347,8 @@ The drafter is the one agent with no free path: writing the draft is the model's
 ```
 
 **Use it from Desktop chat, not from a session with a shell.** A client that can run commands (Claude Code in this repository) can read the database around the tools, or write through `bin/rails runner` as the operator, unchecked. The governance holds for a client whose only way to the record is the tools: Claude Desktop chat, with no shell-capable server beside it. The record is the operator's private job search, so the server is registered on their machine only. `bundle exec ruby mcp/client.rb "<company>"` is a smoke client that connects the same way.
+
+**In Desktop chat,** pick a prompt from the attachment menu's `provenance_pipeline` entry (Cover letter, Outreach note, Resume review, Tailored resume), type the application's company and role, and send: the client writes from the record and keeps the rules while you ask for changes. Or just ask ("review my resume against the Acme application"): it reads the rules and the materials through the tools.
 
 ### The review queue
 
