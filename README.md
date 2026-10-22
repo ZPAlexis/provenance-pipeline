@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1 complete; Stage 2 under way.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Stage 2 has begun with the pipeline itself: an application per role, moved through its stages by the operator alone (no agent scope allows it, and an agent that tries is refused on the record), with what happened along the way. Each role's description is read from its own page, free and never by the LLM, and kept version by version; the operator's resume is held with the profile, in the database only. A draft agent writes cover letters and outreach notes from them, claiming only what the resume shows and flagging what the role asks that it doesn't; the operator edits and approves each one, and nothing is ever sent. Next: the MCP server. See [Build stages](#build-stages).
+> **Status: Stage 1 complete; Stage 2 under way.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Stage 2 has begun with the pipeline itself: an application per role, moved through its stages by the operator alone (no agent scope allows it, and an agent that tries is refused on the record), with what happened along the way. Each role's description is read from its own page, free and never by the LLM, and kept version by version; the operator's resume is held with the profile, in the database only. A draft agent writes cover letters and outreach notes from them, claiming only what the resume shows and flagging what the role asks that it doesn't; the operator edits and approves each one, and nothing is ever sent. Under way: an MCP server through which the operator's own Claude client reads the record and does that writing on their subscription, saving it back under a credential per save. See [Build stages](#build-stages).
 
 ---
 
@@ -93,6 +93,7 @@ Before 1.3 every agent write went through an audited service under a named actor
 | Review agent (planned) | `review:recommend` (write a recommendation on an open item) | Decide an item, or make the write it recommends |
 | Activity logger (Stage 2) | `activities:write`, `applications:read` | Change stage |
 | Draft agent | `drafts:write` (a new draft as it wrote it, and the LLM call that wrote it) | Edit or approve a draft, or send anything |
+| Assistant (the operator's own Claude client, through MCP) | only the scopes of the save tool it calls, a credential per call (`drafts:write` so far) | Edit or approve what it saved, or send anything |
 | **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); editing or approving a draft; tracking a role; deciding a review item | **Human-only by design** |
 
 The last row is the point: the most consequential write is withheld from every agent. Read and enrich is safe to automate; drafting is safe-with-review; stage advancement and anything outbound is human-gated.
@@ -106,7 +107,7 @@ The last row is the point: the most consequential write is withheld from every a
 - **The audit log is append-only,** for everyone; an event in an agent's name needs that agent's credential.
 - **The review queue's bookkeeping** is worked out from the record, not an agent's judgment: it writes under a grant fixed in code, checked by the same guard, limited to review items.
 - **The operator's own writes are not checked** while the app is local, single-user and has no login; a login comes with a host (1.4).
-- **Reads are not scoped yet:** the MCP server (2.3) scopes them, behind the same check.
+- **Reads through MCP are read-only by construction:** every read tool's call runs inside a read-only transaction. Writes through MCP go through save tools, each under a credential for that one call.
 
 The Agents page shows each agent's scopes as the code defines them, the credentials its runs held with what each wrote and was refused, and every refused write.
 
@@ -227,7 +228,8 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 - **2a — Applications** ✅ one per role, started from its page (tracking it if it wasn't), moved through Interested, Applied, Screening, Interviewing, Offer and Accepted, or closed as Rejected, Withdrawn or No response, by the operator alone, each change dated and noted; what happened along the way logged; a pipeline page by stage, and `applications:` commands.
 - **2b — Descriptions and the resume** ✅ each role's description read from its own page (through its board's job API, or the page rendered; never the LLM), when an application starts or when asked, kept as versions, a change shown in what changed; the operator's resume pasted on the Profile page, kept as versions in the database only.
 - **2c — The draft agent** ✅ a cover letter or an outreach note for an application, written by Opus 5.5 from the resume, the role's description, the profile and the operator's notes, in the description's language unless another is asked: it claims only what the resume shows, cites the resume lines it drew on, and lists what the role asks that the resume doesn't show. Written in the background from the application's page, where the operator edits, approves and copies it; nothing is ever sent. `drafts:` commands.
-- 2d — The MCP server, grown from a read-only one, adding scoped write tools behind the same credential check; contacts and an activity logger with it.
+- 2d — Drafting through MCP (in progress): the operator's own Claude client, on their subscription rather than API credits, reads an application's materials and writes a resume review, a cover letter, an outreach note and a tailored resume, saving each back as `agent:assistant` under a credential per call. The server grows from the operator's read-only learning server.
+- 2e — Contacts and an activity logger, as MCP tools too.
 
 **Stage 3 — Governance completion.** Full audit views, a review queue for drafts, analytics.
 
@@ -318,6 +320,31 @@ An application's page writes a cover letter or a short outreach note for it (the
 - **Written in the background**, one at a time per application, with what a draft costs on the record shown first (about 6 cents each so far). The run's targets file holds the whole resume, so it is removed when the run ends.
 
 The drafter is the one agent with no free path: writing the draft is the model's work. Without an API key a draft run stops and says so; everything else keeps working.
+
+### The MCP server
+
+[`mcp/`](mcp) is a stdio [MCP](https://modelcontextprotocol.io) server (the Ruby SDK, gem `mcp`) through which the operator's own Claude client reads the record, and, as 2d goes on, writes a resume review, a cover letter, an outreach note or a tailored resume and saves it back. The model's work is then paid for by the operator's Claude subscription, not by API credits. It grew from the operator's own read-only learning server.
+
+- **Every read tool's call runs inside a read-only transaction,** so no read can write, and a tool's inputs (they come from a model) reach SQL only as bound parameters.
+- **A save tool writes as `agent:assistant`,** under a credential issued for that one call with only that tool's scopes, revoked when it ends: checked at every write and audited like any agent's. A write its scopes don't allow comes back to the client as a refusal, kept on the record.
+- **stdout carries the protocol,** and nothing else writes there. Rails boots in the background, so the server answers a client's first request at once; times are UTC; an answer is cut at 20,000 characters, and says so.
+- **Tools so far:** `get_company_status` (a company by its name, domain, or a link on its site: its careers page and how it was found, its roles by answer with dismissed ones apart, its last check, its applications).
+- **Layout:** `mcp/server.rb` (the entry point), `mcp/provenance_mcp.rb` (the shared parts and rules), one file per tool in `mcp/tools/` (a `ReadTool` or `SaveTool` subclass with an `answer`), specs in `spec/mcp/` (each tool as the server calls it, and the whole server over stdio). `mcp/run.sh` starts it from a client on Windows, through WSL.
+
+**Registering it with Claude Desktop** (Settings → Developer → Edit Config), on the machine that holds the database, with the repo's path inside WSL:
+
+```json
+{
+  "mcpServers": {
+    "provenance_pipeline": {
+      "command": "wsl.exe",
+      "args": ["bash", "/mnt/<drive>/<path>/provenance-pipeline/mcp/run.sh"]
+    }
+  }
+}
+```
+
+**Use it from Desktop chat, not from a session with a shell.** A client that can run commands (Claude Code in this repository) can read the database around the tools, or write through `bin/rails runner` as the operator, unchecked. The governance holds for a client whose only way to the record is the tools: Claude Desktop chat, with no shell-capable server beside it. The record is the operator's private job search, so the server is registered on their machine only. `bundle exec ruby mcp/client.rb "<company>"` is a smoke client that connects the same way.
 
 ### The review queue
 

@@ -11,8 +11,8 @@ gem "solid_cache"
 gem "solid_queue"
 gem "bootsnap", require: false
 gem "turbo-rails"
-gem "mcp"
-
+# The MCP server (mcp/, Stage 2d) requires it itself: the app never loads it.
+gem "mcp", require: false
 
 # Bundled gem as of Ruby 3.4 — must be declared explicitly. Used by the CSV importer.
 gem "csv"
