@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_19_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_23_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -152,10 +152,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_000002) do
     t.datetime "approved_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "written_by", default: "agent:drafter", null: false
+    t.string "reported_model"
+    t.jsonb "tailoring", default: [], null: false
+    t.uuid "revises_id"
     t.index ["application_id", "created_at"], name: "index_drafts_on_application_id_and_created_at"
     t.index ["application_id"], name: "index_drafts_on_application_id"
     t.index ["llm_call_id"], name: "index_drafts_on_llm_call_id"
     t.index ["resume_id"], name: "index_drafts_on_resume_id"
+    t.index ["revises_id"], name: "index_drafts_on_revises_id"
     t.index ["role_description_id"], name: "index_drafts_on_role_description_id"
   end
 
@@ -240,6 +245,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_000002) do
     t.index ["verification_state"], name: "index_postings_on_verification_state"
   end
 
+  create_table "resume_reviews", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "application_id", null: false
+    t.string "language", null: false
+    t.jsonb "strengths", default: [], null: false
+    t.jsonb "gaps", default: [], null: false
+    t.jsonb "suggestions", default: [], null: false
+    t.text "note"
+    t.integer "dropped_lines", default: 0, null: false
+    t.uuid "resume_id"
+    t.string "resume_hash", null: false
+    t.uuid "role_description_id"
+    t.string "description_hash", null: false
+    t.string "written_by", null: false
+    t.string "reported_model"
+    t.uuid "llm_call_id"
+    t.string "run_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["application_id", "created_at"], name: "index_resume_reviews_on_application_id_and_created_at"
+    t.index ["application_id"], name: "index_resume_reviews_on_application_id"
+    t.index ["llm_call_id"], name: "index_resume_reviews_on_llm_call_id"
+    t.index ["resume_id"], name: "index_resume_reviews_on_resume_id"
+    t.index ["role_description_id"], name: "index_resume_reviews_on_role_description_id"
+  end
+
   create_table "resumes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "search_profile_id", null: false
     t.text "text", null: false
@@ -306,6 +336,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_000002) do
   add_foreign_key "check_runs", "companies"
   add_foreign_key "check_runs", "postings", on_delete: :nullify
   add_foreign_key "drafts", "applications", on_delete: :cascade
+  add_foreign_key "drafts", "drafts", column: "revises_id", on_delete: :nullify
   add_foreign_key "drafts", "llm_calls"
   add_foreign_key "drafts", "resumes", on_delete: :nullify
   add_foreign_key "drafts", "role_descriptions", on_delete: :nullify
@@ -313,6 +344,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_19_000002) do
   add_foreign_key "page_checks", "companies"
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify
   add_foreign_key "postings", "companies"
+  add_foreign_key "resume_reviews", "applications", on_delete: :cascade
+  add_foreign_key "resume_reviews", "llm_calls"
+  add_foreign_key "resume_reviews", "resumes", on_delete: :nullify
+  add_foreign_key "resume_reviews", "role_descriptions", on_delete: :nullify
   add_foreign_key "resumes", "search_profiles", on_delete: :cascade
   add_foreign_key "review_items", "companies", on_delete: :cascade
   add_foreign_key "role_descriptions", "postings", on_delete: :cascade

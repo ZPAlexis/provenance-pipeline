@@ -1,0 +1,63 @@
+<%# An application's resume reviews (2d): your resume weighed against the role, saved by your own Claude client
+    through MCP. Advice for you: nothing in them is sent or claimed. %>
+<% resume = SearchProfile.current&.resumes&.newest_first&.first %>
+<% description = application.posting.role_descriptions.newest_first.first %>
+<% lines = ->(cited) { "#{"line".pluralize(cited.size)} #{cited.map { |line| line["line"] }.join(", ")}" } %>
+<h2 id="reviews">Resume reviews</h2>
+<% if reviews.empty? %>
+  <p class="muted small">
+    None yet. In Claude Desktop, pick the Resume review prompt for this application (or ask for one): it weighs your resume
+    against the role, and saves its review here when you tell it to.
+  </p>
+<% end %>
+<% reviews.each do |review| %>
+  <section class="draft" id="<%= dom_id(review) %>">
+    <div class="draft-head">
+      <strong>Resume review</strong>
+      <span class="muted small"><%= review.language %> · written <%= ago(review.created_at) %></span>
+    </div>
+    <div class="gaps">
+      <p class="small"><strong>Strengths</strong>: what the role asks that your resume shows</p>
+      <ul class="small">
+        <% review.strengths.each do |strength| %>
+          <li><%= strength["point"] %><% if strength["lines"].any? %> <span class="muted">· <%= lines.call(strength["lines"]) %></span><% end %></li>
+        <% end %>
+      </ul>
+      <p class="small"><strong>Gaps</strong>: what the role asks that your resume doesn't show</p>
+      <ul class="small">
+        <% review.gaps.each do |gap| %>
+          <li><strong><%= gap["asks"] %></strong>: <%= gap["note"] %></li>
+        <% end %>
+        <% if review.gaps.empty? %><li class="muted">none found</li><% end %>
+      </ul>
+      <p class="small"><strong>Suggestions</strong> for this role</p>
+      <ul class="small">
+        <% review.suggestions.each do |suggestion| %>
+          <li><%= suggestion["change"] %><% if suggestion["lines"].any? %> <span class="muted">· <%= lines.call(suggestion["lines"]) %></span><% end %></li>
+        <% end %>
+      </ul>
+    </div>
+    <% if review.note.present? %>
+      <p class="small"><span class="muted">Its note:</span> <%= review.note %></p>
+    <% end %>
+    <% if review.dropped_lines.positive? %>
+      <p class="small warn">It named <%= pluralize(review.dropped_lines, "line") %> your resume doesn't have; they were left out.</p>
+    <% end %>
+    <% written_by = AuditEvent.find_by(target: review, action: "create") %>
+    <p class="muted small">
+      Written by <%= review.writer %><%= " (it reports #{review.reported_model})" if review.reported_model %>,
+      from your resume <%= review.resume ? "saved #{review.resume.created_at.to_date}" : "(since deleted)" %>
+      and the role's description <%= review.role_description ? "read #{review.role_description.first_read_at.to_date}" : "(no longer on record)" %>
+      <% if written_by&.credential %> · <%= link_to "its credential", agent_credential_path(written_by.credential) %><% end %>
+    </p>
+    <% stale = [ ("your resume" if resume && resume.content_hash != review.resume_hash),
+                 ("the role's description" if description && description.content_hash != review.description_hash) ].compact %>
+    <% if stale.any? %>
+      <p class="small warn"><%= stale.to_sentence.upcase_first %> <%= stale.one? ? "has" : "have" %> changed since it was written.</p>
+    <% end %>
+    <div class="button-row">
+      <%= button_to "Delete", application_resume_review_path(application, review), method: :delete, class: "btn small",
+                              data: { turbo_confirm: "Delete this review? Its record keeps its counts and hashes, not its text." } %>
+    </div>
+  </section>
+<% end %>

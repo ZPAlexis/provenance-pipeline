@@ -16,15 +16,28 @@ module ProvenanceMcp
         - Lines drawn on: each resume line it relies on, by its number in brackets, with what in the role it answers.
         - Gaps: what the role asks for that the resume doesn't show, each with what it shows instead, or that it shows nothing for it.
         - Note: one or two plain sentences on what it leads with, and anything to check or add before sending.
+        When I say to save it, save it with save_draft (kind cover_letter), as it then stands, with the resume version
+        from the materials, the lines by their numbers, the gaps and the note; a polished version of a saved draft names
+        it in revises.
       TEXT
       "outreach_note" => <<~TEXT,
         Show a short email subject line and the note, then under it:
         - Lines drawn on: each resume line it relies on, by its number in brackets, with what in the role it answers.
         - Gaps: what the role asks for that the resume doesn't show, each with what it shows instead, or that it shows nothing for it.
         - Note: one or two plain sentences on what it leads with, and anything to check or add before sending.
+        When I say to save it, save it with save_draft (kind outreach_note, with its subject), as it then stands, with the
+        resume version from the materials, the lines by their numbers, the gaps and the note.
       TEXT
-      "resume_review" => "Write it under four headings: Strengths, Gaps, Suggestions, Note.\n",
-      "tailored_resume" => "Show the tailored resume, then under it: Changes (each naming the original lines by number), then Gaps.\n"
+      "resume_review" => <<~TEXT,
+        Write it under four headings: Strengths, Gaps, Suggestions, Note.
+        When I say to save it, save it with save_resume_review, with the resume version from the materials and the lines
+        by their numbers.
+      TEXT
+      "tailored_resume" => <<~TEXT
+        Show the tailored resume, then under it: Changes (each naming the original lines by number), then Gaps.
+        When I say to save it, save it with save_draft (kind tailored_resume, its changes with the lines they name), with
+        the resume version from the materials.
+      TEXT
     }.freeze
 
     module_function
@@ -56,7 +69,7 @@ module ProvenanceMcp
     end
 
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out.
-    FENCES = %w[role_description resume profile notes].freeze
+    FENCES = %w[role_description resume profile notes review].freeze
 
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
     # the newest resume numbered by line, the profile, the notes, and what is already written for it.
@@ -73,7 +86,7 @@ module ProvenanceMcp
         description ? fence("role_description", description.text, read: description.first_read_at.utc.to_date, words: description.words)
                     : "The role's description: not read yet (it is read from the role's page in the app).",
         resume ? fence("resume", resume.numbered_lines.map { |number, line| "[#{number}] #{line}" }.join("\n"),
-                       saved: resume.created_at.utc.to_date, lines: resume.numbered_lines.size)
+                       saved: resume.created_at.utc.to_date, lines: resume.numbered_lines.size, version: resume.version)
                : "The resume: none saved yet (it is pasted on the Profile page in the app).",
         (fence("profile", [ "Titles they search for: #{profile.titles.join(', ').presence || '(none)'}",
                             "Places they can work: #{profile.places.join(', ').presence || '(none)'}",
@@ -87,15 +100,27 @@ module ProvenanceMcp
       "<#{tag}#{said}>\n#{text.to_s.gsub(%r{</?(?:#{FENCES.join('|')})\b[^>]*>}i, '')}\n</#{tag}>"
     end
 
+    # What is written for it: its drafts (get_draft reads one in full), and its newest resume review in full.
     def written(application)
       drafts = application.drafts.newest_first.to_a
-      return "Nothing is written for it yet." if drafts.empty?
+      review = application.resume_reviews.newest_first.first
+      return "Nothing is written for it yet." if drafts.empty? && review.nil?
 
-      [ "Already written for it (get_draft reads one in full):",
-        *drafts.map do |draft|
-          "- #{draft.label} in #{draft.language}, #{draft.words} words, #{draft.approved? ? 'approved' : 'a draft'}" \
-            "#{', edited' if draft.edited?}, #{draft.created_at.utc.to_date}: draft id #{draft.id}"
-        end ].join("\n")
+      listed = drafts.map do |draft|
+        "- #{draft.label} in #{draft.language}, #{draft.words} words, #{draft.approved? ? 'approved' : 'a draft'}" \
+          "#{', edited' if draft.edited?}, written by #{draft.writer}, #{draft.created_at.utc.to_date}: draft id #{draft.id}"
+      end
+      [ ([ "Already written for it (get_draft reads one in full):", *listed ].join("\n") if listed.any?),
+        (fence("review", review_text(review), written: review.created_at.utc.to_date, by: review.written_by) if review) ].compact.join("\n\n")
+    end
+
+    # A resume review as text: what a client reads back, to draft from it.
+    def review_text(review)
+      lines = ->(cited) { cited.map { |line| line["line"] }.join(", ").then { |numbers| numbers.empty? ? "" : " [lines #{numbers}]" } }
+      [ "Strengths:", *review.strengths.map { |strength| "- #{strength['point']}#{lines.call(strength['lines'])}" },
+        "Gaps:", *review.gaps.map { |gap| "- #{gap['asks']}: #{gap['note']}" },
+        "Suggestions:", *review.suggestions.map { |suggestion| "- #{suggestion['change']}#{lines.call(suggestion['lines'])}" },
+        ("Note: #{review.note}" if review.note) ].compact.join("\n")
     end
 
     # An application by its id, or by words from its role and company ("acme sales engineer").

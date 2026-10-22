@@ -96,6 +96,10 @@ module Authority
         Rule.new(model: "LlmCall", actions: %i[create], only_if: ->(call) { call.purpose == "draft" })
       ]
     },
+    "resume_reviews:write" => {
+      about: "Save a review of the resume against an application's role, for the operator to read. Never edit or delete one.",
+      rules: [ Rule.new(model: "ResumeReview", actions: %i[create]) ]
+    },
     "review:keep" => {
       about: "Review items kept in step with the record: raised, restated, and closed when what was seen resolves. " \
              "Never decided.",
@@ -118,7 +122,7 @@ module Authority
                                 "profile, for the operator to edit and approve. Sends nothing.", scopes: %w[drafts:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server, one credential " \
                                   "per save holding only that tool's scopes. Edits, approves, and sends nothing.",
-                           scopes: %w[drafts:write] }
+                           scopes: %w[drafts:write resume_reviews:write] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.

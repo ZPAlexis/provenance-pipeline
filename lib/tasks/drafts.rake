@@ -32,13 +32,20 @@ namespace :drafts do
     puts "\nWhat the role asks for that the resume doesn't show"
     puts "  nothing it found" if draft.gaps.empty?
     draft.gaps.each { |gap| puts "  - #{gap['asks']}: #{gap['note']}" }
-    puts "\nWhat it drew on"
-    draft.drew_on.each { |point| puts "  [#{point['line']}] #{point['text']} (#{point['used_for']})" }
+    if draft.tailored_resume?
+      puts "\nWhat it changed"
+      draft.tailoring.each { |change| puts "  - #{change['change']} (lines #{change['lines'].map { |line| line['line'] }.join(', ')})" }
+    else
+      puts "\nWhat it drew on"
+      draft.drew_on.each { |point| puts "  [#{point['line']}] #{point['text']} (#{point['used_for']})" }
+    end
     puts "  #{draft.dropped_lines} more it named aren't in the resume: left out" if draft.dropped_lines.positive?
     puts "\nIts note: #{draft.notes}" if draft.notes
 
     call = draft.llm_call
-    puts "\nWritten #{draft.created_at.to_date} by the drafter#{" with #{call.model} for #{dollars.call(call.cost_usd)}" if call}, from " \
+    model = call ? " with #{call.model} for #{dollars.call(call.cost_usd)}" : (" (it reports #{draft.reported_model})" if draft.reported_model)
+    puts "Revises the #{draft.revises.label.downcase} of #{draft.revises.created_at.to_date} (#{draft.revises.id})" if draft.revises
+    puts "\nWritten #{draft.created_at.to_date} by #{draft.writer}#{model}, from " \
          "the resume #{draft.resume ? "saved #{draft.resume.created_at.to_date}" : '(since deleted)'} and the role's description " \
          "#{draft.role_description ? "read #{draft.role_description.first_read_at.to_date}" : '(no longer on record)'}"
     asked = [ draft.asked_language, ("to stress \"#{draft.guidance}\"" if draft.guidance) ].compact

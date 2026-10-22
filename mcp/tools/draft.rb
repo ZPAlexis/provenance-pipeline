@@ -4,9 +4,11 @@ module ProvenanceMcp
     class GetDraft < ReadTool
       tool_name "get_draft"
       title "A draft"
-      description "One cover letter or outreach note in full, by its draft id (get_application_materials lists them): " \
-                  "its text as it stands, whether it is approved or edited, who wrote it, the resume lines it drew on, " \
-                  "its gaps and note, and whether the resume or the role's description has changed since."
+      description "One cover letter, outreach note or tailored resume in full, by its draft id (get_application_materials " \
+                  "lists them): its text as it stands, whether it is approved or edited, who wrote it and what it revises, " \
+                  "the resume lines it drew on (or a tailored resume's changes), its gaps and note, and whether the resume " \
+                  "or the role's description has changed since. To polish it, save the new version with save_draft, naming " \
+                  "this one in revises."
       input_schema(properties: { draft: { type: "string", description: "The draft's id" } }, required: [ "draft" ])
 
       class << self
@@ -21,19 +23,23 @@ module ProvenanceMcp
         private
 
         def about(draft)
-          written_by = AuditEvent.where(target: draft, action: "create").pick(:actor)
-          by = { "agent:drafter" => "the in-app drafter", "agent:assistant" => "your Claude client, through MCP" }.fetch(written_by, written_by || "unknown")
+          model = draft.llm_call&.model || ("#{draft.reported_model}, as reported" if draft.reported_model)
+          revises = " It revises the #{draft.revises.label.downcase} of #{draft.revises.created_at.utc.to_date} (draft id #{draft.revises.id})." if draft.revises
           "#{draft.label} for #{Writing.label(draft.application)}, in #{draft.language}: " \
             "#{draft.approved? ? "approved #{draft.approved_at.utc.to_date}" : 'a draft'}#{', edited by the operator' if draft.edited?}. " \
-            "Written #{draft.created_at.utc.to_date} by #{by}#{" (#{draft.llm_call.model})" if draft.llm_call}." \
+            "Written #{draft.created_at.utc.to_date} by #{draft.writer}#{" (#{model})" if model}.#{revises}" \
             "#{" Asked to stress: #{draft.guidance}" if draft.guidance.present?}"
         end
 
         def rests_on(draft)
-          lines = draft.drew_on.map { |point| "- [#{point['line']}] #{point['text']} (#{point['used_for']})" }
+          lines = if draft.tailored_resume?
+            [ "Changes:", *draft.tailoring.map { |change| "- #{change['change']} [lines #{change['lines'].map { |line| line['line'] }.join(', ')}]" } ]
+          else
+            [ "Lines drawn on:", *draft.drew_on.map { |point| "- [#{point['line']}] #{point['text']} (#{point['used_for']})" } ]
+          end
+          lines << "- none" if lines.one?
           gaps = draft.gaps.map { |gap| "- #{gap['asks']}: #{gap['note']}" }
-          [ "Lines drawn on:", *(lines.presence || [ "- none" ]), "Gaps:", *(gaps.presence || [ "- none found" ]),
-            ("Note: #{draft.notes}" if draft.notes) ].compact.join("\n")
+          [ *lines, "Gaps:", *(gaps.presence || [ "- none found" ]), ("Note: #{draft.notes}" if draft.notes) ].compact.join("\n")
         end
 
         def changed_since(draft)

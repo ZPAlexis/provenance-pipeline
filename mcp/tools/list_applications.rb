@@ -10,7 +10,8 @@ module ProvenanceMcp
 
       class << self
         def answer(closed: false)
-          applications = (closed ? Application.all : Application.open).includes(:company, :posting, :drafts).order(:stage_changed_on)
+          applications = (closed ? Application.all : Application.open).includes(:company, :posting, :drafts, :resume_reviews)
+                                                                      .order(:stage_changed_on)
           return ProvenanceMcp.text("No #{'open ' unless closed}application on record.") if applications.empty?
 
           ProvenanceMcp.text(applications.map { |application| line(application) })
@@ -20,8 +21,8 @@ module ProvenanceMcp
 
         def line(application)
           role = application.posting
-          drafts = application.drafts.map { |draft| "#{draft.label.downcase}#{' (approved)' if draft.approved?}" }.tally
-                                     .map { |what, count| count > 1 ? "#{what} x#{count}" : what }
+          drafts = (application.drafts.map { |draft| "#{draft.label.downcase}#{' (approved)' if draft.approved?}" } +
+                    application.resume_reviews.map { "resume review" }).tally.map { |what, count| count > 1 ? "#{what} x#{count}" : what }
           "- #{Writing.label(application)}#{" (#{role.location})" if role.location}: " \
             "#{Application.stage_label(application.stage).downcase} since #{application.stage_changed_on} " \
             "(#{application.days_in_stage} #{'day'.pluralize(application.days_in_stage)}); " \
