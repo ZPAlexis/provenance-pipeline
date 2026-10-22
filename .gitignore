@@ -85,3 +85,4 @@ __pycache__/
 
 # Claude Code settings for one machine (permission allowlists with local paths)
 /.claude/settings.local.json
+.mcp.json

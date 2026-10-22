@@ -11,6 +11,8 @@ gem "solid_cache"
 gem "solid_queue"
 gem "bootsnap", require: false
 gem "turbo-rails"
+gem "mcp"
+
 
 # Bundled gem as of Ruby 3.4 — must be declared explicitly. Used by the CSV importer.
 gem "csv"
