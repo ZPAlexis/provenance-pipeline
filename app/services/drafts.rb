@@ -70,7 +70,7 @@ module Drafts
   # Why a draft can't be written as asked, in words; nil when it can. Asked before a run is queued, and again when it runs.
   def refusal(application, kind:, language: nil, guidance: nil)
     language, guidance = language.to_s.strip, guidance.to_s.strip
-    return "unknown kind of draft #{kind.inspect}" unless Draft::KINDS.include?(kind)
+    return "unknown kind of draft #{kind.inspect}" unless Draft::IN_APP.include?(kind)
     return "a language is named in a few words, not #{language.size} characters" if language.size > MAX_LANGUAGE
     return "what to stress fits in #{MAX_GUIDANCE} characters" if guidance.size > MAX_GUIDANCE
 
@@ -102,7 +102,7 @@ module Drafts
       llm_call: call, run_id: run.id
     )
     gaps = draft.gaps.empty? ? "no gaps" : "#{counted(draft.gaps.size, 'gap')} flagged"
-    dropped = "; #{counted(draft.dropped_lines, 'line')} it named aren't in the resume, left out" if draft.dropped_lines.positive?
+    dropped = WrittenFrom.dropped(draft.dropped_lines)
     summary = "#{draft.label} in #{draft.language}: #{counted(draft.words, 'word')}, drawing on " \
               "#{counted(draft.drew_on.size, 'line')} of the resume, #{gaps}#{dropped}."
     AuditEvent.record!(actor: ACTOR, action: "create", target: draft, model_version: call&.model, reasoning: "Drafted: #{summary}",
@@ -116,6 +116,48 @@ module Drafts
     LlmCall.create!(run_id: run.id, purpose: llm["purpose"], model: llm["model"], settings: llm["settings"] || {},
                     prompt_version: llm["prompt_version"], input_tokens: llm["input_tokens"],
                     output_tokens: llm["output_tokens"], cost_usd: llm["cost_usd"], called_at: Time.current)
+  end
+
+  # What the operator's own Claude client wrote through MCP (2d), saved as `actor` under the credential of that one
+  # call: a cover letter, an outreach note, or a tailored resume, read against the resume version the client saw. A
+  # polished version revises the draft it came from, which stays. Returns the draft and what was saved, in words.
+  def save!(application, kind:, language:, body:, resume_version:, subject: nil, lines_drawn_on: [], changes: [], gaps: [],
+            note: nil, revises: nil, reported_model: nil, actor: "agent:assistant")
+    raise ArgumentError, "a draft is one of: #{Draft::KINDS.join(', ')}" unless Draft::KINDS.include?(kind)
+
+    body = body.to_s.gsub("\r\n", "\n").strip
+    raise ArgumentError, "the text is empty" if body.empty?
+    raise ArgumentError, "a text of over #{Resumes::MAX_CHARS} characters is more than a draft" if body.size > Resumes::MAX_CHARS
+
+    language = language.to_s.strip
+    raise ArgumentError, "name the language it is written in, in a few words" if language.empty? || language.size > MAX_LANGUAGE
+
+    resume, description = WrittenFrom.sources!(application, resume_version)
+    earlier = application.drafts.find_by(id: revises.to_s.strip) if revises.present?
+    raise ArgumentError, "it revises no draft of this application (#{revises})" if revises.present? && !earlier
+
+    drew_on, dropped = WrittenFrom.drawn_on(resume, lines_drawn_on)
+    tailoring, dropped_too = WrittenFrom.with_lines(resume, changes, "change")
+    subject = subject.to_s.strip.presence if kind == "outreach"
+    draft = application.drafts.create!(
+      kind: kind, language: language, subject: subject, body: body, written_subject: subject, written_body: body,
+      drew_on: (kind == "tailored_resume" ? [] : drew_on), tailoring: (kind == "tailored_resume" ? tailoring : []),
+      gaps: WrittenFrom.gaps(gaps), notes: note.to_s.strip.presence, dropped_lines: dropped + dropped_too,
+      resume: resume, resume_hash: resume.content_hash, role_description: description, description_hash: description.content_hash,
+      written_by: actor, reported_model: WrittenFrom.reported(reported_model), revises: earlier, run_id: "mcp:#{Authority.credential&.id}"
+    )
+    summary = saved_summary(draft)
+    AuditEvent.record!(actor: actor, action: "create", target: draft, reasoning: "Saved through MCP: #{summary}",
+                       changes_made: facts(draft).merge("revises_id" => earlier&.id).compact.transform_values { |value| [ nil, value ] })
+    [ draft, summary ]
+  end
+
+  def saved_summary(draft)
+    made = draft.tailored_resume? ? counted(draft.tailoring.size, "change") : "drawing on #{counted(draft.drew_on.size, 'line')} of the resume"
+    gaps = draft.gaps.empty? ? "no gaps" : "#{counted(draft.gaps.size, 'gap')} flagged"
+    dropped = WrittenFrom.dropped(draft.dropped_lines)
+    revised = "; it revises the #{draft.revises.label.downcase} of #{draft.revises.created_at.utc.to_date}" if draft.revises
+    "#{draft.label} in #{draft.language}: #{counted(draft.words, 'word')}, #{made}, #{gaps}#{dropped}#{revised}."
   end
 
   # The operator's edit of a draft's text; nil when it says the same. An approved draft returns to a draft.
@@ -160,12 +202,13 @@ module Drafts
   # What a draft's audit events say of it: its facts, never its text.
   def facts(draft)
     { "kind" => draft.kind, "status" => draft.status, "language" => draft.language, "words" => draft.words,
-      "content_hash" => draft.content_hash, "resume_hash" => draft.resume_hash, "description_hash" => draft.description_hash }
+      "content_hash" => draft.content_hash, "resume_hash" => draft.resume_hash, "description_hash" => draft.description_hash,
+      "written_by" => draft.written_by }
   end
 
   def changed(before, after) = after.filter_map { |key, value| [ key, [ before[key], value ] ] unless before[key] == value }.to_h
 
   def counted(count, what) = "#{count} #{what.pluralize(count)}"
 
-  private_class_method :record, :record_call, :facts, :changed, :counted
+  private_class_method :record, :record_call, :facts, :changed, :counted, :saved_summary
 end

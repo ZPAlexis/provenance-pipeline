@@ -93,7 +93,7 @@ Before 1.3 every agent write went through an audited service under a named actor
 | Review agent (planned) | `review:recommend` (write a recommendation on an open item) | Decide an item, or make the write it recommends |
 | Activity logger (Stage 2) | `activities:write`, `applications:read` | Change stage |
 | Draft agent | `drafts:write` (a new draft as it wrote it, and the LLM call that wrote it) | Edit or approve a draft, or send anything |
-| Assistant (the operator's own Claude client, through MCP) | only the scopes of the save tool it calls, a credential per call (`drafts:write` so far) | Edit or approve what it saved, or send anything |
+| Assistant (the operator's own Claude client, through MCP) | only the scopes of the save tool it calls, a credential per call: `drafts:write` (a cover letter, an outreach note or a tailored resume), `resume_reviews:write` | Edit, approve or delete what it saved, or send anything |
 | **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); editing or approving a draft; tracking a role; deciding a review item | **Human-only by design** |
 
 The last row is the point: the most consequential write is withheld from every agent. Read and enrich is safe to automate; drafting is safe-with-review; stage advancement and anything outbound is human-gated.
@@ -141,13 +141,22 @@ role_descriptions  posting_id, text, content_hash, read_via, url, run_id,
 resumes       search_profile_id, text, content_hash (one row per version;
               audited by size and hash, never the text)
 
-drafts        application_id, kind (cover_letter | outreach), status
-              (draft | approved), language, asked_language, guidance,
-              subject, body (as it stands), written_subject, written_body
-              (as the drafter wrote it), drew_on (jsonb: resume lines),
+drafts        application_id, kind (cover_letter | outreach |
+              tailored_resume), status (draft | approved), language,
+              asked_language, guidance, subject, body (as it stands),
+              written_subject, written_body (as written), drew_on (jsonb:
+              resume lines), tailoring (jsonb: a tailored resume's changes),
               gaps (jsonb), notes, dropped_lines, resume_id, resume_hash,
               role_description_id, description_hash, llm_call_id, run_id,
-              edited_at, approved_at (audited by size and hash, never the text)
+              written_by (the drafter, or the assistant through MCP),
+              reported_model, revises_id (the draft it polishes), edited_at,
+              approved_at (audited by size and hash, never the text)
+
+resume_reviews  application_id, language, strengths, gaps, suggestions
+              (jsonb, each point with the resume lines behind it), note,
+              dropped_lines, resume_id, resume_hash, role_description_id,
+              description_hash, written_by, reported_model (audited by its
+              counts and hashes, never the text)
 
 page_checks   company_id, run_id, purpose (resolution | verification), step,
               url, final_url, outcome, reason, read_via, ats_vendor, ats_board,
@@ -330,6 +339,7 @@ The drafter is the one agent with no free path: writing the draft is the model's
 - **stdout carries the protocol,** and nothing else writes there. Rails boots in the background, so the server answers a client's first request at once; times are UTC; an answer is cut at 20,000 characters, and says so.
 - **Tools:** `get_company_status` (a company by its name, domain, or a link on its site: its careers page and how it was found, its roles by answer with dismissed ones apart, its last check, its applications); `list_applications` (where each stands, what is written for it, its id); `get_application_materials` (what any writing about an application starts from: the role, its description, the resume numbered by line exactly as the in-app drafter numbers it, the profile, the notes, what is already written, the record's text fenced as data); `get_draft` (a draft in full, with what it rests on and whether its inputs changed since); `get_writing_rules`.
 - **Prompts,** picked in the client with an application (completed as it is typed): `cover_letter`, `outreach_note`, `resume_review`, `tailored_resume`. Each carries the writing rules and the application's materials, so the client writes at once, and keeps the rules through every change asked of it.
+- **Save tools,** used only when the operator says to save: `save_draft` (a cover letter, an outreach note, or a tailored resume with its changes) and `save_resume_review`. Each gives back the resume version the client read, so the lines it cites by number are read against the lines it saw (a version no longer on record is refused); a number the resume doesn't have is dropped and counted. A polished version is a new draft that names the one it revises. What is saved shows on the application's page, as the operator's to edit, approve, copy or delete; the record says the client wrote it and the model it reports.
 - **The writing rules live in one file,** [`writing_rules.md`](workers/verifier/src/verifier/writing_rules.md): the worker's drafter builds its prompt from it, and the server's prompts hand it to the client. Only what the resume shows, figures as it states them, an employer as it describes it, gaps listed rather than claimed.
 - **Layout:** `mcp/server.rb` (the entry point), `mcp/provenance_mcp.rb` (the shared parts and rules), one file per tool in `mcp/tools/` (a `ReadTool` or `SaveTool` subclass with an `answer`), specs in `spec/mcp/` (each tool as the server calls it, and the whole server over stdio). `mcp/run.sh` starts it from a client on Windows, through WSL.
 

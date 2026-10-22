@@ -1,5 +1,6 @@
-<%# An application's drafts (2c): written by the drafter from what is on record, then yours to edit,
-    approve, copy, or delete. Nothing is sent from here. %>
+<%# An application's drafts: cover letters and outreach notes written by the in-app drafter (2c) or saved by
+    your own Claude client through MCP, and tailored resumes (2d); yours to edit, approve, copy, or delete.
+    Nothing is sent from here. %>
 <% needs = Drafts.missing(application) %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
 <% description = application.posting.role_descriptions.newest_first.first %>
@@ -14,7 +15,7 @@
     <% estimate = Drafts.estimate %>
     <%= form_with url: application_drafts_path(application), class: "add-form",
                   data: { turbo_confirm: "Opus 5.5 writes it from your resume and the role's description: about #{cost(estimate)}. Write it?" } do |form| %>
-      <label>What <%= select_tag :kind, options_for_select(Draft::LABELS.invert), id: "draft_kind" %></label>
+      <label>What <%= select_tag :kind, options_for_select(Draft::LABELS.slice(*Draft::IN_APP).invert), id: "draft_kind" %></label>
       <label>Language <%= text_field_tag :language, nil, list: "draft-languages", placeholder: "As its description", maxlength: Drafts::MAX_LANGUAGE,
                                                          autocomplete: "off" %></label>
       <datalist id="draft-languages"><% %w[English Portuguese Spanish].each do |language| %><option value="<%= language %>"></option><% end %></datalist>
@@ -24,6 +25,7 @@
       <p class="muted small">
         Opus 5.5 writes it from your resume (saved <%= resume.created_at.to_date %>), the role's description (read <%= description.first_read_at.to_date %>),
         your profile and your notes above, claiming only what your resume shows: about <%= cost(estimate) %>. You edit it and approve it; nothing is ever sent.
+        Or write it, and a tailored resume, in your own Claude client through MCP, on your subscription: it saves them here.
       </p>
     <% end %>
   <% end %>
@@ -46,7 +48,7 @@
       <% if draft.kind == "outreach" %>
         <label>Subject <%= form.text_field :subject, value: draft.subject, autocomplete: "off", data: { copy_target: "subject" } %></label>
       <% end %>
-      <label><%= draft.kind == "outreach" ? "Note" : "Letter" %>
+      <label><%= { "outreach" => "Note", "tailored_resume" => "Resume" }.fetch(draft.kind, "Letter") %>
         <%# Tall enough for the whole text at desktop width (about 90 characters a line), and no taller than a screen. %>
         <%= form.text_area :body, value: draft.body, rows: draft.body.lines.sum { |line| [ (line.length / 90.0).ceil, 1 ].max }.clamp(8, 30),
                                   data: { copy_target: "body" } %></label>
@@ -59,7 +61,7 @@
       <% if draft.kind == "outreach" %>
         <button type="button" class="btn small" data-action="copy#copy" data-copy-field-param="subject">Copy subject</button>
       <% end %>
-      <button type="button" class="btn small" data-action="copy#copy" data-copy-field-param="body">Copy <%= draft.kind == "outreach" ? "note" : "letter" %></button>
+      <button type="button" class="btn small" data-action="copy#copy" data-copy-field-param="body">Copy <%= { "outreach" => "note", "tailored_resume" => "resume" }.fetch(draft.kind, "letter") %></button>
       <%= button_to "Delete", application_draft_path(application, draft), method: :delete, class: "btn small",
                               data: { turbo_confirm: "Delete this #{draft.label.downcase}? Its record keeps its size and hash, not its text." } %>
     </div>
@@ -70,7 +72,7 @@
 
     <% if draft.gaps.any? %>
       <div class="gaps">
-        <p class="small"><strong>What the role asks for that your resume doesn't show</strong> (left out of the draft)</p>
+        <p class="small"><strong>What the role asks for that your resume doesn't show</strong> (left out of <%= draft.tailored_resume? ? "it" : "the draft" %>)</p>
         <ul class="small">
           <% draft.gaps.each do |gap| %>
             <li><strong><%= gap["asks"] %></strong>: <%= gap["note"] %></li>
@@ -84,21 +86,40 @@
       <p class="small"><span class="muted">Its note:</span> <%= draft.notes %></p>
     <% end %>
     <% if draft.dropped_lines.positive? %>
-      <p class="small warn">It named <%= pluralize(draft.dropped_lines, "line") %> your resume doesn't have; they were left out of what it drew on.</p>
+      <p class="small warn">It named <%= pluralize(draft.dropped_lines, "line") %> your resume doesn't have; they were left out.</p>
     <% end %>
-    <details class="description">
-      <summary class="muted small">What it drew on: <%= pluralize(draft.drew_on.size, "line") %> of your resume</summary>
-      <ul class="small drew-on">
-        <% draft.drew_on.each do |point| %>
-          <li><span class="muted">[<%= point["line"] %>]</span> <%= point["text"] %> <span class="muted">· <%= point["used_for"] %></span></li>
-        <% end %>
-      </ul>
-    </details>
+    <% if draft.tailored_resume? %>
+      <details class="description">
+        <summary class="muted small">What it changed: <%= pluralize(draft.tailoring.size, "change") %></summary>
+        <ul class="small drew-on">
+          <% draft.tailoring.each do |change| %>
+            <% named = change["lines"].map { |line| line["line"] } %>
+            <li><%= change["change"] %> <span class="muted">· <%= named.any? ? "#{'line'.pluralize(named.size)} #{named.join(', ')}" : "no line named" %></span></li>
+          <% end %>
+        </ul>
+      </details>
+    <% else %>
+      <details class="description">
+        <summary class="muted small">What it drew on: <%= pluralize(draft.drew_on.size, "line") %> of your resume</summary>
+        <ul class="small drew-on">
+          <% draft.drew_on.each do |point| %>
+            <li><span class="muted">[<%= point["line"] %>]</span> <%= point["text"] %> <span class="muted">· <%= point["used_for"] %></span></li>
+          <% end %>
+        </ul>
+      </details>
+    <% end %>
 
     <% written_by = AuditEvent.find_by(target: draft, action: "create") %>
     <% call = draft.llm_call %>
+    <% if draft.revises %>
+      <p class="muted small">A revision of the <%= link_to "#{draft.revises.label.downcase} of #{draft.revises.created_at.to_date}", "##{dom_id(draft.revises)}" %>.</p>
+    <% end %>
     <p class="muted small">
-      Written by the drafter<%= " with #{call.model}#{" at #{call.settings.dig('output_config', 'effort')} effort" if call.settings.dig('output_config', 'effort')} for #{cost(call.cost_usd)}" if call %>,
+      <% if draft.written_by == "agent:assistant" %>
+        Written by your Claude client and saved through MCP<%= " (it reports #{draft.reported_model})" if draft.reported_model %>, on your subscription,
+      <% else %>
+        Written by the drafter<%= " with #{call.model}#{" at #{call.settings.dig('output_config', 'effort')} effort" if call.settings.dig('output_config', 'effort')} for #{cost(call.cost_usd)}" if call %>,
+      <% end %>
       from your resume <%= draft.resume ? "saved #{draft.resume.created_at.to_date}" : "(since deleted)" %>
       and the role's description <%= draft.role_description ? "read #{draft.role_description.first_read_at.to_date}" : "(no longer on record)" %>
       <% if written_by&.credential %> · <%= link_to "its credential", agent_credential_path(written_by.credential) %><% end %>
