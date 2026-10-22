@@ -89,7 +89,8 @@ module Authority
       ]
     },
     "drafts:write" => {
-      about: "Write a new draft for the operator to edit and approve, and record the LLM call that wrote it. Never edit, "              "approve, or send one.",
+      about: "Write a new draft for the operator to edit and approve, and record the LLM call that wrote it. Never edit, " \
+             "approve, or send one.",
       rules: [
         Rule.new(model: "Draft", actions: %i[create], only_if: AS_WRITTEN),
         Rule.new(model: "LlmCall", actions: %i[create], only_if: ->(call) { call.purpose == "draft" })
@@ -113,7 +114,11 @@ module Authority
                                  "on record is still listed.", scopes: %w[companies:enrich postings:verify evidence:write] },
     "agent:suggester" => { about: "Proposes the roles on watched pages that fit the search profile.", scopes: %w[postings:suggest] },
     "agent:clay_importer" => { about: "Imports Clay CSV exports, the seed data.", scopes: %w[companies:import postings:import] },
-    "agent:drafter" => { about: "Drafts cover letters and outreach notes from the resume, the role's description and the "                                 "profile, for the operator to edit and approve. Sends nothing.", scopes: %w[drafts:write] }
+    "agent:drafter" => { about: "Drafts cover letters and outreach notes from the resume, the role's description and the " \
+                                "profile, for the operator to edit and approve. Sends nothing.", scopes: %w[drafts:write] },
+    "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server, one credential " \
+                                  "per save holding only that tool's scopes. Edits, approves, and sends nothing.",
+                           scopes: %w[drafts:write] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.

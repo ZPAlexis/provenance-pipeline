@@ -61,7 +61,8 @@ RSpec.describe Verifier::Capture do
       )
       expect(placed.posting.company).to have_attributes(name: "Acme", careers_page_url: "https://job-boards.greenhouse.io/acme")
       expect(AuditEvent.find_by!(target: placed.posting)).to have_attributes(
-        actor: "human:operator", reasoning: "Added by URL: https://job-boards.greenhouse.io/acme/jobs/4012345 "                                             "(found at https://www.linkedin.com/jobs/view/4099887766)."
+        actor: "human:operator", reasoning: "Added by URL: https://job-boards.greenhouse.io/acme/jobs/4012345 " \
+                                            "(found at https://www.linkedin.com/jobs/view/4099887766)."
       )
     end
 
