@@ -22,6 +22,8 @@ draft    writes a cover letter or an outreach note from what is on record (the
          resume, the role's description, the profile): one DraftResult per
          target, one LLM call each, with Opus 5.5 unless --model names another.
          Nothing is fetched, and nothing is ever sent.
+review   reviews the resume against an application's role, from the same record:
+         one ReviewResult per target, one LLM call each, with the draft's model.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -63,6 +65,8 @@ from verifier.contract import (
     RelateTarget,
     ResolutionResult,
     ResolveTarget,
+    ReviewResult,
+    ReviewTarget,
     SuggestionResult,
     SuggestTarget,
     Target,
@@ -94,6 +98,7 @@ Result = (
     | RelatedResult
     | DescriptionResult
     | DraftResult
+    | ReviewResult
 )
 
 
@@ -221,6 +226,15 @@ def run_draft(targets: list[DraftTarget], out_path: Path, drafter, log=sys.stder
     return _run(targets, out_path, lambda target: draft(target, drafter), failed, log)
 
 
+def run_review(targets: list[ReviewTarget], out_path: Path, reviewer, log=sys.stderr) -> RunSummary:
+    from verifier.review import review
+
+    def failed(target: ReviewTarget, reason: str) -> ReviewResult:
+        return ReviewResult(target_id=target.id, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: review(target, reviewer), failed, log)
+
+
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
     summary = RunSummary()
     outage_streak = 0
@@ -255,7 +269,8 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 
 def _pages(result: Result) -> list[PageResult]:
     if isinstance(
-        result, MatchResult | BoardResult | SuggestionResult | RelatedResult | DescriptionResult | DraftResult
+        result,
+        MatchResult | BoardResult | SuggestionResult | RelatedResult | DescriptionResult | DraftResult | ReviewResult,
     ):
         return []
     return result.checks if isinstance(result, ResolutionResult | VerificationResult) else [result]
@@ -265,7 +280,7 @@ def _usages(result: Result) -> list:
     usages = [page.llm for page in _pages(result) if page.llm]
     extra = (
         result.llm
-        if isinstance(result, MatchResult | RelatedResult | DraftResult)
+        if isinstance(result, MatchResult | RelatedResult | DraftResult | ReviewResult)
         else getattr(result, "match_llm", None)
     )
     return usages + [extra] if extra else usages
@@ -274,7 +289,9 @@ def _usages(result: Result) -> list:
 def _reasons(result: Result) -> list[str | None]:
     own = (
         [result.reason]
-        if isinstance(result, MatchResult | VerificationResult | RelatedResult | DescriptionResult | DraftResult)
+        if isinstance(
+            result, MatchResult | VerificationResult | RelatedResult | DescriptionResult | DraftResult | ReviewResult
+        )
         else []
     )
     return [page.reason for page in _pages(result)] + own
@@ -295,6 +312,11 @@ def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, resu
         words = len((result.body or "").split())
         drawn = f"{len(result.drew_on)} resume lines, {len(result.gaps)} gaps"
         return f"{target.label or target.id}: {result.draft_kind} in {result.language}, {words} words, {drawn} {timing}"
+    if isinstance(result, ReviewResult):
+        if result.outcome != "ok":
+            return f"{target.label or target.id}: error, {result.reason} {timing}"
+        said = f"{len(result.strengths)} strengths, {len(result.gaps)} gaps, {len(result.suggestions)} suggestions"
+        return f"{target.label or target.id}: review in {result.language}, {said} {timing}"
     if isinstance(result, SuggestionResult):
         if result.outcome != "ok":
             return f"{target.label or target.id}: {result.outcome}, {result.reason} {timing}"
@@ -330,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     common.add_argument("--targets", type=Path, required=True, help='JSON file: {"targets": [...]}')
     common.add_argument("--out", type=Path, required=True, help="JSONL file to append results to")
     common.add_argument(
-        "--model", choices=sorted(MODEL_SETTINGS), help=f"default {DEFAULT_MODEL}; {DRAFT_MODEL} for draft"
+        "--model", choices=sorted(MODEL_SETTINGS), help=f"default {DEFAULT_MODEL}; {DRAFT_MODEL} for draft and review"
     )
     common.add_argument("--delay", type=float, default=DOMAIN_DELAY_SECONDS, help="seconds between requests to a host")
 
@@ -350,8 +372,9 @@ def main(argv: list[str] | None = None) -> int:
         "describe", parents=[common], help="read roles' descriptions from their own pages, never by the LLM"
     )
     commands.add_parser("draft", parents=[common], help="write cover letters and outreach notes; never sends them")
+    commands.add_parser("review", parents=[common], help="review the resume against an application's role")
     args = parser.parse_args(argv)
-    llm_model = args.model or (DRAFT_MODEL if args.command == "draft" else DEFAULT_MODEL)
+    llm_model = args.model or (DRAFT_MODEL if args.command in ("draft", "review") else DEFAULT_MODEL)
 
     model = {
         "resolve": ResolveTarget,
@@ -363,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
         "related": RelateTarget,
         "describe": DescribeTarget,
         "draft": DraftTarget,
+        "review": ReviewTarget,
     }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
@@ -385,6 +409,14 @@ def main(argv: list[str] | None = None) -> int:
 
         summary = run_draft(targets, args.out, LlmDrafter(model=llm_model))
         print(f"\n{summary.targets}/{len(targets)} drafts, est. ${summary.cost_usd:.4f}", file=sys.stderr)
+        return _exit_code(summary)
+
+    if args.command == "review":
+        # Nothing is fetched: one LLM call per review, from what Rails sent.
+        from verifier.review import LlmReviewer
+
+        summary = run_review(targets, args.out, LlmReviewer(model=llm_model))
+        print(f"\n{summary.targets}/{len(targets)} reviews, est. ${summary.cost_usd:.4f}", file=sys.stderr)
         return _exit_code(summary)
 
     from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher, LlmTitleProposer

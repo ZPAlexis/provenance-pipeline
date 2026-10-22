@@ -52,7 +52,7 @@ class Listing(BaseModel):
 class LlmUsage(BaseModel):
     model: str  # the model the API reports having served
     settings: dict = Field(default_factory=dict)  # request settings, e.g. effort
-    purpose: Literal["extract", "resolve", "match", "relate", "draft"] = "extract"
+    purpose: Literal["extract", "resolve", "match", "relate", "draft", "review"] = "extract"
     # A hash over the system prompt, output schema, and limits that produced this call.
     prompt_version: str = ""
     input_tokens: int = 0
@@ -453,6 +453,60 @@ class DraftResult(BaseModel):
     drew_on: list[ResumeLine] = Field(default_factory=list)
     gaps: list[Gap] = Field(default_factory=list)
     notes: str | None = None  # the drafter's note to the operator
+    dropped_lines: int = 0  # line numbers it named that the resume doesn't have
+    llm: LlmUsage | None = None
+    duration_ms: int = 0
+
+
+class ReviewTarget(BaseModel):
+    """One resume review to write (Stage 2d): an application's role, and what is on record for it."""
+
+    id: str  # the application's
+    label: str | None = None  # for progress output only
+    role_title: str
+    company: str
+    location: str | None = None
+    description: str
+    resume: str
+    titles: list[str] = Field(default_factory=list)
+    places: list[str] = Field(default_factory=list)
+    work_modes: list[str] = Field(default_factory=list)
+    notes: str | None = None
+    language: str = "English"  # the language to write the review in
+
+
+class LineText(BaseModel):
+    line: int  # its number among the resume's non-blank lines, from 1
+    text: str  # the line itself, as the resume has it
+
+
+class ReviewPoint(BaseModel):
+    point: str  # what the role asks that the resume shows
+    lines: list[LineText] = Field(default_factory=list)
+
+
+class ReviewSuggestion(BaseModel):
+    change: str  # a change to the resume for this role
+    lines: list[LineText] = Field(default_factory=list)
+
+
+class ReviewResult(BaseModel):
+    """A review of the resume against an application's role, for the operator to read: never sent, never claiming.
+
+    ok     written: strengths with the resume lines behind them, gaps, suggestions naming the lines they touch, a note
+    error  the call failed or its answer was unusable: `reason` says which
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["review"] = "review"
+    target_id: str
+    outcome: Literal["ok", "error"] = "ok"
+    reason: str | None = None
+    language: str | None = None
+    strengths: list[ReviewPoint] = Field(default_factory=list)
+    gaps: list[Gap] = Field(default_factory=list)
+    suggestions: list[ReviewSuggestion] = Field(default_factory=list)
+    note: str | None = None
     dropped_lines: int = 0  # line numbers it named that the resume doesn't have
     llm: LlmUsage | None = None
     duration_ms: int = 0

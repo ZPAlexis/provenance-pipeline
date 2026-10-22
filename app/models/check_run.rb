@@ -1,13 +1,14 @@
 # A check the operator asked for from the pages, run in the background (CheckNowJob):
-# one role, one company, everything (1.4), a role's description read (2b), or a
-# draft written for its application (2c). The page polls it until it is done.
+# one role, one company, everything (1.4), a role's description read (2b), a
+# draft written for its application (2c), or a resume review written for it (2d).
+# The page polls it until it is done.
 # Evidence and changes are recorded as for any check, under run_id; this row is the
 # request and its outcome.
 class CheckRun < ApplicationRecord
   belongs_to :company, optional: true # none for everything
   belongs_to :posting, optional: true
 
-  KINDS = %w[role company all describe draft].freeze
+  KINDS = %w[role company all describe draft review].freeze
   STATUSES = %w[queued running done failed].freeze
   ACTIVE = %w[queued running].freeze
   # Longer than any check takes (a ten-page list read by the LLM, or a 2,000-role
@@ -19,7 +20,7 @@ class CheckRun < ApplicationRecord
   validates :kind, inclusion: { in: KINDS }
   validates :status, inclusion: { in: STATUSES }
   validates :requested_by, presence: true
-  validates :posting, presence: true, if: -> { kind.in?(%w[role describe draft]) }
+  validates :posting, presence: true, if: -> { kind.in?(%w[role describe draft review]) }
   validates :company, presence: true, unless: -> { kind == "all" }
 
   scope :active, -> { where(status: ACTIVE) }
@@ -70,6 +71,16 @@ class CheckRun < ApplicationRecord
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
+  # A resume review for `application` (2d), or the one already being written: one at a time per application,
+  # with what a review costs on the record. `request` holds the language asked.
+  def self.start_review!(application, language: nil, requested_by: AuditEvent::OPERATOR)
+    abandon_stale!
+    where(kind: "review", posting: application.posting).active.first || create!(
+      kind: "review", company: application.company, posting: application.posting, requested_by: requested_by,
+      ceiling_usd: ResumeReviews.estimate, request: { "language" => language }
+    ).tap { |run| CheckNowJob.perform_later(run) }
+  end
+
   # Everything checked at once, or the run already under way: one at a time.
   def self.start_all!(requested_by: AuditEvent::OPERATOR)
     abandon_stale!
@@ -93,6 +104,7 @@ class CheckRun < ApplicationRecord
     when "role" then "#{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "describe" then "the description of #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "draft" then "#{Draft::A_LABEL.fetch(request['kind'])} for #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
+    when "review" then "a resume review for #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "all" then "everything"
     else company.name
     end

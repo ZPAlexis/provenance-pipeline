@@ -1,15 +1,32 @@
-<%# An application's resume reviews (2d): your resume weighed against the role, saved by your own Claude client
-    through MCP. Advice for you: nothing in them is sent or claimed. %>
+<%# An application's resume reviews (2d): your resume weighed against the role, written in the app by the drafter
+    (on the API) or saved by your own Claude client through MCP (on your subscription). Advice for you: nothing in
+    them is sent or claimed. %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
 <% description = application.posting.role_descriptions.newest_first.first %>
 <% lines = ->(cited) { "#{"line".pluralize(cited.size)} #{cited.map { |line| line["line"] }.join(", ")}" } %>
 <h2 id="reviews">Resume reviews</h2>
-<% if reviews.empty? %>
-  <p class="muted small">
-    None yet. In Claude Desktop, pick the Resume review prompt for this application (or ask for one): it weighs your resume
-    against the role, and saves its review here when you tell it to.
-  </p>
-<% end %>
+<% needs = Drafts.missing(application) %>
+<section class="check-now">
+  <% if needs.any? %>
+    <p class="muted small">Reviewing needs <%= needs.to_sentence %> first.</p>
+  <% elsif !run&.active? %>
+    <% estimate = ResumeReviews.estimate %>
+    <%= form_with url: application_resume_reviews_path(application), class: "add-form",
+                  data: { turbo_confirm: "Opus 5.5 reviews your resume against the role: about #{cost(estimate)}. Review it?" } do |form| %>
+      <label>Language <%= text_field_tag :language, nil, id: "review_language", list: "review-languages", placeholder: "English",
+                                                         maxlength: Drafts::MAX_LANGUAGE, autocomplete: "off" %></label>
+      <datalist id="review-languages"><% %w[English Portuguese Spanish].each do |language| %><option value="<%= language %>"></option><% end %></datalist>
+      <%= form.submit "Review my resume", class: "btn small" %>
+      <p class="muted small">
+        Opus 5.5 weighs your resume against the role's description: strengths with the lines behind them, gaps, suggestions;
+        about <%= cost(estimate) %>. Or ask your own Claude client for one through MCP (the Resume review prompt), on your
+        subscription: it saves it here when you tell it to.
+      </p>
+    <% end %>
+  <% end %>
+  <%# The latest run, while it writes or when it wrote nothing (why not); a review it wrote shows below. %>
+  <%= render "check_runs/run", run: run, poll: false if run && (run.active? || run.answer != "reviewed") %>
+</section>
 <% reviews.each do |review| %>
   <section class="draft" id="<%= dom_id(review) %>">
     <div class="draft-head">
@@ -44,8 +61,10 @@
       <p class="small warn">It named <%= pluralize(review.dropped_lines, "line") %> your resume doesn't have; they were left out.</p>
     <% end %>
     <% written_by = AuditEvent.find_by(target: review, action: "create") %>
+    <% call = review.llm_call %>
     <p class="muted small">
-      Written by <%= review.writer %><%= " (it reports #{review.reported_model})" if review.reported_model %>,
+      Written by <%= review.writer %><%= " (it reports #{review.reported_model})" if review.reported_model %><%=
+        " with #{call.model}#{" at #{call.settings.dig('output_config', 'effort')} effort" if call.settings.dig('output_config', 'effort')} for #{cost(call.cost_usd)}" if call %>,
       from your resume <%= review.resume ? "saved #{review.resume.created_at.to_date}" : "(since deleted)" %>
       and the role's description <%= review.role_description ? "read #{review.role_description.first_read_at.to_date}" : "(no longer on record)" %>
       <% if written_by&.credential %> · <%= link_to "its credential", agent_credential_path(written_by.credential) %><% end %>

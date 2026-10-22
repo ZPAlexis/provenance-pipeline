@@ -53,6 +53,19 @@ RSpec.describe CheckNowJob do
     expect(described.reload).to have_attributes(status: "done", answer: "read", summary: /480 words/, cost_usd: 0)
   end
 
+  it "writes a resume review for a review run, in the language asked, and keeps what it cost" do
+    application = create(:application, posting: create(:posting, company: company))
+    asked = create(:check_run, kind: "review", company: company, posting: application.posting, request: { "language" => "Portuguese" })
+    written = ResumeReviews::Written.new(application: application, review: ResumeReview.new, summary: "Resume review in Portuguese: 3 strengths.",
+                                         cost_usd: 0.056, run_id: "20261023T120000Z-review")
+    allow(ResumeReviews).to receive(:write!).and_return(written)
+
+    described_class.perform_now(asked)
+
+    expect(ResumeReviews).to have_received(:write!).with(application, language: "Portuguese", issued_by: "human:operator")
+    expect(asked.reload).to have_attributes(status: "done", answer: "reviewed", summary: /3 strengths/, cost_usd: 0.056)
+  end
+
   it "writes a draft for a draft run, as it was asked, and keeps what it cost" do
     application = create(:application, posting: create(:posting, company: company))
     asked = create(:check_run, kind: "draft", company: company, posting: application.posting,

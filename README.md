@@ -92,7 +92,7 @@ Before 1.3 every agent write went through an audited service under a named actor
 | Review queue (a system grant) | `review:keep` (raise, restate, and close what resolved) | Decide an item |
 | Review agent (planned) | `review:recommend` (write a recommendation on an open item) | Decide an item, or make the write it recommends |
 | Activity logger (Stage 2) | `activities:write`, `applications:read` | Change stage |
-| Draft agent | `drafts:write` (a new draft as it wrote it, and the LLM call that wrote it) | Edit or approve a draft, or send anything |
+| Draft agent | `drafts:write` (a new draft as it wrote it, and the LLM call that wrote it), `resume_reviews:write` (a review of the resume against a role, and its call); each run holds only the one it needs | Edit or approve a draft, delete a review, or send anything |
 | Assistant (the operator's own Claude client, through MCP) | only the scopes of the save tool it calls, a credential per call: `drafts:write` (a cover letter, an outreach note or a tailored resume), `resume_reviews:write` | Edit, approve or delete what it saved, or send anything |
 | **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); editing or approving a draft; tracking a role; deciding a review item | **Human-only by design** |
 
@@ -328,7 +328,9 @@ An application's page writes a cover letter or a short outreach note for it (the
 - **Never sent.** The operator edits it, approves it (an edit after that returns it to a draft), and copies it out; only the operator can edit or approve one.
 - **Written in the background**, one at a time per application, with what a draft costs on the record shown first (about 6 cents each so far). The run's targets file holds the whole resume, so it is removed when the run ends.
 
-The drafter is the one agent with no free path: writing the draft is the model's work. Without an API key a draft run stops and says so; everything else keeps working.
+**A resume review** weighs the resume against the role, for the operator to decide what to stress and what to add: strengths with the resume lines behind them, gaps, suggestions naming the lines they touch, and a note. The drafter writes one from the application's page (the worker's `review`, the same model and record, about 6 cents, in English unless another language is asked), under a credential holding `resume_reviews:write` alone; or the operator's own Claude client writes one through MCP and saves it back. Its rules are the shared ones. Advice only: it writes nothing to send and claims nothing.
+
+The drafter is the one agent with no free path: writing the draft is the model's work. Without an API key a draft or review run stops and says so; everything else keeps working, and the MCP path does the same writing on the operator's own subscription.
 
 ### The MCP server
 

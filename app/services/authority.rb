@@ -97,8 +97,12 @@ module Authority
       ]
     },
     "resume_reviews:write" => {
-      about: "Save a review of the resume against an application's role, for the operator to read. Never edit or delete one.",
-      rules: [ Rule.new(model: "ResumeReview", actions: %i[create]) ]
+      about: "Save a review of the resume against an application's role, for the operator to read, and the LLM call that " \
+             "wrote it. Never edit or delete one.",
+      rules: [
+        Rule.new(model: "ResumeReview", actions: %i[create]),
+        Rule.new(model: "LlmCall", actions: %i[create], only_if: ->(call) { call.purpose == "review" })
+      ]
     },
     "review:keep" => {
       about: "Review items kept in step with the record: raised, restated, and closed when what was seen resolves. " \
@@ -118,8 +122,9 @@ module Authority
                                  "on record is still listed.", scopes: %w[companies:enrich postings:verify evidence:write] },
     "agent:suggester" => { about: "Proposes the roles on watched pages that fit the search profile.", scopes: %w[postings:suggest] },
     "agent:clay_importer" => { about: "Imports Clay CSV exports, the seed data.", scopes: %w[companies:import postings:import] },
-    "agent:drafter" => { about: "Drafts cover letters and outreach notes from the resume, the role's description and the " \
-                                "profile, for the operator to edit and approve. Sends nothing.", scopes: %w[drafts:write] },
+    "agent:drafter" => { about: "Drafts cover letters and outreach notes, and reviews the resume against a role, from the " \
+                                "resume, the role's description and the profile, for the operator to edit, approve or read. " \
+                                "Sends nothing.", scopes: %w[drafts:write resume_reviews:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server, one credential " \
                                   "per save holding only that tool's scopes. Edits, approves, and sends nothing.",
                            scopes: %w[drafts:write resume_reviews:write] }

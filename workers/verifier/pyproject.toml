@@ -42,3 +42,4 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 # The system prompts are prose sent to the model; wrapping them would change the prompts.
 "src/verifier/extract.py" = ["E501"]
 "src/verifier/draft.py" = ["E501"]
+"src/verifier/review.py" = ["E501"]
