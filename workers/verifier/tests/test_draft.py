@@ -17,6 +17,7 @@ from verifier.draft import (
     build_draft_prompt,
     draft,
     resume_lines,
+    writing_rules,
 )
 from verifier.errors import ExtractionFailed
 
@@ -149,6 +150,17 @@ def test_the_rules_put_claiming_only_what_the_resume_shows_above_the_rest():
     # The first smoke draft (2026-10-19) added up dates into "about seven years", and read employers by their names.
     assert "never add up years of experience" in DRAFT_SYSTEM_PROMPT
     assert "never what its name suggests" in DRAFT_SYSTEM_PROMPT
+
+
+# Its rules live in writing_rules.md, shared with the MCP server's prompts. Moving them there changed nothing
+# the model sees: the version is the one the smoke drafts of 2026-10-19 ran on. A change to the rules changes it.
+def test_the_prompt_is_built_from_the_shared_rules_and_kept_its_version():
+    rules = writing_rules()
+
+    assert set(rules) >= {"grounding", "style", "cover_letter", "outreach_note", "resume_review", "tailored_resume"}
+    assert rules["grounding"] in DRAFT_SYSTEM_PROMPT
+    assert f"- {rules['cover_letter']} subject is null." in DRAFT_SYSTEM_PROMPT
+    assert DRAFT_PROMPT_VERSION == "c24d8ab8151c"
 
 
 class FakeClient:

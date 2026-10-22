@@ -7,8 +7,9 @@ module Searchable
 
   module_function
 
-  # The words typed, folded as the columns are; none for a blank search.
-  def words(text) = text.to_s.downcase.tr(FROM, TO).split.uniq.first(8)
+  # The words typed, folded as the columns are; none for a blank search. A word of punctuation alone ("/", "-")
+  # is no word: "Acme / Sales Engineer" finds what "Acme Sales Engineer" does.
+  def words(text) = text.to_s.downcase.tr(FROM, TO).split.grep(/[[:alnum:]]/).uniq.first(8)
 
   def folded(column) = "translate(lower(coalesce(#{column}, '')), '#{FROM}', '#{TO}')"
 

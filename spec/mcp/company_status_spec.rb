@@ -162,6 +162,11 @@ RSpec.describe ProvenanceMcp do
       response = client.call_tool(name: "get_company_status", arguments: { company: "no-such-company.example" })
       expect(response.dig("result", "isError")).to be(true)
       expect(response.dig("result", "content", 0, "text")).to eq('No company matches "no-such-company.example".')
+
+      # The prompts a client offers to pick, and the completion of their application as it is typed (none on record here).
+      expect(client.prompts.map { |prompt| prompt["name"] }).to eq(%w[cover_letter outreach_note resume_review tailored_resume])
+      expect(client.complete(ref: { type: "ref/prompt", name: "cover_letter" }, argument: { name: "application", value: "acme" }))
+        .to include("values" => [])
     ensure
       transport.close
     end
