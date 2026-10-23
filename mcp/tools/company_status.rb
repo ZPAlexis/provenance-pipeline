@@ -30,8 +30,9 @@ module ProvenanceMcp
           text = text.to_s.strip
           raise Refusal, "Name a company: its name, its domain, or a link on its site." if text.empty?
 
+          # Sorted here, not by the database: its collation differs between machines ("acme" before "Acme" on one, after on another).
           matches = Company.where("lower(name) = :name OR lower(domain) IN (:domains)", name: text.downcase, domains: domains(text))
-                           .order(:name).to_a
+                           .to_a.sort_by { |found| [ found.name.downcase, found.name ] }
           return matches.sole if matches.one?
           raise Refusal, "Several companies match #{text.inspect}: #{matches.map(&:name).join(', ')}. Which one?" if matches.any?
 

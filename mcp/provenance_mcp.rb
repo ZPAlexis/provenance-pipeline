@@ -96,7 +96,7 @@ module ProvenanceMcp
       typed = params.dig(:argument, :value).to_s
       found = typed.strip.empty? ? Application.open : Searchable.narrow(Application.joins(posting: :company), typed,
                                                                          %w[postings.role_title companies.name])
-      found.includes(:company, :posting).order(:stage_changed_on).limit(100).map { |application| Writing.label(application) }
+      found.includes(:company, :posting).order(:stage_changed_on, :created_at).limit(100).map { |application| Writing.label(application) }
     end
     { completion: { values: labels.uniq, hasMore: labels.size == 100 } }
   end
