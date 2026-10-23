@@ -20,32 +20,11 @@ module ProvenanceMcp
 
       class << self
         def answer(company:)
-          found = find(company)
+          found = Lookup.company(company)
           ProvenanceMcp.text(heading(found), "Careers page: #{page(found)}", roles(found), checked(found), applications(found))
         end
 
         private
-
-        def find(text)
-          text = text.to_s.strip
-          raise Refusal, "Name a company: its name, its domain, or a link on its site." if text.empty?
-
-          # Sorted here, not by the database: its collation differs between machines ("acme" before "Acme" on one, after on another).
-          matches = Company.where("lower(name) = :name OR lower(domain) IN (:domains)", name: text.downcase, domains: domains(text))
-                           .to_a.sort_by { |found| [ found.name.downcase, found.name ] }
-          return matches.sole if matches.one?
-          raise Refusal, "Several companies match #{text.inspect}: #{matches.map(&:name).join(', ')}. Which one?" if matches.any?
-
-          close = Company.matching(text).order(:name).limit(5).pluck(:name)
-          raise Refusal, "No company matches #{text.inspect}.#{" Close: #{close.join(', ')}." if close.any?}"
-        end
-
-        # The domains a name or a link could stand for: a link's host, and the hosts above it (careers.acme.com is acme.com).
-        def domains(text)
-          host = text.downcase.sub(%r{\A[a-z]+://}, "").split(%r{[/?#]}).first.to_s.delete_prefix("www.")
-          labels = host.split(".")
-          (0..[ labels.size - 2, 0 ].max).map { |from| labels[from..].join(".") }.uniq
-        end
 
         def heading(company)
           kind = { "recruiter" => "a recruiter (its roles are its clients')", "aggregator" => "an aggregator (other employers' roles: never watched)" }

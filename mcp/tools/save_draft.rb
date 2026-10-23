@@ -43,7 +43,7 @@ module ProvenanceMcp
       class << self
         def answer(application:, kind:, resume_version:, language:, body:, subject: nil, lines_drawn_on: [], changes: [], gaps: [],
                    note: nil, revises: nil, model: nil)
-          found = Writing.find_application(application)
+          found = Lookup.application(application)
           draft, summary = Drafts.save!(found, kind: kind == "outreach_note" ? "outreach" : kind, language: language, body: body,
                                                resume_version: resume_version, subject: subject, lines_drawn_on: lines_drawn_on,
                                                changes: changes, gaps: gaps, note: note, revises: revises, reported_model: model,

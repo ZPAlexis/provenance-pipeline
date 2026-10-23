@@ -36,7 +36,7 @@ module ProvenanceMcp
 
       class << self
         def answer(application:, resume_version:, language:, strengths: [], gaps: [], suggestions: [], note: nil, model: nil)
-          found = Writing.find_application(application)
+          found = Lookup.application(application)
           review, summary = ResumeReviews.save!(found, language: language, resume_version: resume_version, strengths: strengths, gaps: gaps,
                                                        suggestions: suggestions, note: note, reported_model: model, actor: ASSISTANT)
           ProvenanceMcp.text("Saved for #{Writing.label(found)}: #{summary}",

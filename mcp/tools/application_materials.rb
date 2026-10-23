@@ -15,7 +15,7 @@ module ProvenanceMcp
 
       class << self
         # A description and a resume run long: this tool's answer may be longer than most.
-        def answer(application:) = ProvenanceMcp.text(Writing.materials(Writing.find_application(application)), limit: 150_000)
+        def answer(application:) = ProvenanceMcp.text(Writing.materials(Lookup.application(application)), limit: 150_000)
       end
     end
   end

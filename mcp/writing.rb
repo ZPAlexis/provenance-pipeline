@@ -69,7 +69,7 @@ module ProvenanceMcp
     end
 
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out.
-    FENCES = %w[role_description resume profile notes review].freeze
+    FENCES = %w[role_description resume profile notes contacts review].freeze
 
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
     # the newest resume numbered by line, the profile, the notes, and what is already written for it.
@@ -92,6 +92,7 @@ module ProvenanceMcp
                             "Places they can work: #{profile.places.join(', ').presence || '(none)'}",
                             "Work modes: #{profile.work_modes.join(', ').presence || '(any)'}" ].join("\n")) if profile),
         (fence("notes", application.notes) if application.notes.present?),
+        contacts(application),
         written(application) ].compact.join("\n\n")
     end
 
@@ -114,6 +115,19 @@ module ProvenanceMcp
         (fence("review", review_text(review), written: review.created_at.utc.to_date, by: review.written_by) if review) ].compact.join("\n\n")
     end
 
+    # The people the operator deals with about it: its contacts, and how many more its company has.
+    def contacts(application)
+      linked = application.contacts.to_a
+      others = application.company.contacts.count - linked.size
+      more = " #{application.company.name} has #{others} more (list_contacts names them)." if others.positive?
+      return "Contacts: none linked to it.#{more}" if linked.empty?
+
+      lines = linked.map do |contact|
+        "- #{contact.label}, #{contact.kind_label.downcase}#{": #{contact.notes}" if contact.notes.present?} (contact id #{contact.id})"
+      end
+      [ fence("contacts", lines.join("\n")), more&.strip ].compact.join("\n")
+    end
+
     # A resume review as text: what a client reads back, to draft from it.
     def review_text(review)
       lines = ->(cited) { cited.map { |line| line["line"] }.join(", ").then { |numbers| numbers.empty? ? "" : " [lines #{numbers}]" } }
@@ -121,23 +135,6 @@ module ProvenanceMcp
         "Gaps:", *review.gaps.map { |gap| "- #{gap['asks']}: #{gap['note']}" },
         "Suggestions:", *review.suggestions.map { |suggestion| "- #{suggestion['change']}#{lines.call(suggestion['lines'])}" },
         ("Note: #{review.note}" if review.note) ].compact.join("\n")
-    end
-
-    # An application by its id, or by words from its role and company ("acme sales engineer").
-    def find_application(text)
-      text = text.to_s.strip
-      raise Refusal, "Name an application: its id, or its company and role." if text.empty?
-
-      found = Application.includes(:company, :posting).find_by(id: text) if text.match?(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
-      return found if found
-
-      matches = Searchable.narrow(Application.joins(posting: :company), text, %w[postings.role_title companies.name postings.location])
-                          .includes(:company, :posting).order(:stage_changed_on, :created_at).to_a
-      return matches.sole if matches.one?
-
-      listed = (matches.presence || Application.open.includes(:company, :posting).order(:stage_changed_on, :created_at).to_a).first(20).map { |found_one| "- #{label(found_one)}: #{found_one.id}" }
-      raise Refusal, "#{matches.any? ? "Several applications match #{text.inspect}" : "No application matches #{text.inspect}"}. " \
-                     "#{matches.any? ? 'They are' : 'The open ones'}:\n#{listed.join("\n").presence || '(none)'}"
     end
 
     def label(application) = "#{application.company.name} / #{application.posting.role_title}"

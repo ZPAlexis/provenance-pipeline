@@ -97,8 +97,9 @@ RSpec.describe "Contacts", type: :request do
     end
   end
 
-  it "is the operator's alone until the assistant gets its scope" do
-    expect { as_agent("agent:assistant") { Contacts.save!(company, fields, actor: "agent:assistant") } }
+  # The assistant writes contacts under contacts:write (2e step 2, spec/mcp/contacts_spec.rb); no other agent may.
+  it "is refused to any agent without contacts:write" do
+    expect { as_agent("agent:suggester") { Contacts.save!(company, fields, actor: "agent:suggester") } }
       .to raise_error(Authority::Denied, /may not create a contact/)
   end
 end

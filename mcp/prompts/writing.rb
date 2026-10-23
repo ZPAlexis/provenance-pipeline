@@ -16,7 +16,7 @@ module ProvenanceMcp
 
       # Unknown arguments a client sends are set aside.
       def compose(application:, language: nil, stress: nil, **)
-        found = ProvenanceMcp::Writing.find_application(application)
+        found = ProvenanceMcp::Lookup.application(application)
         [ ProvenanceMcp::Writing.instructions(kind, language: language, stress: stress),
           ProvenanceMcp::Writing.materials(found) ].join("\n\n---\n\n")
       end
