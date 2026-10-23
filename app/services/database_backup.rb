@@ -9,7 +9,11 @@
 # for a year) and, when a second folder is named, is copied there too: on
 # another disk, so losing the database's disk does not lose its backups.
 class DatabaseBackup
-  DIR = Pathname.new(Dir.home).join(".local/share/provenance-pipeline/backups")
+  # The test environment never writes beside the real dumps, nor to their mirror: a page driven against the test
+  # server (a browser probe) backs up into tmp/. On 2026-10-21 one such probe left a test dump among the real ones.
+  DIR = if Rails.env.test? then Rails.root.join("tmp/backups")
+  else Pathname.new(Dir.home).join(".local/share/provenance-pipeline/backups")
+  end
   # One line naming a folder for a copy of each new dump, on another disk. Kept
   # outside the repo, like the API key: it is one machine's layout. No file, no copy.
   MIRROR_FILE = Pathname.new(Dir.home).join(".config/provenance-pipeline/backup_mirror")
@@ -92,6 +96,6 @@ class DatabaseBackup
   end
 
   def self.mirror_dir
-    MIRROR_FILE.read.strip.presence if MIRROR_FILE.exist?
+    MIRROR_FILE.read.strip.presence if MIRROR_FILE.exist? && !Rails.env.test?
   end
 end

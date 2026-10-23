@@ -11,7 +11,7 @@ module ProvenanceMcp
       class << self
         def answer(closed: false)
           applications = (closed ? Application.all : Application.open).includes(:company, :posting, :drafts, :resume_reviews)
-                                                                      .order(:stage_changed_on)
+                                                                      .order(:stage_changed_on, :created_at)
           return ProvenanceMcp.text("No #{'open ' unless closed}application on record.") if applications.empty?
 
           ProvenanceMcp.text(applications.map { |application| line(application) })

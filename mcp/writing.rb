@@ -132,10 +132,10 @@ module ProvenanceMcp
       return found if found
 
       matches = Searchable.narrow(Application.joins(posting: :company), text, %w[postings.role_title companies.name postings.location])
-                          .includes(:company, :posting).order(:stage_changed_on).to_a
+                          .includes(:company, :posting).order(:stage_changed_on, :created_at).to_a
       return matches.sole if matches.one?
 
-      listed = (matches.presence || Application.open.includes(:company, :posting).to_a).first(20).map { |found_one| "- #{label(found_one)}: #{found_one.id}" }
+      listed = (matches.presence || Application.open.includes(:company, :posting).order(:stage_changed_on, :created_at).to_a).first(20).map { |found_one| "- #{label(found_one)}: #{found_one.id}" }
       raise Refusal, "#{matches.any? ? "Several applications match #{text.inspect}" : "No application matches #{text.inspect}"}. " \
                      "#{matches.any? ? 'They are' : 'The open ones'}:\n#{listed.join("\n").presence || '(none)'}"
     end
