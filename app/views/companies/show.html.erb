@@ -85,6 +85,8 @@
   <p class="empty">No role tracked here.</p>
 <% end %>
 
+<%= render "contacts", company: @company, contacts: @contacts %>
+
 <h2>Recent checks</h2>
 <% if @checks.any? %>
   <div class="table-wrap">

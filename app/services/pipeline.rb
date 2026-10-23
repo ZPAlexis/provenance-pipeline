@@ -40,10 +40,12 @@ module Pipeline
   end
 
   # Something that happened along the way, on the date it happened.
-  def log!(application, kind:, summary:, on: Date.current, actor: AuditEvent::OPERATOR)
+  # What happened, perhaps with one of the company's contacts, who is then linked to the application too (2e).
+  def log!(application, kind:, summary:, on: Date.current, contact: nil, actor: AuditEvent::OPERATOR, reasoning: "Logged by hand.")
     ApplicationRecord.transaction do
-      activity = application.activities.create!(kind: kind, summary: summary.to_s.strip, occurred_on: on, logged_by: actor)
-      AuditEvent.record_write!(activity, actor: actor, reasoning: "Logged by hand.")
+      activity = application.activities.create!(kind: kind, summary: summary.to_s.strip, occurred_on: on, logged_by: actor, contact: contact)
+      AuditEvent.record_write!(activity, actor: actor, reasoning: reasoning)
+      Contacts.link!(contact, application, actor: actor) if contact
       activity
     end
   end
@@ -58,9 +60,10 @@ module Pipeline
   end
 
   # An activity corrected: its kind, date, or summary. Returns nil when nothing changed.
-  def edit_activity!(activity, kind:, summary:, on:, actor: AuditEvent::OPERATOR)
+  def edit_activity!(activity, kind:, summary:, on:, contact: activity.contact, actor: AuditEvent::OPERATOR)
     ApplicationRecord.transaction do
-      activity.update!(kind: kind, summary: summary.to_s.strip, occurred_on: on)
+      activity.update!(kind: kind, summary: summary.to_s.strip, occurred_on: on, contact: contact)
+      Contacts.link!(contact, activity.application, actor: actor) if contact
       AuditEvent.record_write!(activity, actor: actor, reasoning: "Edited by hand.") && activity
     end
   end

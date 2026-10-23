@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_23_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_23_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -23,8 +23,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000001) do
     t.string "logged_by", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.uuid "contact_id"
     t.index ["application_id", "occurred_on"], name: "index_activities_on_application_id_and_occurred_on"
     t.index ["application_id"], name: "index_activities_on_application_id"
+    t.index ["contact_id"], name: "index_activities_on_contact_id"
   end
 
   create_table "agent_credentials", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -39,6 +41,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000001) do
     t.datetime "updated_at", null: false
     t.index ["actor", "created_at"], name: "index_agent_credentials_on_actor_and_created_at"
     t.index ["token_digest"], name: "index_agent_credentials_on_token_digest", unique: true
+  end
+
+  create_table "application_contacts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "application_id", null: false
+    t.uuid "contact_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["application_id", "contact_id"], name: "index_application_contacts_on_application_id_and_contact_id", unique: true
+    t.index ["application_id"], name: "index_application_contacts_on_application_id"
+    t.index ["contact_id"], name: "index_application_contacts_on_contact_id"
   end
 
   create_table "applications", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -125,6 +137,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000001) do
     t.index ["enrichment"], name: "index_companies_on_enrichment", using: :gin
     t.index ["name"], name: "index_companies_on_name"
     t.index ["resolution_status"], name: "index_companies_on_resolution_status"
+  end
+
+  create_table "contacts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.string "name", null: false
+    t.string "role"
+    t.string "kind", default: "other", null: false
+    t.string "email"
+    t.string "linkedin_url"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "name"], name: "index_contacts_on_company_id_and_name"
+    t.index ["company_id"], name: "index_contacts_on_company_id"
   end
 
   create_table "drafts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -330,11 +356,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000001) do
   end
 
   add_foreign_key "activities", "applications"
+  add_foreign_key "activities", "contacts", on_delete: :nullify
+  add_foreign_key "application_contacts", "applications", on_delete: :cascade
+  add_foreign_key "application_contacts", "contacts", on_delete: :cascade
   add_foreign_key "applications", "companies"
   add_foreign_key "applications", "postings"
   add_foreign_key "audit_events", "agent_credentials", column: "credential_id"
   add_foreign_key "check_runs", "companies"
   add_foreign_key "check_runs", "postings", on_delete: :nullify
+  add_foreign_key "contacts", "companies", on_delete: :cascade
   add_foreign_key "drafts", "applications", on_delete: :cascade
   add_foreign_key "drafts", "drafts", column: "revises_id", on_delete: :nullify
   add_foreign_key "drafts", "llm_calls"

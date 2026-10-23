@@ -4,6 +4,7 @@ class Company < ApplicationRecord
   has_many :check_runs, dependent: :destroy
   has_many :review_items, dependent: :destroy
   has_many :applications, dependent: :restrict_with_exception
+  has_many :contacts, -> { by_name }, dependent: :destroy, inverse_of: :company
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 

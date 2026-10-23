@@ -12,6 +12,8 @@ class Application < ApplicationRecord
   has_many :activities, dependent: :destroy
   has_many :drafts, dependent: :destroy
   has_many :resume_reviews, dependent: :destroy
+  has_many :application_contacts, dependent: :destroy
+  has_many :contacts, -> { by_name }, through: :application_contacts
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 

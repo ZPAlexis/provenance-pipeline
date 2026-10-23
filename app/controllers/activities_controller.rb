@@ -6,7 +6,8 @@ class ActivitiesController < ApplicationController
   before_action { @activity = Activity.find_by!(id: params[:id], application_id: params[:application_id]) }
 
   def update
-    edited = Pipeline.edit_activity!(@activity, kind: params[:kind], summary: params[:summary], on: day)
+    contact = (@activity.application.company.contacts.find(params[:contact_id]) if params[:contact_id].present?)
+    edited = Pipeline.edit_activity!(@activity, kind: params[:kind], summary: params[:summary], on: day, contact: contact)
     back(notice: edited ? "Activity saved." : "Nothing to save: it says the same as before.")
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     back(alert: "Not saved: #{e.message}.")

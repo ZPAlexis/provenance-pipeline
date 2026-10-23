@@ -467,3 +467,19 @@ td form.button_to { display: inline-block; }
   border-radius: 6px;
 }
 .bulk-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+
+/* Contacts (Stage 2e): the people at a company, on its page and its applications' */
+
+.contact-list { list-style: none; margin: 4px 0 10px; padding: 0; max-width: 900px; }
+.contact-list li { margin: 6px 0; }
+form.inline { display: inline-block; margin: 0 0 0 6px; }
+.add-form input[type="email"] {
+  width: 300px;
+  max-width: 100%;
+  padding: 5px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}

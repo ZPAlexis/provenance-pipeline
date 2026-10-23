@@ -62,6 +62,7 @@ class CompaniesController < ApplicationController
     @roles = @company.postings.order(:tracking, :role_title)
     @checks = @company.page_checks.order(checked_at: :desc).limit(10)
     @events = @company.audit_events.order(occurred_at: :desc).limit(10).includes(:credential)
+    @contacts = @company.contacts.includes(applications: :posting)
   end
 
   private
