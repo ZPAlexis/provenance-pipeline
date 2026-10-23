@@ -22,7 +22,7 @@
                 <%= render "contacts/fields", url: company_contact_path(company, contact), contact: contact, submit: "Save" %>
               </details>
               <%= button_to "Delete", company_contact_path(company, contact), method: :delete, class: "btn small",
-                                      data: { turbo_confirm: "Delete #{contact.name}? Its links to applications go too; its activities stay, naming no one." } %>
+                                      data: { turbo_confirm: "Delete #{contact.name}? Its links to applications go too; its activities and outreach notes stay, naming no one." } %>
             </td>
           </tr>
         <% end %>

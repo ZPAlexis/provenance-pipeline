@@ -6,7 +6,9 @@ class DraftsController < ApplicationController
   before_action(except: :create) { @draft = @application.drafts.find(params[:id]) }
 
   def create
-    asked = { kind: params[:kind].to_s, language: params[:language].to_s.strip.presence, guidance: params[:guidance].to_s.strip.presence }
+    contact = @application.company.contacts.find(params[:contact_id]) if params[:contact_id].present?
+    asked = { kind: params[:kind].to_s, language: params[:language].to_s.strip.presence, guidance: params[:guidance].to_s.strip.presence,
+              contact: contact }
     if (why = Drafts.refusal(@application, **asked))
       return back(alert: "Not written: #{why}.")
     end

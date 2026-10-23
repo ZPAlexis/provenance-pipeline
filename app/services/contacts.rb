@@ -44,14 +44,15 @@ module Contacts
     end
   end
 
-  # The operator's deletion: the contact, its links, and its name on activities, which keep what they said.
+  # The operator's deletion: the contact, its links, and its name on activities and outreach notes, which keep what they said.
   def delete!(contact, actor: AuditEvent::OPERATOR)
-    links, activities = contact.application_contacts.count, contact.activities.count
+    links, activities, notes = contact.application_contacts.count, contact.activities.count, contact.drafts.count
     ApplicationRecord.transaction do
       AuditEvent.record!(actor: actor, action: "destroy", target: contact,
                          changes_made: audited(contact.attributes.transform_values { |value| [ value, nil ] }),
                          reasoning: "Contact deleted, with #{links} #{'link'.pluralize(links)} to applications; " \
-                                    "#{activities} #{'activity'.pluralize(activities)} no longer #{activities == 1 ? 'names' : 'name'} it.")
+                                    "#{activities} #{'activity'.pluralize(activities)} no longer #{activities == 1 ? 'names' : 'name'} it." \
+                                    "#{" #{notes} outreach #{'note'.pluralize(notes)} addressed to them #{notes == 1 ? 'is' : 'are'} now to no one on record." if notes.positive?}")
       contact.destroy!
     end
   end

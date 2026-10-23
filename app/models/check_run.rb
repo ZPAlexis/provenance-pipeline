@@ -63,11 +63,11 @@ class CheckRun < ApplicationRecord
 
   # A draft for `application` (2c), or the one already being written: one at a time per
   # application, with what a draft costs on the record. `request` is what to write.
-  def self.start_draft!(application, kind:, language: nil, guidance: nil, requested_by: AuditEvent::OPERATOR)
+  def self.start_draft!(application, kind:, language: nil, guidance: nil, contact: nil, requested_by: AuditEvent::OPERATOR)
     abandon_stale!
     where(kind: "draft", posting: application.posting).active.first || create!(
       kind: "draft", company: application.company, posting: application.posting, requested_by: requested_by,
-      ceiling_usd: Drafts.estimate, request: { "kind" => kind, "language" => language, "guidance" => guidance }
+      ceiling_usd: Drafts.estimate, request: { "kind" => kind, "language" => language, "guidance" => guidance, "contact_id" => contact&.id }
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 

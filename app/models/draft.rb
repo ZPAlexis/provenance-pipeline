@@ -17,12 +17,14 @@ class Draft < ApplicationRecord
   belongs_to :role_description, optional: true
   belongs_to :llm_call, optional: true
   belongs_to :revises, class_name: "Draft", optional: true # the draft this one polishes
+  belongs_to :contact, optional: true # the person an outreach note is addressed to (2e)
   has_many :revisions, class_name: "Draft", foreign_key: :revises_id, inverse_of: :revises, dependent: :nullify
 
   validates :kind, inclusion: { in: KINDS }
   validates :status, inclusion: { in: STATUSES }
   validates :written_by, inclusion: { in: WRITERS.keys }
   validates :language, :body, :written_body, :resume_hash, :description_hash, :run_id, presence: true
+  validate :addressed_to_its_companys_contact
 
   scope :newest_first, -> { order(created_at: :desc) }
 
@@ -44,4 +46,14 @@ class Draft < ApplicationRecord
 
   # A hash of the text as it stands, subject included: what its audit events name in its place.
   def content_hash = Resume.digest([ subject, body ].compact.join("\n"))
+
+  private
+
+  # Only an outreach note is addressed to someone, and only to one of its application's company's contacts.
+  def addressed_to_its_companys_contact
+    return unless contact
+
+    errors.add(:contact, "is for an outreach note alone") unless kind == "outreach"
+    errors.add(:contact, "must be at the application's company") if application && contact.company_id != application.company_id
+  end
 end

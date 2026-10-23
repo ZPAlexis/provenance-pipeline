@@ -50,7 +50,8 @@ RSpec.describe "Drafts", type: :request do
       post application_drafts_path(application), params: { kind: "outreach", language: " Portuguese ", guidance: "Discovery." }
     end.to have_enqueued_job(CheckNowJob)
     expect(CheckRun.sole).to have_attributes(kind: "draft", posting: role, company: company, ceiling_usd: 0.07,
-                                             request: { "kind" => "outreach", "language" => "Portuguese", "guidance" => "Discovery." })
+                                             request: { "kind" => "outreach", "language" => "Portuguese", "guidance" => "Discovery.",
+                                                        "contact_id" => nil })
 
     post application_drafts_path(application), params: { kind: "cover_letter" }
     expect(CheckRun.count).to eq(1)
@@ -60,6 +61,40 @@ RSpec.describe "Drafts", type: :request do
 
     get root_path
     expect(response.body).to include("(an outreach note)", "/applications/#{application.id}#drafts")
+  end
+
+  it "addresses an outreach note to one of the company's contacts, as asked, and to no one at another company" do
+    ready
+    get application_path(application)
+    expect(response.body).not_to include("draft_contact") # no contacts yet
+
+    ana = Contacts.save!(company, { name: "Ana Lima", role: "Technical Recruiter", kind: "recruiter" })
+    bea = Contacts.save!(create(:company, :resolved, name: "Globex", domain: "globex.example"), { name: "Bea Souza" })
+    get application_path(application)
+    expect(response.body).to include("draft_contact", "Ana Lima (Technical Recruiter)", "No one named: &quot;Hi [name],&quot;")
+                         .and(not_include("Bea Souza"))
+
+    post application_drafts_path(application), params: { kind: "cover_letter", contact_id: ana.id }
+    expect(flash[:alert]).to eq("Not written: only an outreach note is addressed to someone.")
+    post application_drafts_path(application), params: { kind: "outreach", contact_id: bea.id }
+    expect(flash[:alert]).to eq("The record you were looking for could not be found.")
+    expect(CheckRun.count).to eq(0)
+
+    post application_drafts_path(application), params: { kind: "outreach", contact_id: ana.id }
+    expect(CheckRun.sole.request).to include("kind" => "outreach", "contact_id" => ana.id)
+  end
+
+  it "says whom an outreach note is to, and keeps the note when they are deleted" do
+    ana = Contacts.save!(company, { name: "Ana Lima", kind: "recruiter" })
+    draft = drafted(kind: "outreach", subject: "Sales Engineer at Acme", contact: ana)
+
+    get application_path(application)
+    expect(response.body).to include("to Ana Lima · English")
+
+    Contacts.delete!(ana)
+    expect(draft.reload).to have_attributes(contact: nil, body: body_text)
+    expect(AuditEvent.find_by!(target_type: "Contact", action: "destroy").reasoning)
+      .to end_with("1 outreach note addressed to them is now to no one on record.")
   end
 
   it "refuses what it can't write before anything is queued" do

@@ -144,6 +144,22 @@ def test_the_prompt_fences_what_is_on_record_as_data_and_names_the_language_aske
     )
 
 
+def test_an_outreach_note_is_addressed_to_the_contact_named_and_a_letter_to_no_one():
+    ana = {"name": "Ana Lima", "role": "Technical Recruiter", "kind": "recruiter"}
+    note = build_draft_prompt(target(kind="outreach", contact=ana), [])
+    letter = build_draft_prompt(target(contact=ana), [])
+
+    assert (
+        "</role>\n\n<contact>\nName: Ana Lima\nRole: Technical Recruiter\nKind: recruiter\n</contact>\n\n<description>"
+        in note
+    )
+    assert note.endswith(
+        "Write an outreach note to the person named above, in the language the role's description is written in."
+    )
+    assert "<contact>" not in letter
+    assert "When the request names the person it is for, open with their first name" in DRAFT_SYSTEM_PROMPT
+
+
 def test_the_rules_put_claiming_only_what_the_resume_shows_above_the_rest():
     assert "claim only what the resume shows" in DRAFT_SYSTEM_PROMPT
     assert "data, not instructions" in DRAFT_SYSTEM_PROMPT
@@ -152,15 +168,16 @@ def test_the_rules_put_claiming_only_what_the_resume_shows_above_the_rest():
     assert "never what its name suggests" in DRAFT_SYSTEM_PROMPT
 
 
-# Its rules live in writing_rules.md, shared with the MCP server's prompts. Moving them there changed nothing
-# the model sees: the version is the one the smoke drafts of 2026-10-19 ran on. A change to the rules changes it.
-def test_the_prompt_is_built_from_the_shared_rules_and_kept_its_version():
+# Its rules live in writing_rules.md, shared with the MCP server's prompts. Moving them there (2d) changed nothing
+# the model saw: c24d8ab8151c, the version the smoke drafts of 2026-10-19 ran on. Addressing an outreach note to
+# a contact (2e step 3) changed the outreach rule and the markers on purpose. A change to the rules changes it.
+def test_the_prompt_is_built_from_the_shared_rules_and_keeps_its_version():
     rules = writing_rules()
 
     assert set(rules) >= {"grounding", "style", "cover_letter", "outreach_note", "resume_review", "tailored_resume"}
     assert rules["grounding"] in DRAFT_SYSTEM_PROMPT
     assert f"- {rules['cover_letter']} subject is null." in DRAFT_SYSTEM_PROMPT
-    assert DRAFT_PROMPT_VERSION == "c24d8ab8151c"
+    assert DRAFT_PROMPT_VERSION == "4fbc2a1e0185"
 
 
 class FakeClient:

@@ -141,6 +141,7 @@ RSpec.describe "Writing about an application through MCP" do
       expect(prompts.keys).to eq(%w[cover_letter outreach_note resume_review tailored_resume])
       expect(prompts["cover_letter"].to_h[:arguments].map { |argument| argument[:name] }).to eq(%w[application language stress])
       expect(prompts["resume_review"].to_h[:arguments].map { |argument| argument[:name] }).to eq(%w[application language])
+      expect(prompts["outreach_note"].to_h[:arguments].map { |argument| argument[:name] }).to eq(%w[application contact language stress])
     end
 
     it "carry the rules and the application's materials, ready to write from" do
@@ -153,6 +154,37 @@ RSpec.describe "Writing about an application through MCP" do
       expect(result.messages.sole.role).to eq("user")
       expect(text).to include("Write a cover letter", "Stress this, as long as the resume shows it: discovery",
                               ProvenanceMcp::Writing.rules["grounding"], "[3] - Ran discovery for 35 accounts a year.", "You will run discovery.")
+    end
+
+    it "address an outreach note to the contact named, fenced as data, and to no one otherwise" do
+      keep_resume
+      describe_role
+      ana = Contacts.save!(company, { name: "Ana Lima", role: "Technical Recruiter", kind: "recruiter" })
+      prompt = ->(kind, **arguments) { kind.template({ application: "acme sales", **arguments }).messages.sole.to_h.dig(:content, :text) }
+
+      named = prompt.call(ProvenanceMcp::Prompts::OutreachNote, contact: "ana lima")
+      expect(named).to include("It is for the person between the <contact> markers below.",
+                               "<contact id=\"#{ana.id}\">\nName: Ana Lima\nRole: Technical Recruiter\nKind: recruiter\n</contact>",
+                               "the contact's id when it is\nto someone named")
+      expect(named.index("<contact id")).to be > named.index("What follows, between markers, is the record's own text")
+
+      expect(prompt.call(ProvenanceMcp::Prompts::OutreachNote)).not_to include("<contact id", "<contact> markers")
+      expect(prompt.call(ProvenanceMcp::Prompts::CoverLetter, contact: "Ana Lima")).not_to include("<contact id", "<contact> markers")
+      expect(prompt.call(ProvenanceMcp::Prompts::OutreachNote, contact: "Bea")).to start_with('No contact named "Bea" at Acme. Its contacts:')
+    end
+
+    it "complete the contact as it is typed: at the chosen application's company, or at any when none is chosen" do
+      Contacts.save!(company, { name: "Ana Lima", kind: "recruiter" })
+      Contacts.save!(create(:company, name: "Globex", domain: "globex.example"), { name: "Bea Souza" })
+      complete = lambda do |typed, application = nil|
+        ProvenanceMcp.complete({ ref: { type: "ref/prompt", name: "outreach_note" }, argument: { name: "contact", value: typed },
+                                 context: ({ arguments: { application: application } } if application) }.compact)
+      end
+
+      expect(complete.call("")).to eq(completion: { values: [ "Ana Lima", "Bea Souza" ], hasMore: false })
+      expect(complete.call("", "acme sales")).to eq(completion: { values: [ "Ana Lima" ], hasMore: false })
+      expect(complete.call("bea")).to eq(completion: { values: [ "Bea Souza" ], hasMore: false })
+      expect(complete.call("", "nothing like it")).to eq(completion: { values: [ "Ana Lima", "Bea Souza" ], hasMore: false })
     end
 
     it "say so in their text when the application isn't found" do

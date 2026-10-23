@@ -88,18 +88,36 @@ module ProvenanceMcp
       .tap { |server| server.completion_handler { |params| complete(params) } }
   end
 
-  # What a prompt's argument could be, as the operator types it: an application's company and role.
+  # What a prompt's argument could be, as the operator types it: an application's company and role, or the
+  # contact an outreach note is for (2e).
   def complete(params)
-    return { completion: { values: [] } } unless params.dig(:argument, :name).to_s == "application"
+    argument = params.dig(:argument, :name).to_s
+    return { completion: { values: [] } } unless %w[application contact].include?(argument)
 
     ready!
-    labels = read_only do
-      typed = params.dig(:argument, :value).to_s
-      found = typed.strip.empty? ? Application.open : Searchable.narrow(Application.joins(posting: :company), typed,
-                                                                         %w[postings.role_title companies.name])
-      found.includes(:company, :posting).order(:stage_changed_on, :created_at).limit(100).map { |application| Writing.label(application) }
+    typed = params.dig(:argument, :value).to_s
+    values = read_only do
+      argument == "application" ? applications(typed) : contacts(typed, params.dig(:context, :arguments, :application))
     end
-    { completion: { values: labels.uniq, hasMore: labels.size == 100 } }
+    { completion: { values: values.uniq.first(100), hasMore: values.size > 100 } }
+  end
+
+  def applications(typed)
+    found = typed.strip.empty? ? Application.open : Searchable.narrow(Application.joins(posting: :company), typed,
+                                                                       %w[postings.role_title companies.name])
+    found.includes(:company, :posting).order(:stage_changed_on, :created_at).limit(101).map { |application| Writing.label(application) }
+  end
+
+  # Contacts by name: those at the company of the application already chosen, when the client says which, or else any.
+  def contacts(typed, application)
+    company = begin
+      Lookup.application(application).company if application.to_s.strip.present?
+    rescue Refusal
+      nil
+    end
+    people = company ? company.contacts : Contact.all
+    people = Searchable.narrow(people, typed, %w[contacts.name]) unless typed.strip.empty?
+    people.pluck(:name).sort_by { |name| [ name.downcase, name ] }
   end
 
   # A tool that reads the record and nothing else: each call inside a read-only transaction.

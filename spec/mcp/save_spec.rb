@@ -75,6 +75,26 @@ RSpec.describe "Saving what the client wrote, through MCP" do
                                                                                      { "line" => 2, "text" => "Sales engineer, eight years." } ] } ])
     end
 
+    it "saves an outreach note to the contact it names, at the application's company, and says whom it is to" do
+      ana = Contacts.save!(company, { name: "Ana Lima", kind: "recruiter" })
+
+      response = save(:SaveDraft, **letter(kind: "outreach_note", subject: "Sales Engineer", body: "Hi Ana, ...", contact: " ana lima "))
+
+      draft = application.drafts.sole
+      expect(said(response)).to start_with("Saved for Acme / Sales Engineer, to Ana Lima: Outreach note in English")
+      expect(draft.contact).to eq(ana)
+      event = AuditEvent.find_by!(target: draft)
+      expect(event.changes_made).to include("contact_id" => [ nil, ana.id ])
+      expect(event.reasoning).not_to include("Ana")
+
+      expect(said(save(:SaveDraft, **letter(contact: ana.id)))).to eq("Not saved: only an outreach note is addressed to someone.")
+      expect(said(save(:SaveDraft, **letter(kind: "outreach_note", contact: "Bea")))).to start_with('No contact named "Bea" at Acme.')
+      expect(application.drafts.count).to eq(1)
+
+      expect(said(save(:GetDraft, draft: draft.id))).to start_with("Outreach note for Acme / Sales Engineer, to Ana Lima (contact id #{ana.id}), in English: a draft.")
+      expect(ProvenanceMcp::Writing.written(application)).to include("- Outreach note to Ana Lima in English, 3 words, a draft")
+    end
+
     it "saves nothing it can't read straight, and says why" do
       expect(said(save(:SaveDraft, **letter(resume_version: "0123456789ab")))).to start_with('Not saved: resume version "0123456789ab" isn\'t on record')
       expect(said(save(:SaveDraft, **letter(revises: SecureRandom.uuid)))).to start_with("Not saved: it revises no draft of this application")

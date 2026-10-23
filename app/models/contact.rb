@@ -12,6 +12,7 @@ class Contact < ApplicationRecord
   has_many :application_contacts, dependent: :destroy
   has_many :applications, through: :application_contacts
   has_many :activities, dependent: :nullify
+  has_many :drafts, dependent: :nullify # outreach notes addressed to them, kept as written
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 

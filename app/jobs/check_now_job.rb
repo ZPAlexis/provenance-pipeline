@@ -21,8 +21,9 @@ class CheckNowJob < ApplicationJob
         ResumeReviews.write!(check_run.posting.application, language: check_run.request["language"], issued_by: check_run.requested_by)
       when "draft"
         asked = check_run.request
-        Drafts.write!(check_run.posting.application, kind: asked["kind"], language: asked["language"],
-                                                     guidance: asked["guidance"], issued_by: check_run.requested_by)
+        application = check_run.posting.application
+        Drafts.write!(application, kind: asked["kind"], language: asked["language"], guidance: asked["guidance"],
+                                   contact: application.company.contacts.find_by(id: asked["contact_id"]), issued_by: check_run.requested_by)
       when "role" then Verifier::CheckNow.role(check_run.posting)
       else Verifier::CheckNow.company(check_run.company)
       end

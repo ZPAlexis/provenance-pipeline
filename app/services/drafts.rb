@@ -37,19 +37,21 @@ module Drafts
   # What a draft costs, on the record; a cautious guess before the first one.
   def estimate = LlmCall.where(purpose: "draft").average(:cost_usd)&.to_f || FIRST_ESTIMATE
 
-  def target(application, kind:, language:, guidance:, resume:, description:, profile:)
+  def target(application, kind:, language:, guidance:, resume:, description:, profile:, contact: nil)
     role = application.posting
     { id: application.id, kind: kind, label: "#{application.company.name} / #{role.role_title}", role_title: role.role_title,
       company: application.company.name, location: role.location, description: description.text, resume: resume.text,
       titles: profile.titles, places: profile.places, work_modes: profile.work_modes, notes: application.notes.presence,
-      guidance: guidance, language: language }
+      guidance: guidance, language: language,
+      contact: ({ name: contact.name, role: contact.role, kind: contact.kind_label.downcase } if contact) }
   end
 
   # Writes a draft of `kind` for `application` as the drafter, in `language` (nil: its description's).
-  def write!(application, kind:, language: nil, guidance: nil, worker: Verifier::Worker.new(run_dir: Verifier::Worker.dir_for("draft")),
-             issued_by: AuditEvent::OPERATOR)
+  # An outreach note may be addressed to one of the company's contacts (2e): it opens with their name.
+  def write!(application, kind:, language: nil, guidance: nil, contact: nil,
+             worker: Verifier::Worker.new(run_dir: Verifier::Worker.dir_for("draft")), issued_by: AuditEvent::OPERATOR)
     language, guidance = language.to_s.strip.presence, guidance.to_s.strip.presence
-    why = refusal(application, kind:, language:, guidance:)
+    why = refusal(application, kind:, language:, guidance:, contact:)
     raise ArgumentError, why if why
 
     profile = SearchProfile.current
@@ -59,18 +61,20 @@ module Drafts
     Authority.run(ACTOR, scopes: SCOPES, purpose: "draft: #{Draft.label(kind).downcase} for #{application.posting.role_title} " \
                                                   "at #{application.company.name}", issued_by: issued_by) do
       run = begin
-        worker.run([ target(application, kind:, language:, guidance:, resume:, description:, profile:) ], command: "draft")
+        worker.run([ target(application, kind:, language:, guidance:, resume:, description:, profile:, contact:) ], command: "draft")
       ensure
         FileUtils.rm_f(worker.run_dir.join("targets.json")) # it holds the whole resume
       end
-      record(application, run, kind:, language:, guidance:, resume:, description:)
+      record(application, run, kind:, language:, guidance:, resume:, description:, contact:)
     end
   end
 
   # Why a draft can't be written as asked, in words; nil when it can. Asked before a run is queued, and again when it runs.
-  def refusal(application, kind:, language: nil, guidance: nil)
+  def refusal(application, kind:, language: nil, guidance: nil, contact: nil)
     language, guidance = language.to_s.strip, guidance.to_s.strip
     return "unknown kind of draft #{kind.inspect}" unless Draft::IN_APP.include?(kind)
+    return "only an outreach note is addressed to someone" if contact && kind != "outreach"
+    return "#{contact.name} is not a contact at #{application.company.name}" if contact && contact.company_id != application.company_id
     return "a language is named in a few words, not #{language.size} characters" if language.size > MAX_LANGUAGE
     return "what to stress fits in #{MAX_GUIDANCE} characters" if guidance.size > MAX_GUIDANCE
 
@@ -79,7 +83,7 @@ module Drafts
   end
 
   # The run's one result through the contract, then kept: its LLM call whatever came of it (billed all the same), and the draft.
-  def record(application, run, kind:, language:, guidance:, resume:, description:)
+  def record(application, run, kind:, language:, guidance:, resume:, description:, contact: nil)
     result = run.results.first
     return Written.new(application:, draft: nil, cost_usd: 0.0, run_id: run.id, summary: "Stopped before it was written: " \
                                                                                           "#{run.stopped || 'no result written'}.") unless result
@@ -99,7 +103,7 @@ module Drafts
       subject: result["subject"], body: result["body"], written_subject: result["subject"], written_body: result["body"],
       drew_on: result["drew_on"], gaps: result["gaps"], notes: result["notes"], dropped_lines: result["dropped_lines"],
       resume: resume, resume_hash: resume.content_hash, role_description: description, description_hash: description.content_hash,
-      llm_call: call, run_id: run.id
+      llm_call: call, run_id: run.id, contact: contact
     )
     gaps = draft.gaps.empty? ? "no gaps" : "#{counted(draft.gaps.size, 'gap')} flagged"
     dropped = WrittenFrom.dropped(draft.dropped_lines)
@@ -122,8 +126,9 @@ module Drafts
   # call: a cover letter, an outreach note, or a tailored resume, read against the resume version the client saw. A
   # polished version revises the draft it came from, which stays. Returns the draft and what was saved, in words.
   def save!(application, kind:, language:, body:, resume_version:, subject: nil, lines_drawn_on: [], changes: [], gaps: [],
-            note: nil, revises: nil, reported_model: nil, actor: "agent:assistant")
+            note: nil, revises: nil, contact: nil, reported_model: nil, actor: "agent:assistant")
     raise ArgumentError, "a draft is one of: #{Draft::KINDS.join(', ')}" unless Draft::KINDS.include?(kind)
+    raise ArgumentError, "only an outreach note is addressed to someone" if contact && kind != "outreach"
 
     body = body.to_s.gsub("\r\n", "\n").strip
     raise ArgumentError, "the text is empty" if body.empty?
@@ -144,7 +149,8 @@ module Drafts
       drew_on: (kind == "tailored_resume" ? [] : drew_on), tailoring: (kind == "tailored_resume" ? tailoring : []),
       gaps: WrittenFrom.gaps(gaps), notes: note.to_s.strip.presence, dropped_lines: dropped + dropped_too,
       resume: resume, resume_hash: resume.content_hash, role_description: description, description_hash: description.content_hash,
-      written_by: actor, reported_model: WrittenFrom.reported(reported_model), revises: earlier, run_id: "mcp:#{Authority.credential&.id}"
+      written_by: actor, reported_model: WrittenFrom.reported(reported_model), revises: earlier, run_id: "mcp:#{Authority.credential&.id}",
+      contact: contact
     )
     summary = saved_summary(draft)
     AuditEvent.record!(actor: actor, action: "create", target: draft, reasoning: "Saved through MCP: #{summary}",
@@ -203,7 +209,7 @@ module Drafts
   def facts(draft)
     { "kind" => draft.kind, "status" => draft.status, "language" => draft.language, "words" => draft.words,
       "content_hash" => draft.content_hash, "resume_hash" => draft.resume_hash, "description_hash" => draft.description_hash,
-      "written_by" => draft.written_by }
+      "written_by" => draft.written_by, "contact_id" => draft.contact_id }.compact
   end
 
   def changed(before, after) = after.filter_map { |key, value| [ key, [ before[key], value ] ] unless before[key] == value }.to_h

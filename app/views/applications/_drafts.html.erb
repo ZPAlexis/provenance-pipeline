@@ -19,6 +19,11 @@
       <label>Language <%= text_field_tag :language, nil, list: "draft-languages", placeholder: "As its description", maxlength: Drafts::MAX_LANGUAGE,
                                                          autocomplete: "off" %></label>
       <datalist id="draft-languages"><% %w[English Portuguese Spanish].each do |language| %><option value="<%= language %>"></option><% end %></datalist>
+      <% if (people = application.company.contacts.to_a).any? %>
+        <label><span>To <span class="muted">(an outreach note)</span></span>
+          <%= select_tag :contact_id, options_for_select(people.map { |person| [ person.label, person.id ] }),
+                         include_blank: "No one named: \"Hi [name],\"", id: "draft_contact" %></label>
+      <% end %>
       <label class="wide">Anything to stress <%= text_field_tag :guidance, nil, maxlength: Drafts::MAX_GUIDANCE, autocomplete: "off",
                                                                  placeholder: "Optional: the discovery work, or that you can start in November" %></label>
       <%= form.submit "Write it", class: "btn primary small" %>
@@ -39,7 +44,7 @@
       <strong><%= draft.label %></strong>
       <%= tag.span(draft.approved? ? "Approved" : "Draft", class: [ "badge", ("live" if draft.approved?) ]) %>
       <span class="muted small">
-        <%= draft.language %> · <%= pluralize(draft.words, "word") %> · written <%= ago(draft.created_at) %><% if draft.edited? %> · edited by you<% end %>
+        <% if draft.contact %>to <%= draft.contact.name %> · <% end %><%= draft.language %> · <%= pluralize(draft.words, "word") %> · written <%= ago(draft.created_at) %><% if draft.edited? %> · edited by you<% end %>
         <% if draft.approved? %> · approved <%= ago(draft.approved_at) %><% end %>
       </span>
     </div>
