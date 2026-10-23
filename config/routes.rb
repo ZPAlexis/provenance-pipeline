@@ -23,6 +23,7 @@ Rails.application.routes.draw do
     resources :activities, only: %i[update destroy]
     resources :drafts, only: %i[create update destroy]
     resources :resume_reviews, only: %i[create destroy]
+    resources :contacts, only: %i[create destroy], controller: "application_contacts"
   end
   resources :companies, only: %i[index show create] do
     member do
@@ -31,6 +32,7 @@ Rails.application.routes.draw do
       patch :set_page
       patch :rename
     end
+    resources :contacts, only: %i[create update destroy]
   end
   resources :check_runs, only: %i[create show]
   resource :check_all, only: %i[show create], controller: "check_all"

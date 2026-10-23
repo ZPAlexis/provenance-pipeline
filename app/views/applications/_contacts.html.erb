@@ -1,0 +1,35 @@
+<%# An application's contacts (2e): people at its company, linked to it, or added here and linked. Kept with the
+    company, so a recruiter on two of its roles is one contact. Other people's details: in this database only. %>
+<% linked = application.contacts.to_a %>
+<h2 id="contacts">Contacts</h2>
+<% if linked.any? %>
+  <ul class="contact-list">
+    <% linked.each do |contact| %>
+      <li>
+        <strong><%= contact.name %></strong>
+        <span class="muted small"><%= [ contact.role, contact.kind_label.downcase ].compact_blank.join(" · ") %></span>
+        <% if contact.email.present? %> · <%= mail_to contact.email, class: "small" %><% end %>
+        <% if contact.linkedin_url.present? %> · <%= outside_link(contact.linkedin_url, label: "LinkedIn") %><% end %>
+        <%= button_to "Unlink", application_contact_path(application, contact), method: :delete, class: "btn small quiet",
+                                form_class: "inline", data: { turbo_confirm: "Unlink #{contact.name} from this application? They stay with the company." } %>
+        <% if contact.notes.present? %><div class="muted small"><%= contact.notes %></div><% end %>
+      </li>
+    <% end %>
+  </ul>
+<% else %>
+  <p class="muted small">None linked yet: the people you deal with about this role, a recruiter or the hiring manager.</p>
+<% end %>
+
+<% others = company_contacts - linked %>
+<% if others.any? %>
+  <%= form_with url: application_contacts_path(application), class: "add-form" do |form| %>
+    <label>Link a contact at <%= application.company.name %>
+      <%= select_tag :contact_id, options_for_select(others.map { |contact| [ contact.label, contact.id ] }), id: "link_contact" %></label>
+    <%= form.submit "Link", class: "btn small" %>
+  <% end %>
+<% end %>
+<details class="add">
+  <summary class="btn small">Add a contact</summary>
+  <%= render "contacts/fields", url: application_contacts_path(application), contact: Contact.new(kind: "recruiter"), submit: "Add and link" %>
+</details>
+<p class="muted small">Contacts are kept with <%= link_to application.company.name, company_path(application.company, anchor: "contacts") %>, in this database only.</p>

@@ -1,4 +1,5 @@
 <% role = @application.posting %>
+<% company_contacts = @application.company.contacts.to_a %>
 <% content_for :title, "#{role.role_title} · Pipeline · Provenance Pipeline" %>
 <%# Its forms redirect back here: keep the reader's place, and the notice in view. %>
 <% turbo_refreshes_with method: :replace, scroll: :preserve %>
@@ -58,6 +59,10 @@
 <%= form_with url: log_application_path(@application), class: "add-form" do |form| %>
   <label>What <%= select_tag :kind, activity_options %></label>
   <label>On <%= form.date_field :on, value: Date.current %></label>
+  <% if company_contacts.any? %>
+    <label>With <%= select_tag :contact_id, options_for_select(company_contacts.map { |contact| [ contact.label, contact.id ] }),
+                                include_blank: "(no one in particular)", id: "log_contact" %></label>
+  <% end %>
   <label>Summary <%= form.text_field :summary, required: true, placeholder: "Wrote to the recruiter", autocomplete: "off" %></label>
   <%= form.submit "Log it", class: "btn small" %>
 <% end %>
@@ -76,6 +81,7 @@
                 <%= entry.from ? "#{Application.stage_label(entry.from)} → " : "Started at " %><%= stage_badge(entry.stage) %>
               <% else %>
                 <span class="badge"><%= entry.activity.kind.humanize %></span>
+                <% if entry.activity.contact %><span class="muted small">with <%= entry.activity.contact.name %></span><% end %>
               <% end %>
             </td>
             <td><%= actor_label(entry.actor) %></td>
@@ -87,6 +93,10 @@
                   <%= form_with url: application_activity_path(@application, activity), method: :patch, class: "add-form" do |form| %>
                     <label>What <%= select_tag :kind, activity_options(activity.kind) %></label>
                     <label>On <%= form.date_field :on, value: activity.occurred_on %></label>
+                    <% if company_contacts.any? %>
+                      <label>With <%= select_tag :contact_id, options_for_select(company_contacts.map { |contact| [ contact.label, contact.id ] }, activity.contact_id),
+                                                  include_blank: "(no one in particular)", id: dom_id(activity, :contact) %></label>
+                    <% end %>
                     <label>Summary <%= form.text_field :summary, value: activity.summary, required: true, autocomplete: "off" %></label>
                     <%= form.submit "Save", class: "btn primary small" %>
                   <% end %>
@@ -103,6 +113,8 @@
 <% else %>
   <p class="empty">Nothing yet.</p>
 <% end %>
+
+<%= render "contacts", application: @application, company_contacts: company_contacts %>
 
 <h2 id="notes">Notes and pay expectation</h2>
 <%= form_with url: note_application_path(@application), method: :patch, class: "add-form" do |form| %>

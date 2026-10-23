@@ -1,0 +1,11 @@
+<%# A contact's fields, to add one or edit it. %>
+<%= form_with url: url, method: (contact.persisted? ? :patch : :post), class: "add-form" do |form| %>
+  <label>Name <%= form.text_field :name, value: contact.name, required: true, maxlength: 120, autocomplete: "off" %></label>
+  <label>Their role <%= form.text_field :role, value: contact.role, maxlength: 120, placeholder: "Technical Recruiter", autocomplete: "off" %></label>
+  <label>Kind <%= select_tag :kind, options_for_select(Contact::KINDS.map { |kind| [ Contact.kind_label(kind), kind ] }, contact.kind),
+                             id: [ contact.id, "contact_kind" ].compact.join("_") %></label>
+  <label>Email <%= form.email_field :email, value: contact.email, placeholder: "optional", autocomplete: "off" %></label>
+  <label>LinkedIn <%= form.url_field :linkedin_url, value: contact.linkedin_url, placeholder: "optional", autocomplete: "off" %></label>
+  <label class="wide">Notes <%= form.text_area :notes, value: contact.notes, rows: 2, maxlength: 2_000, placeholder: "How you met, what they care about" %></label>
+  <%= form.submit submit, class: "btn primary small" %>
+<% end %>

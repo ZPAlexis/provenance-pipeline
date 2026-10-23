@@ -41,7 +41,7 @@ class ApplicationsController < ApplicationController
 
   def log
     act do
-      activity = Pipeline.log!(@application, kind: params[:kind], summary: params[:summary], on: day)
+      activity = Pipeline.log!(@application, kind: params[:kind], summary: params[:summary], on: day, contact: contact)
       "Logged: #{activity.kind.humanize.downcase} on #{activity.occurred_on}."
     end
   end
@@ -58,6 +58,9 @@ class ApplicationsController < ApplicationController
   def find_application
     @application = Application.includes(:company, :posting, :activities).find(params[:id])
   end
+
+  # The contact an activity was with: one of the application's company's, or none.
+  def contact = (@application.company.contacts.find(params[:contact_id]) if params[:contact_id].present?)
 
   # Makes the write in the block, then back to the application with what it did, or why not.
   def act

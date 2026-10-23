@@ -1,0 +1,38 @@
+<%# A company's contacts (2e): the people there you deal with, each linked to any of its applications. Other
+    people's details: in this database only; their audit records name them by a hash, so deleting one removes it. %>
+<h2 id="contacts">Contacts</h2>
+<% if contacts.any? %>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Role</th><th>Kind</th><th>Reach</th><th>Applications</th><th></th></tr></thead>
+      <tbody>
+        <% contacts.each do |contact| %>
+          <tr>
+            <td><strong><%= contact.name %></strong><% if contact.notes.present? %><div class="muted small"><%= contact.notes %></div><% end %></td>
+            <td><%= contact.role %></td>
+            <td><%= contact.kind_label %></td>
+            <td class="nowrap">
+              <%= mail_to(contact.email, class: "small") if contact.email.present? %>
+              <%= outside_link(contact.linkedin_url, label: "LinkedIn") if contact.linkedin_url.present? %>
+            </td>
+            <td><%= safe_join(contact.applications.map { |application| link_to(application.posting.role_title, application_path(application)) }, ", ") %></td>
+            <td class="nowrap">
+              <details class="row-edit">
+                <summary class="btn small">Edit</summary>
+                <%= render "contacts/fields", url: company_contact_path(company, contact), contact: contact, submit: "Save" %>
+              </details>
+              <%= button_to "Delete", company_contact_path(company, contact), method: :delete, class: "btn small",
+                                      data: { turbo_confirm: "Delete #{contact.name}? Its links to applications go too; its activities stay, naming no one." } %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="muted small">None yet: the people you deal with here, a recruiter, a hiring manager, someone who referred you.</p>
+<% end %>
+<details class="add">
+  <summary class="btn small">Add a contact</summary>
+  <%= render "contacts/fields", url: company_contacts_path(company), contact: Contact.new(kind: "recruiter"), submit: "Add" %>
+</details>
