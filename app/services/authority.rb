@@ -104,6 +104,23 @@ module Authority
         Rule.new(model: "LlmCall", actions: %i[create], only_if: ->(call) { call.purpose == "review" })
       ]
     },
+    "contacts:write" => {
+      about: "Add a contact at a company, update one, or link one to an application at its company. Never delete one, " \
+             "nor move it to another company.",
+      rules: [
+        Rule.new(model: "Contact", actions: %i[create]),
+        Rule.new(model: "Contact", actions: %i[update], except: %w[company_id]),
+        Rule.new(model: "ApplicationContact", actions: %i[create])
+      ]
+    },
+    "activities:write" => {
+      about: "Log an activity on an application, as the activity logger: what happened, when, and with whom. Never an " \
+             "application's stage, nor an activity edited or deleted.",
+      rules: [
+        Rule.new(model: "Activity", actions: %i[create], only_if: ->(activity) { activity.logged_by == "agent:assistant" }),
+        Rule.new(model: "ApplicationContact", actions: %i[create]) # the contact an activity names, linked to its application
+      ]
+    },
     "review:keep" => {
       about: "Review items kept in step with the record: raised, restated, and closed when what was seen resolves. " \
              "Never decided.",
@@ -125,9 +142,10 @@ module Authority
     "agent:drafter" => { about: "Drafts cover letters and outreach notes, and reviews the resume against a role, from the " \
                                 "resume, the role's description and the profile, for the operator to edit, approve or read. " \
                                 "Sends nothing.", scopes: %w[drafts:write resume_reviews:write] },
-    "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server, one credential " \
-                                  "per save holding only that tool's scopes. Edits, approves, and sends nothing.",
-                           scopes: %w[drafts:write resume_reviews:write] }
+    "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
+                                  "contacts, activities), one credential per save holding only that tool's scopes. Approves, " \
+                                  "deletes, moves a stage, and sends nothing.",
+                           scopes: %w[drafts:write resume_reviews:write contacts:write activities:write] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.
