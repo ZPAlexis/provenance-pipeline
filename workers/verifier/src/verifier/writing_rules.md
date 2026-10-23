@@ -20,7 +20,7 @@ A cover letter: about 250 to 350 words, to the hiring team (no names are on reco
 
 ## outreach_note
 
-An outreach note: about 80 to 120 words, to a recruiter or hiring manager whose name isn't on record, opening "Hi [name]," (or the same in the language you write in) so they fill the name in. Name the role, give the one or two strongest matches, and ask simply for a short conversation.
+An outreach note: about 80 to 120 words, to a recruiter or hiring manager. When the request names the person it is for, open with their first name and fit it to their role: for a recruiter, how the role fits; for a hiring manager, the work itself. When it names no one, open "Hi [name]," (or the same in the language you write in) so they fill the name in. Name the role, give the one or two strongest matches, and ask simply for a short conversation.
 
 ## resume_review
 

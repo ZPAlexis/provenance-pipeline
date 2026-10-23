@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_23_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_23_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -182,8 +182,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000002) do
     t.string "reported_model"
     t.jsonb "tailoring", default: [], null: false
     t.uuid "revises_id"
+    t.uuid "contact_id"
     t.index ["application_id", "created_at"], name: "index_drafts_on_application_id_and_created_at"
     t.index ["application_id"], name: "index_drafts_on_application_id"
+    t.index ["contact_id"], name: "index_drafts_on_contact_id"
     t.index ["llm_call_id"], name: "index_drafts_on_llm_call_id"
     t.index ["resume_id"], name: "index_drafts_on_resume_id"
     t.index ["revises_id"], name: "index_drafts_on_revises_id"
@@ -366,6 +368,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000002) do
   add_foreign_key "check_runs", "postings", on_delete: :nullify
   add_foreign_key "contacts", "companies", on_delete: :cascade
   add_foreign_key "drafts", "applications", on_delete: :cascade
+  add_foreign_key "drafts", "contacts", on_delete: :nullify
   add_foreign_key "drafts", "drafts", column: "revises_id", on_delete: :nullify
   add_foreign_key "drafts", "llm_calls"
   add_foreign_key "drafts", "resumes", on_delete: :nullify

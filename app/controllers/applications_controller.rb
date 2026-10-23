@@ -16,7 +16,7 @@ class ApplicationsController < ApplicationController
 
   def show
     @timeline = Pipeline.timeline(@application)
-    @drafts = @application.drafts.includes(:llm_call, :revises, :resume, :role_description).newest_first.to_a
+    @drafts = @application.drafts.includes(:llm_call, :revises, :resume, :role_description, :contact).newest_first.to_a
     @reviews = @application.resume_reviews.includes(:resume, :role_description, :llm_call).newest_first.to_a
     @review_run = @application.posting.check_runs.where(kind: "review").newest_first.first
     @draft_run = @application.posting.check_runs.where(kind: "draft").newest_first.first

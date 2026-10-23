@@ -105,6 +105,25 @@ RSpec.describe Drafts do
                                                          guidance: "Stress the discovery work.", subject: "Sales Engineer")
     end
 
+    it "addresses an outreach note to one of the company's contacts: the drafter reads whom, the record keeps their id alone" do
+      ana = Contacts.save!(company, { name: "Ana Lima", role: "Technical Recruiter", kind: "recruiter" })
+      _, worker = write(drafted("draft_kind" => "outreach", "subject" => "Sales Engineer"), kind: "outreach", contact: ana)
+
+      expect(worker.asked[:targets].sole).to include(contact: { name: "Ana Lima", role: "Technical Recruiter", kind: "recruiter" })
+      draft = application.drafts.sole
+      expect(draft.contact).to eq(ana)
+      expect(draft_events.sole.changes_made).to include("contact_id" => [ nil, ana.id ])
+      expect(draft_events.sole.attributes.to_json).not_to include("Ana", "Lima")
+
+      bea = Contacts.save!(create(:company, :resolved, name: "Globex", domain: "globex.example"), { name: "Bea Souza" })
+      expect { write(kind: "cover_letter", contact: ana) }.to raise_error(ArgumentError, "only an outreach note is addressed to someone")
+      expect { write(kind: "outreach", contact: bea) }.to raise_error(ArgumentError, "Bea Souza is not a contact at Acme")
+      expect do
+        described_class.save!(application, kind: "outreach", language: "English", body: "Hi Bea.", resume_version: resume.version, contact: bea)
+      end.to raise_error(ActiveRecord::RecordInvalid, /Contact must be at the application's company/)
+      expect(Draft.count).to eq(1)
+    end
+
     it "keeps what a failed call cost, writes no draft, and says why" do
       written, = write(drafted("outcome" => "error", "reason" => "llm_refusal", "body" => nil, "llm" => llm("cost_usd" => 0.01)))
 

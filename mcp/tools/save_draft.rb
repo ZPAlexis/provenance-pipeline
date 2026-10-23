@@ -8,8 +8,9 @@ module ProvenanceMcp
       title "Save a draft"
       description "Saves a cover letter, an outreach note, or a tailored resume you wrote for an application, only when " \
                   "the operator asks you to save it. Give the resume_version from get_application_materials and cite " \
-                  "resume lines by their numbers. A polished version of a saved draft names it in `revises`: the earlier " \
-                  "one stays. The operator edits and approves it in the app; nothing is sent."
+                  "resume lines by their numbers; an outreach note to someone named gives their contact. A polished " \
+                  "version of a saved draft names it in `revises`: the earlier one stays. The operator edits and " \
+                  "approves it in the app; nothing is sent."
       scopes "drafts:write"
 
       LINES = { type: "array", items: { type: "integer" }, description: "Resume lines, by their numbers" }.freeze
@@ -21,6 +22,7 @@ module ProvenanceMcp
           language: { type: "string", description: "The language it is written in, named in English" },
           body: { type: "string", description: "The text: the letter, the note, or the whole tailored resume" },
           subject: { type: "string", description: "An outreach note's subject line" },
+          contact: { type: "string", description: "An outreach note's, when it is to someone named: their contact id, or name" },
           lines_drawn_on: {
             type: "array", description: "A letter's or note's: each resume line it relies on, with what in the role it answers",
             items: { type: "object", properties: { line: { type: "integer" }, answers: { type: "string" } }, required: %w[line answers] }
@@ -41,14 +43,15 @@ module ProvenanceMcp
       )
 
       class << self
-        def answer(application:, kind:, resume_version:, language:, body:, subject: nil, lines_drawn_on: [], changes: [], gaps: [],
-                   note: nil, revises: nil, model: nil)
+        def answer(application:, kind:, resume_version:, language:, body:, subject: nil, contact: nil, lines_drawn_on: [], changes: [],
+                   gaps: [], note: nil, revises: nil, model: nil)
           found = Lookup.application(application)
+          to = Lookup.contact(found.company, contact) if contact.to_s.strip.present?
           draft, summary = Drafts.save!(found, kind: kind == "outreach_note" ? "outreach" : kind, language: language, body: body,
-                                               resume_version: resume_version, subject: subject, lines_drawn_on: lines_drawn_on,
+                                               resume_version: resume_version, subject: subject, contact: to, lines_drawn_on: lines_drawn_on,
                                                changes: changes, gaps: gaps, note: note, revises: revises, reported_model: model,
                                                actor: ASSISTANT)
-          ProvenanceMcp.text("Saved for #{Writing.label(found)}: #{summary}",
+          ProvenanceMcp.text("Saved for #{Writing.label(found)}#{", to #{to.name}" if to}: #{summary}",
                              "Draft id #{draft.id}. The operator edits and approves it on the application's page in the app " \
                              "(/applications/#{found.id}#drafts); nothing is sent.")
         end

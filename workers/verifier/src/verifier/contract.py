@@ -402,6 +402,14 @@ class DescriptionResult(BaseModel):
 DraftKind = Literal["cover_letter", "outreach"]
 
 
+class DraftContact(BaseModel):
+    """The person an outreach note is for (Stage 2e): one of the company's contacts."""
+
+    name: str
+    role: str | None = None  # their role there
+    kind: str | None = None  # recruiter, hiring manager, referrer, interviewer, other
+
+
 class DraftTarget(BaseModel):
     """One draft to write (Stage 2c): an application's role, and what is on record for it."""
 
@@ -420,6 +428,7 @@ class DraftTarget(BaseModel):
     notes: str | None = None  # the operator's notes on the application
     guidance: str | None = None  # the operator's: anything to stress in this draft
     language: str | None = None  # None: the language the description is written in
+    contact: DraftContact | None = None  # an outreach note's person, when one is named (2e)
 
 
 class ResumeLine(BaseModel):

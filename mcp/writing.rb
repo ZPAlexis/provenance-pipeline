@@ -25,8 +25,9 @@ module ProvenanceMcp
         - Lines drawn on: each resume line it relies on, by its number in brackets, with what in the role it answers.
         - Gaps: what the role asks for that the resume doesn't show, each with what it shows instead, or that it shows nothing for it.
         - Note: one or two plain sentences on what it leads with, and anything to check or add before sending.
-        When I say to save it, save it with save_draft (kind outreach_note, with its subject), as it then stands, with the
-        resume version from the materials, the lines by their numbers, the gaps and the note.
+        When I say to save it, save it with save_draft (kind outreach_note, with its subject, and the contact's id when it is
+        to someone named), as it then stands, with the resume version from the materials, the lines by their numbers, the
+        gaps and the note.
       TEXT
       "resume_review" => <<~TEXT,
         Write it under four headings: Strengths, Gaps, Suggestions, Note.
@@ -50,8 +51,9 @@ module ProvenanceMcp
       end
     end
 
-    # The rules and the shape of the answer for one kind of writing, in the operator's voice (they are the one asking).
-    def instructions(kind, language: nil, stress: nil)
+    # The rules and the shape of the answer for one kind of writing, in the operator's voice (they are the one asking);
+    # an outreach note may be to one of the company's contacts (2e).
+    def instructions(kind, language: nil, stress: nil, to: nil)
       raise Refusal, "Writing is one of: #{KINDS.keys.join(', ')}." unless KINDS.key?(kind)
 
       language = language.to_s.strip.presence
@@ -61,6 +63,7 @@ module ProvenanceMcp
       else "Write it in the language the role's description is written in."
       end
       [ "Write #{KINDS.fetch(kind)}, for me to read and edit: nothing is sent from here. #{in_language}",
+        ("It is for the person between the <contact> markers below." if to),
         ("Stress this, as long as the resume shows it: #{stress.strip}" if stress.to_s.strip.present?),
         rules.fetch("grounding"), rules.fetch(kind),
         (rules.fetch("style") if kind.in?(%w[cover_letter outreach_note])),
@@ -69,11 +72,12 @@ module ProvenanceMcp
     end
 
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out.
-    FENCES = %w[role_description resume profile notes contacts review].freeze
+    FENCES = %w[role_description resume profile notes contacts contact review].freeze
 
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
-    # the newest resume numbered by line, the profile, the notes, and what is already written for it.
-    def materials(application)
+    # the newest resume numbered by line, the profile, the notes, its contacts, the one it is to (when the writing is to
+    # someone), and what is already written for it.
+    def materials(application, to: nil)
       role = application.posting
       description = role.role_descriptions.newest_first.first
       profile = SearchProfile.current
@@ -93,6 +97,8 @@ module ProvenanceMcp
                             "Work modes: #{profile.work_modes.join(', ').presence || '(any)'}" ].join("\n")) if profile),
         (fence("notes", application.notes) if application.notes.present?),
         contacts(application),
+        (fence("contact", [ "Name: #{to.name}", ("Role: #{to.role}" if to.role.present?), "Kind: #{to.kind_label.downcase}" ].compact.join("\n"),
+               id: to.id) if to),
         written(application) ].compact.join("\n\n")
     end
 
@@ -103,12 +109,12 @@ module ProvenanceMcp
 
     # What is written for it: its drafts (get_draft reads one in full), and its newest resume review in full.
     def written(application)
-      drafts = application.drafts.newest_first.to_a
+      drafts = application.drafts.includes(:contact).newest_first.to_a
       review = application.resume_reviews.newest_first.first
       return "Nothing is written for it yet." if drafts.empty? && review.nil?
 
       listed = drafts.map do |draft|
-        "- #{draft.label} in #{draft.language}, #{draft.words} words, #{draft.approved? ? 'approved' : 'a draft'}" \
+        "- #{draft.label}#{" to #{draft.contact.name}" if draft.contact} in #{draft.language}, #{draft.words} words, #{draft.approved? ? 'approved' : 'a draft'}" \
           "#{', edited' if draft.edited?}, written by #{draft.writer}, #{draft.created_at.utc.to_date}: draft id #{draft.id}"
       end
       [ ([ "Already written for it (get_draft reads one in full):", *listed ].join("\n") if listed.any?),

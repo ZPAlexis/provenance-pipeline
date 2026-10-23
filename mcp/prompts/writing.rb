@@ -1,8 +1,9 @@
 module ProvenanceMcp
   # The four kinds of writing about an application (2d), as prompts the operator picks in their client: each
   # carries the writing rules the in-app drafter keeps, and the application's materials, so the operator's own
-  # Claude client writes on their subscription. Nothing is sent; saving it back comes with 2d step 3. The base
-  # sits outside Prompts, so only the four below are served.
+  # Claude client writes on their subscription. Nothing is sent; the client saves it back when the operator says
+  # so. An outreach note may be to one of the company's contacts (2e). The base sits outside Prompts, so only the
+  # four below are served.
   class WritingPrompt < Prompt
     APPLICATION = MCP::Prompt::Argument.new(name: "application", title: "Application", required: true,
                                             description: "Its company and role (acme sales engineer), or its id")
@@ -10,15 +11,18 @@ module ProvenanceMcp
                                          description: "Optional: the language to write in (by default the role's, or the resume's)")
     STRESS = MCP::Prompt::Argument.new(name: "stress", title: "Anything to stress",
                                        description: "Optional: what to put first, as long as the resume shows it")
+    CONTACT = MCP::Prompt::Argument.new(name: "contact", title: "To",
+                                        description: "Optional: the contact at its company it is for, by name (by default it opens \"Hi [name],\")")
 
     class << self
       def kind(value = nil) = value ? (@kind = value) : @kind
 
-      # Unknown arguments a client sends are set aside.
-      def compose(application:, language: nil, stress: nil, **)
+      # Unknown arguments a client sends are set aside, and a contact for anything but an outreach note.
+      def compose(application:, language: nil, stress: nil, contact: nil, **)
         found = ProvenanceMcp::Lookup.application(application)
-        [ ProvenanceMcp::Writing.instructions(kind, language: language, stress: stress),
-          ProvenanceMcp::Writing.materials(found) ].join("\n\n---\n\n")
+        to = ProvenanceMcp::Lookup.contact(found.company, contact) if kind == "outreach_note" && contact.to_s.strip.present?
+        [ ProvenanceMcp::Writing.instructions(kind, language: language, stress: stress, to: to),
+          ProvenanceMcp::Writing.materials(found, to: to) ].join("\n\n---\n\n")
       end
     end
   end
@@ -35,8 +39,9 @@ module ProvenanceMcp
     class OutreachNote < WritingPrompt
       prompt_name "outreach_note"
       title "Outreach note"
-      description "A short note to a recruiter or hiring manager about an application, with a subject line."
-      arguments [ APPLICATION, LANGUAGE, STRESS ]
+      description "A short note to a recruiter or hiring manager about an application, with a subject line: to one of " \
+                  "its company's contacts, or opening \"Hi [name],\" for you to fill in."
+      arguments [ APPLICATION, CONTACT, LANGUAGE, STRESS ]
       kind "outreach_note"
     end
 
