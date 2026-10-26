@@ -126,15 +126,14 @@ module Verifier
     # A suggestion the operator's own Claude client proposed (2f step 3): the client's, not the profile's words.
     def proposed_by_client?(posting) = posting.fit.is_a?(Hash) && posting.fit["by"] == CLIENT
 
+    # A role a preview listed, by its key (the read it was listed in, and its place there): its company, that read,
+    # the listing, its own page, and how many roles the read listed.
+    Candidate = Data.define(:key, :company, :check, :listing, :url, :listed) do
+      def label = "#{company.name} / #{listing['title']}"
+    end
 
-    # A role on a watched page proposed by the operator's own Claude client (2f step 3), named by its key from a
-    # preview (the read it was listed in, and its place there): a suggestion as the suggester's are, marked as the
-    # client's, with its reason. Refused when the role is on record already, or the page was read again since. Under
-    # the caller's credential (postings:suggest).
-    def propose!(key, why:, profile: SearchProfile.current, actor: CLIENT)
-      why = why.to_s.strip
-      raise ArgumentError, "say why it fits, in a sentence or two" if why.empty? || why.size > 600
-
+    # The role a key names, refused when the key names none, the page was read again since, or the role is on record.
+    def candidate!(key)
       check_id, index = key.to_s.split(":", 2)
       check = PageCheck.includes(:company).find_by(id: check_id.to_s) if check_id.to_s.match?(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
       raise ArgumentError, "no role #{key.inspect}: find_roles gives each one's key" unless check
@@ -150,16 +149,31 @@ module Verifier
       on_record = url ? company.postings.find_by(job_url: url) : company.postings.find_by(role_title: listing["title"], location: listing["location"])
       raise ArgumentError, "#{listing['title']} at #{company.name} is on record already (#{on_record.tracking})" if on_record
 
-      posting = company.postings.create!(
-        role_title: listing["title"], location: listing["location"], job_url: url, tracking: "suggested",
+      Candidate.new(key: key.to_s, company: company, check: check, listing: listing, url: url, listed: listings.size)
+    end
+
+    # Why the client says a role may fit: a sentence or two, required.
+    def reason!(why)
+      why.to_s.strip.tap { |said| raise ArgumentError, "say why it fits, in a sentence or two" if said.empty? || said.size > 600 }
+    end
+
+    # A role on a watched page proposed by the operator's own Claude client (2f step 3), by its key or as a candidate
+    # already found: a suggestion as the suggester's are, marked as the client's, with its reason. Under the caller's
+    # credential (postings:suggest).
+    def propose!(key, why:, profile: SearchProfile.current, actor: CLIENT)
+      why = reason!(why)
+      found = key.is_a?(Candidate) ? key : candidate!(key)
+      listing, check = found.listing, found.check
+      posting = found.company.postings.create!(
+        role_title: listing["title"], location: listing["location"], job_url: found.url, tracking: "suggested",
         fit: { "by" => actor, "profile_id" => profile&.id, "title" => listing["title"], "reasoning" => why },
-        verification_state: "verified_live", last_checked_at: latest.checked_at, roles_listed_count: listings.size,
+        verification_state: "verified_live", last_checked_at: check.checked_at, roles_listed_count: found.listed,
         work_mode: (listing["work_mode"] unless listing["work_mode"].in?([ nil, "unknown" ]))
       )
       AuditEvent.record_write!(
         posting, actor: actor,
         reasoning: "Suggested by the operator's Claude client: #{why} Listed on its company's careers page when read at " \
-                   "#{latest.checked_at.utc.iso8601} (check #{latest.id}, run #{latest.run_id})."
+                   "#{check.checked_at.utc.iso8601} (check #{check.id}, run #{check.run_id})."
       )
       posting
     end

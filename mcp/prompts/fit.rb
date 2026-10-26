@@ -22,9 +22,10 @@ module ProvenanceMcp
                List the titles a role like mine goes by: my profile's, and other wordings of the same work, up to 20.
             2. Call find_roles with them. It lists roles not on record yet, as my companies' pages were last read.
             3. Judge from each title, place and level which may fit me; a shared word isn't a fit. Tell me which you would
-               suggest and why, and suggest them with suggest_roles when I say so (each with why, in a sentence).
-            4. Read their descriptions with read_descriptions, then weigh each with get_roles_to_weigh by the fit rules,
-               saving each with save_fit_score.
+               suggest and why, and suggest them with suggest_roles when I say so (each with why, in a sentence). The lists
+               are as last read: it reads each role's own page first and suggests only those still up, with their
+               descriptions. Tell me which were gone.
+            4. Weigh each one suggested with get_roles_to_weigh by the fit rules, saving each with save_fit_score.
             5. Give me what you weighed, best first, with each score and why in a line.
             Nothing here tracks a role or sends anything: I track the ones I want, in the app.
           TEXT

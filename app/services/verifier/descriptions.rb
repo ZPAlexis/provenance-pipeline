@@ -49,6 +49,35 @@ module Verifier
       reads
     end
 
+    # What `peek` read: each page's result by its id, and the run's id.
+    Peek = Data.define(:results, :run_id)
+
+    # What each of `pages` ({ id:, url:, label: }) says now, read as `read!` reads (free, never the LLM) but keeping
+    # nothing: for roles not on record yet (2f step 3), so the client suggests only the ones whose own page still has
+    # them. Each result goes through the contract; one that breaks it, or is missing, reads as an error.
+    def peek(pages, worker: Worker.new(run_dir: Worker.dir_for("describe")))
+      return Peek.new(results: {}, run_id: nil) if pages.empty?
+
+      run = worker.run(pages, command: "describe")
+      by_id = run.results.select { |result| result.is_a?(Hash) }.index_by { |result| result["target_id"] }
+      results = pages.to_h do |page|
+        result = by_id[page[:id]]
+        errors = result ? ResultContract.description_errors(result) : [ run.stopped ? "stopped: #{run.stopped}" : "no result written" ]
+        [ page[:id], errors.empty? ? result : { "outcome" => "error", "reason" => errors.join("; ") } ]
+      end
+      Peek.new(results: results, run_id: run.id)
+    end
+
+    # Descriptions `peek` read, kept for the roles now on record from them ([[posting, result]]), as `read!` keeps
+    # them: under the verifier's credential with evidence:write alone, issued by the operator.
+    def keep!(pairs, run_id:, purpose:, issued_by: AuditEvent::OPERATOR)
+      return [] if pairs.empty?
+
+      Authority.run(Ingest::ACTOR, scopes: SCOPES, purpose: purpose, ttl: pairs.one? ? Authority::ONE : Authority::BATCH, issued_by: issued_by) do
+        pairs.map { |posting, result| record(result.merge("target_id" => posting.id), { posting.id => posting }, run_id) }
+      end
+    end
+
     NO_PAGE = "No page of its own on record: add its link to read its description.".freeze
 
     # One result through the contract, then kept: a new version, or the same text seen again.

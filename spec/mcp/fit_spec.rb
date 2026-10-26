@@ -11,7 +11,7 @@ RSpec.describe "Finding and weighing roles through MCP" do
   let!(:resume) { Resumes.keep!(profile, text: "Jordan Sample\nSales engineer, eight years.\n- Ran discovery for 35 accounts a year.") }
   let!(:read) do
     create(:page_check, company: company, purpose: "verification", step: nil, url: company.careers_page_url, run_id: "20261026T100000Z-verify",
-                        checked_at: 1.day.ago, listings: [ listing("Customer Engineer", 1), listing("Recruiter", 2) ])
+                        checked_at: 1.day.ago, listings: [ listing("Customer Engineer", 1), listing("Recruiter", 2), listing("Solutions Consultant", 3) ])
   end
 
   def listing(title, number)
@@ -52,7 +52,8 @@ RSpec.describe "Finding and weighing roles through MCP" do
       expect(text).to start_with("2 roles not on record holding one of: Customer Engineer, Solutions Consultant; fitting the profile's " \
                                  "places (Brazil), work modes (remote)")
       expect(text).to include("- Customer Engineer at Acme · Brazil · remote: key #{read.id}:0",
-                              "- Solutions Consultant at Beta · Brazil · remote: key #{read.id}:3", "Propose the ones that may fit with suggest_roles")
+                              "- Solutions Consultant at Beta · Brazil · remote: key #{read.id}:3",
+                              "a role may have closed since", "it reads each one's own page first and suggests only those still up")
       expect(text).not_to include("- Sales Engineer at Acme")
     end
 
@@ -68,18 +69,52 @@ RSpec.describe "Finding and weighing roles through MCP" do
   end
 
   describe "suggest_roles, read_descriptions, get_roles_to_weigh and save_fit_score" do
-    it "suggests the roles named as the assistant's, each with why, and says which it couldn't" do
+    # Found by the operator, 2026-10-26: 10 of 13 roles suggested from lists read weeks before were gone by then.
+    it "reads each role's own page first, suggests only those still up with their descriptions kept, and says why not the rest" do
       taken = create(:posting, company: company, role_title: "Recruiter", job_url: "https://acme.example/jobs/2")
+      page = lambda do |number, **fields|
+        { "kind" => "description", "target_id" => "#{read.id}:#{number - 1}", "url" => "https://acme.example/jobs/#{number}", "outcome" => "ok",
+          "read_via" => "ats_api:greenhouse", "text" => "Discovery with enterprise buyers.",
+          "content_hash" => "sha256:#{Digest::SHA256.hexdigest('Discovery with enterprise buyers.')}", "checked_at" => "2026-10-26T12:00:00+00:00",
+          **fields }
+      end
+      asked = nil
+      allow(Verifier::Descriptions).to receive(:peek) do |pages|
+        asked = pages
+        Verifier::Descriptions::Peek.new(run_id: "20261026T120000Z-describe", results: {
+          "#{read.id}:0" => page.call(1),
+          "#{read.id}:2" => page.call(3, "outcome" => "gone", "reason" => "http_404", "text" => nil, "content_hash" => nil, "read_via" => nil)
+        })
+      end
 
       text = said(call(:SuggestRoles, roles: [ { key: "#{read.id}:0", why: "Customer engineering is sales engineering by another name." },
-                                               { key: "#{read.id}:1", why: "x" }, { key: "nonsense", why: "x" } ]))
+                                               { key: "#{read.id}:0", why: "The same one twice." },
+                                               { key: "#{read.id}:1", why: "x" }, { key: "#{read.id}:2", why: "Consulting on the same work." },
+                                               { key: "nonsense", why: "x" } ]))
 
+      expect(asked).to eq([ { id: "#{read.id}:0", url: "https://acme.example/jobs/1", label: "Acme / Customer Engineer" },
+                            { id: "#{read.id}:2", url: "https://acme.example/jobs/3", label: "Acme / Solutions Consultant" } ])
       suggested = company.postings.find_by!(role_title: "Customer Engineer")
       expect(suggested).to have_attributes(tracking: "suggested", fit: include("by" => "agent:assistant"))
-      expect(text).to include("Suggested 1 role, as yours", "- Customer Engineer at Acme: role id #{suggested.id}",
-                              "- #{read.id}:1: Recruiter at Acme is on record already (#{taken.tracking})", "read_descriptions: #{suggested.id}")
-      expect(AgentCredential.sole).to have_attributes(actor: "agent:assistant", scopes: %w[postings:suggest], status: "revoked")
-      expect(said(call(:SuggestRoles, roles: [ { key: "nonsense", why: "x" } ]))).to start_with("None suggested:")
+      expect(suggested.role_descriptions.sole).to have_attributes(text: "Discovery with enterprise buyers.", run_id: "20261026T120000Z-describe")
+      expect(company.postings.where(role_title: "Solutions Consultant")).to be_empty
+      expect(text).to include("Read 2 roles' own pages first (free): suggested 1 still up",
+                              "- Customer Engineer at Acme: role id #{suggested.id} (read: 4 words through Greenhouse's job API.)",
+                              "- Solutions Consultant at Acme: Its board or its page no longer has it (http_404). Its company's next check takes it off the list.",
+                              "- #{read.id}:1: Recruiter at Acme is on record already (#{taken.tracking})", "- nonsense: no role",
+                              "get_roles_to_weigh: #{suggested.id}")
+      expect(AgentCredential.order(:created_at).map { |credential| [ credential.actor, credential.scopes, credential.status ] })
+        .to eq([ [ "agent:assistant", %w[postings:suggest], "revoked" ], [ "agent:verifier", %w[evidence:write], "revoked" ] ])
+    end
+
+    it "suggests none when every page is gone, writing nothing" do
+      allow(Verifier::Descriptions).to receive(:peek).and_return(
+        Verifier::Descriptions::Peek.new(run_id: "r", results: { "#{read.id}:0" => { "outcome" => "inaccessible", "reason" => "http_403" } })
+      )
+
+      expect(said(call(:SuggestRoles, roles: [ { key: "#{read.id}:0", why: "x" } ])))
+        .to eq("None suggested:\n- Customer Engineer at Acme: Its page could not be read (http_403).")
+      expect([ Posting.count, AgentCredential.count ]).to eq([ 0, 0 ])
     end
 
     it "has the verifier read descriptions, under its own credential, nothing written as the client" do
@@ -140,7 +175,7 @@ RSpec.describe "Finding and weighing roles through MCP" do
       found = ProvenanceMcp::Prompts::FindRoles.template({ focus: "customer engineering" }).messages.sole.to_h.dig(:content, :text)
       weigh = ProvenanceMcp::Prompts::WeighRoles.template({ how_many: "3" }).messages.sole.to_h.dig(:content, :text)
 
-      expect(found).to include("judged by meaning", "find_roles", "suggest_roles", "read_descriptions", "save_fit_score",
+      expect(found).to include("judged by meaning", "find_roles", "suggest_roles", "reads each role's own page first", "save_fit_score",
                                "Look first for: customer engineering", "<profile>", "Titles they search for: Sales Engineer",
                                "Nothing here tracks a role")
       expect(weigh).to start_with("Weigh 3 of my roles that have no current fit score")
