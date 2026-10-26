@@ -31,7 +31,7 @@ namespace :applications do
     end
   end
 
-  desc "One application: its stage, the role's answer, notes, and its timeline. Usage: bin/rails \"applications:show[id]\""
+  desc "One application: its stage, the role's answer, notes, contacts, and its timeline. Usage: bin/rails \"applications:show[id]\""
   task :show, [ :id ] => :environment do |_task, args|
     application = Application.includes(:company, :posting).find_by(id: args[:id]) or abort "No application #{args[:id].inspect}: see applications:list."
     role = application.posting
@@ -40,9 +40,13 @@ namespace :applications do
          "the role: #{Posting::ANSWER_LABELS.fetch(role.verification_state, role.verification_state).downcase}"
     puts "  Pay expectation: #{application.comp_expectation}" if application.comp_expectation
     puts "  Notes: #{application.notes}" if application.notes
+    people = application.contacts.by_name.map { |person| "#{person.label}, #{person.kind_label.downcase}" }
+    puts "  Contacts: #{people.any? ? people.join('; ') : 'none linked'}"
     puts "\nTimeline"
     Pipeline.timeline(application).each do |entry|
-      what = entry.stage ? "#{entry.from ? "#{Application.stage_label(entry.from)} -> " : 'started at '}#{Application.stage_label(entry.stage)}" : entry.activity.kind
+      what = if entry.stage then "#{entry.from ? "#{Application.stage_label(entry.from)} -> " : 'started at '}#{Application.stage_label(entry.stage)}"
+      else "#{entry.activity.kind}#{" with #{entry.activity.contact.name}" if entry.activity.contact}"
+      end
       puts "  #{entry.on}  #{what}: #{entry.note}"
     end
   end
@@ -83,17 +87,21 @@ namespace :applications do
 
   desc "Log what happened on an application, audited as you; backs up first. " \
        "Usage: KIND=applied|email|call|interview|assessment|offer|note|other SUMMARY=\"...\" [ON=YYYY-MM-DD] " \
-       "bin/rails \"applications:log[id]\""
+       "[CONTACT=\"name or id\": with whom, linked to it] bin/rails \"applications:log[id]\""
   task :log, [ :id ] => :environment do |_task, args|
     application = Application.includes(:company, :posting).find_by(id: args[:id]) or abort "No application #{args[:id].inspect}: see applications:list."
     kind = ENV["KIND"].to_s
     abort "KIND is one of: #{Activity::KINDS.join(', ')}." unless Activity::KINDS.include?(kind)
     abort "Say what happened in SUMMARY=\"...\"." if ENV["SUMMARY"].blank?
     on = day.call
+    if ENV["CONTACT"].present?
+      contact = Contacts.named(application.company, ENV["CONTACT"]) or
+        abort "No contact #{ENV['CONTACT'].inspect} at #{application.company.name}: see contacts:list, or add one with contacts:add."
+    end
 
     puts "Backed up to #{DatabaseBackup.call}"
-    Pipeline.log!(application, kind: kind, summary: ENV["SUMMARY"], on: on)
-    puts "#{application.company.name} / #{application.posting.role_title}: #{kind} on #{on} logged"
+    Pipeline.log!(application, kind: kind, summary: ENV["SUMMARY"], on: on, contact: contact)
+    puts "#{application.company.name} / #{application.posting.role_title}: #{kind}#{" with #{contact.name}" if contact} on #{on} logged"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
   end

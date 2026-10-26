@@ -3,18 +3,19 @@ namespace :drafts do
   kind = lambda do
     ENV["KIND"].to_s.tap { |value| abort "KIND is one of: #{Draft::KINDS.join(', ')}." unless Draft::KINDS.include?(value) }
   end
-  find = ->(id) { Draft.includes(:llm_call, application: %i[company posting]).find_by(id: id) or abort "No draft #{id.inspect}: see drafts:list." }
+  find = ->(id) { Draft.includes(:llm_call, :contact, application: %i[company posting]).find_by(id: id) or abort "No draft #{id.inspect}: see drafts:list." }
   named = ->(application) { "#{application.company.name} / #{application.posting.role_title}" }
   dollars = ->(amount) { format("$%.3f", amount.to_f) }
 
   desc "Drafts, newest first, each with its id, where it stands and what it cost. [APPLICATION=id]"
   task list: :environment do
-    drafts = Draft.includes(:llm_call, application: %i[company posting]).newest_first
+    drafts = Draft.includes(:llm_call, :contact, application: %i[company posting]).newest_first
     drafts = drafts.where(application_id: ENV["APPLICATION"]) if ENV["APPLICATION"].present?
     abort "No draft yet: write one from an application's page, or with drafts:write." if drafts.empty?
 
     drafts.each do |draft|
-      puts "#{draft.id}  #{draft.created_at.to_date}  #{named.call(draft.application)}: #{draft.label.downcase} in #{draft.language}, " \
+      puts "#{draft.id}  #{draft.created_at.to_date}  #{named.call(draft.application)}: #{draft.label.downcase}" \
+           "#{" to #{draft.contact.name}" if draft.contact} in #{draft.language}, " \
            "#{draft.words} words, #{draft.approved? ? 'approved' : 'a draft'}#{', edited' if draft.edited?}" \
            "#{", #{dollars.call(draft.llm_call.cost_usd)}" if draft.llm_call}"
     end
@@ -24,7 +25,7 @@ namespace :drafts do
        "and what it was written from. Usage: bin/rails \"drafts:show[id]\""
   task :show, [ :id ] => :environment do |_task, args|
     draft = find.call(args[:id])
-    puts "#{draft.label} for #{named.call(draft.application)}, in #{draft.language}: " \
+    puts "#{draft.label} for #{named.call(draft.application)}#{", to #{draft.contact.label}" if draft.contact}, in #{draft.language}: " \
          "#{draft.approved? ? "approved #{draft.approved_at.to_date}" : 'a draft'}#{', edited by you' if draft.edited?}"
     puts "\nSubject: #{draft.subject}" if draft.subject
     puts "\n#{draft.body}"
@@ -54,14 +55,19 @@ namespace :drafts do
 
   desc "Write a draft for an application as the drafter, in the foreground: one Opus 5.5 call, about what drafts cost on " \
        "record. Backs up first; nothing is sent. " \
-       "Usage: KIND=cover_letter|outreach [LANGUAGE=Portuguese] [STRESS=\"...\"] bin/rails \"drafts:write[application_id]\""
+       "Usage: KIND=cover_letter|outreach [LANGUAGE=Portuguese] [STRESS=\"...\"] [CONTACT=\"name or id\": an outreach note's] " \
+       "bin/rails \"drafts:write[application_id]\""
   task :write, [ :id ] => :environment do |_task, args|
     application = Application.includes(:company, :posting).find_by(id: args[:id]) or abort "No application #{args[:id].inspect}: see applications:list."
-    asked = { kind: kind.call, language: ENV["LANGUAGE"].to_s.strip.presence, guidance: ENV["STRESS"].to_s.strip.presence }
+    if ENV["CONTACT"].present?
+      contact = Contacts.named(application.company, ENV["CONTACT"]) or
+        abort "No contact #{ENV['CONTACT'].inspect} at #{application.company.name}: see contacts:list."
+    end
+    asked = { kind: kind.call, language: ENV["LANGUAGE"].to_s.strip.presence, guidance: ENV["STRESS"].to_s.strip.presence, contact: contact }
     why = Drafts.refusal(application, **asked)
     abort "#{why.upcase_first}." if why
 
-    puts "Writing #{Draft::A_LABEL.fetch(asked[:kind])} for #{named.call(application)} with Opus 5.5: about " \
+    puts "Writing #{Draft::A_LABEL.fetch(asked[:kind])} for #{named.call(application)}#{" to #{contact.name}" if contact} with Opus 5.5: about " \
          "#{dollars.call(Drafts.estimate)}."
     puts "Backed up to #{DatabaseBackup.call}"
     written = Drafts.write!(application, **asked)
