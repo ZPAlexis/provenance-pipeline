@@ -32,6 +32,25 @@ RSpec.describe Verifier::Descriptions do
     [ described_class.read!(postings, purpose: "describe: #{role.role_title}", worker: worker), worker ]
   end
 
+  # For roles not on record yet (2f step 3): the client suggests only those whose own page still has them.
+  it "peeks at pages keeping nothing, then keeps a read for the role made from it, under the verifier's credential" do
+    pages = [ { id: "c1:0", url: "https://acme.example/jobs/9", label: "Acme / Customer Engineer" },
+              { id: "c1:1", url: "https://acme.example/jobs/10", label: "Acme / Recruiter" } ]
+    worker = worker_class.new([ described("Discovery with enterprise buyers.").merge("target_id" => "c1:0"), { "target_id" => "c1:9" } ])
+
+    peeked = nil
+    expect { peeked = described_class.peek(pages, worker: worker) }.not_to change { [ RoleDescription.count, AgentCredential.count, AuditEvent.count ] }
+    expect(worker.asked).to eq(command: "describe", targets: pages)
+    expect(peeked.results["c1:0"]).to include("outcome" => "ok", "text" => "Discovery with enterprise buyers.")
+    expect(peeked.results["c1:1"]).to eq("outcome" => "error", "reason" => "no result written")
+
+    reads = described_class.keep!([ [ role, peeked.results["c1:0"] ] ], run_id: peeked.run_id, purpose: "mcp: suggest_roles")
+    expect(reads.sole).to have_attributes(posting: role, outcome: "ok", new_version: true)
+    expect(role.role_descriptions.sole).to have_attributes(text: "Discovery with enterprise buyers.", run_id: peeked.run_id)
+    expect(AgentCredential.sole).to have_attributes(actor: "agent:verifier", scopes: %w[evidence:write], status: "revoked")
+    expect(described_class.peek([], worker: worker).results).to eq({})
+  end
+
   it "keeps a role's description as a version, read under the verifier's credential with evidence:write alone" do
     reads, worker = read(described("You will run technical discovery."))
 

@@ -33,7 +33,8 @@ module ProvenanceMcp
     To write a cover letter, an outreach note, a resume review or a tailored resume for an application, use this
     server's prompt of that name, or call get_writing_rules and get_application_materials first and keep the rules.
     To find roles that fit the person and weigh them against their resume, use the find_roles prompt (or weigh_roles
-    for roles already on record): find_roles, suggest_roles, read_descriptions, get_roles_to_weigh, save_fit_score.
+    for roles already on record): find_roles, suggest_roles (which reads each role's own page first and suggests only
+    those still up), get_roles_to_weigh, save_fit_score; read_descriptions reads a description a role on record lacks.
     Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score) save
     what you wrote, were told, or weighed back to the record: use them only when the person asks you to. Each save is
     recorded as yours, for them to edit, approve, dismiss or delete; nothing is ever sent, no tool tracks a role, and
@@ -194,7 +195,15 @@ module ProvenanceMcp
 
       def call(server_context: nil, **arguments)
         ProvenanceMcp.ready!
-        Authority.run(ASSISTANT, scopes: scopes, purpose: "mcp: #{tool_name}", ttl: Authority::ONE) { answer(**arguments) }
+        guarded { as_assistant { answer(**arguments) } }
+      end
+
+      # The tool's writes as agent:assistant, under a credential for this call holding the tool's scopes alone. A tool
+      # with work of its own around them (a read first) overrides `call` and wraps only its writes in this.
+      def as_assistant(&block) = Authority.run(ASSISTANT, scopes: scopes, purpose: "mcp: #{tool_name}", ttl: Authority::ONE, &block)
+
+      def guarded
+        yield
       rescue Refusal => e
         ProvenanceMcp.error(e.message)
       rescue ArgumentError, ActiveRecord::RecordInvalid => e # what the services refuse to save, said plainly

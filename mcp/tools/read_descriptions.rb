@@ -6,9 +6,10 @@ module ProvenanceMcp
     class ReadDescriptions < RunTool
       tool_name "read_descriptions"
       title "Read roles' descriptions"
-      description "Reads roles' descriptions from their own pages, by role id, so they can be weighed: free, through a " \
-                  "board's job API or the page rendered, never an AI. The app's verifier reads them, as the role page's " \
-                  "button does. A few seconds a role; up to 10 a call."
+      description "Reads the descriptions of roles on record (tracked ones, say) from their own pages, by role id, so they " \
+                  "can be weighed: free, through a board's job API or the page rendered, never an AI. The app's verifier " \
+                  "reads them, as the role page's button does. suggest_roles reads its suggestions' own. A few seconds a " \
+                  "role; up to 10 a call."
       MAX_ROLES = 10
       input_schema(
         properties: { roles: { type: "array", items: { type: "string" }, description: "Up to #{MAX_ROLES} role ids" } },
