@@ -69,6 +69,31 @@ RSpec.describe CheckRun do
     end
   end
 
+  describe "weighing roles' fit (2f)" do
+    include ActiveJob::TestHelper
+
+    let(:company) { create(:company, name: "Acme") }
+    let(:roles) { [ create(:posting, company: company, role_title: "Sales Engineer"), create(:posting, company: company, role_title: "SE II") ] }
+
+    it "is one role's, or a batch's with no company, one at a time, with what it could cost, and cut off after a batch's time" do
+      allow(FitScores).to receive(:estimate).and_return(0.007)
+
+      one = nil
+      expect { one = described_class.start_fit!(roles.first(1)) }.to have_enqueued_job(CheckNowJob)
+      expect(one).to have_attributes(kind: "fit", posting: roles.first, company: company, ceiling_usd: 0.007,
+                                     request: { "posting_ids" => [ roles.first.id ] }, target_name: "the fit of Sales Engineer at Acme")
+      expect(described_class.start_fit!(roles)).to eq(one) # one weighing at a time
+
+      one.update!(status: "done")
+      batch = described_class.start_fit!(roles)
+      expect(batch).to have_attributes(posting: nil, company: nil, ceiling_usd: 0.014, fit_size: 2, target_name: "the fit of 2 roles")
+
+      batch.update!(status: "running", updated_at: 2.hours.ago)
+      described_class.abandon_stale!
+      expect(batch.reload.status).to eq("running")
+    end
+  end
+
   it "names what it checks" do
     company = create(:company, name: "Acme")
     role = create(:posting, company: company, role_title: "RevOps Engineer")

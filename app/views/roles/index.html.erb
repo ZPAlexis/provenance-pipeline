@@ -4,12 +4,23 @@
     <h1>Roles</h1>
     <p class="sub">Every role is checked at the employer's own careers page. Only you track or dismiss one.</p>
   </div>
-  <% if @tab == "suggested" %>
-    <%= button_to "Find suggestions", suggestions_path, class: "btn",
-                  title: "Weigh every watched company's latest list against your search profile. Costs nothing.",
-                  data: { turbo_submits_with: "Weighing roles…" } %>
-  <% end %>
+  <div class="head-actions">
+    <% if @tab == "suggested" %>
+      <%= button_to "Find suggestions", suggestions_path, class: "btn",
+                    title: "Weigh every watched company's latest list against your search profile. Costs nothing.",
+                    data: { turbo_submits_with: "Weighing roles…" } %>
+    <% end %>
+    <% if @tab != "dismissed" && @unscored.any? && !@fit_run&.active? %>
+      <% to_read = FitScores.undescribed(@unscored).size %>
+      <%= button_to "Weigh #{pluralize(@unscored.size, 'unscored role')}", fit_scores_path, class: "btn",
+                    title: "Weigh each tracked or suggested role with no current score against your resume, from its description.",
+                    form: { data: { turbo_confirm: "Haiku 4.5 weighs #{pluralize(@unscored.size, 'role')} against your resume, one call each" \
+                                                   "#{", #{to_read} #{to_read == 1 ? 'description' : 'descriptions'} read first (free)" if to_read.positive?}: " \
+                                                   "about #{cost(FitScores.estimate * @unscored.size)}. It runs in the background. Weigh them?" } } %>
+    <% end %>
+  </div>
 </div>
+<%= render "check_runs/run", run: @fit_run, poll: false if @fit_run %>
 
 <details class="add" <%= "open" if params[:add] %>>
   <summary class="btn">Add a role</summary>
@@ -67,6 +78,20 @@
   <% end %>
 </nav>
 
+<% if @fits.any? || @fit %>
+  <nav class="filters" aria-label="Filter by fit">
+    <span class="muted small">Fit:</span>
+    <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, sort: @sort), class: [ "filter", ("current" if @fit.nil?) ] do %>
+      Any
+    <% end %>
+    <% RolesController::FITS.each do |key, label| %>
+      <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, fit: key, sort: @sort), class: [ "filter", ("current" if key == @fit) ] do %>
+        <%= label %> <span class="count"><%= @fit_counts.fetch(key, 0) %></span>
+      <% end %>
+    <% end %>
+  </nav>
+<% end %>
+
 <% if @roles.any? %>
   <% bulk = @tab != "dismissed" %>
   <%= tag.div(data: { controller: ("bulk" if bulk) }) do %>
@@ -79,8 +104,11 @@
         <%= form.submit "Dismiss selected", class: "btn small", disabled: true, data: { bulk_target: "submit" } %>
       <% end %>
     <% end %>
-    <%= render "table", roles: @roles, fit: @tab == "suggested", bulk: bulk %>
+    <%= render "table", roles: @roles, fit: @tab == "suggested", bulk: bulk, fits: @fits,
+                        sort: roles_path(tab: @tab, answer: @answer, q: @q, fit: @fit, sort: (@sort ? nil : "fit")), sorted: @sort %>
   <% end %>
+<% elsif @fit %>
+  <p class="empty">No <%= @tab %> role listed here is <%= RolesController::FITS.fetch(@fit).downcase %>.</p>
 <% elsif @q %>
   <p class="empty">No <%= @tab %> role<%= " #{answer_label(@answer).downcase}" if @answer %> matches “<%= @q %>”.</p>
 <% elsif @answer %>

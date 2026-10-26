@@ -14,6 +14,7 @@ Rails.application.routes.draw do
     end
     patch :dismiss_many, on: :collection
   end
+  resources :fit_scores, only: :create
   resources :applications, only: %i[index show create] do
     member do
       patch :move

@@ -26,7 +26,7 @@ namespace :fit do
     roles = roles.first(ENV["LIMIT"].to_i) if ENV["LIMIT"].present?
     why = FitScores.refusal(roles)
     abort(roles.empty? && args[:id].blank? ? "Every role offered has a current score: see fit:list." : "#{why.upcase_first}.") if why
-    weighable = roles.select { |role| role.job_url.present? || role.role_descriptions.exists? }
+    weighable = FitScores.weighable(roles)
     if weighable.empty?
       abort(args[:id].present? ? "#{named.call(roles.sole)} has no page of its own to read a description from." :
                                  "None of the #{WrittenFrom.counted(roles.size, 'role')} unscored has a page of its own to read a description from.")
@@ -53,20 +53,17 @@ namespace :fit do
   desc "Roles by how well they fit your resume, best first: each one's newest score, and whether it is stale. " \
        "[MIN=70] [LIMIT=n]"
   task list: :environment do
-    scores = FitScores.newest.values
-    abort "No role is weighed yet: see fit:score." if scores.empty?
+    postings = Posting.includes(:company, :application).where(id: FitScore.select(:posting_id)).index_by(&:id)
+    abort "No role is weighed yet: see fit:score." if postings.empty?
 
-    resume = SearchProfile.current&.resumes&.newest_first&.first
-    postings = Posting.includes(:company, :application).where(id: scores.map(&:posting_id)).index_by(&:id)
-    descriptions = RoleDescription.where(posting_id: postings.keys).newest_first.group_by(&:posting_id)
-    scores = scores.select { |score| score.score >= ENV["MIN"].to_i } if ENV["MIN"].present?
-    scores = scores.sort_by { |score| [ -score.score, postings[score.posting_id].role_title.downcase ] }
-    scores = scores.first(ENV["LIMIT"].to_i) if ENV["LIMIT"].present?
-    scores.each do |score|
-      posting = postings[score.posting_id]
-      stale = score.stale_for(resume, descriptions[posting.id]&.first)
-      puts "#{score.score.to_s.rjust(3)}  #{posting.id}  #{named.call(posting)} (#{posting.tracking}" \
-           "#{', applied' if posting.application})#{"  stale: #{stale.to_sentence} changed" if stale.any?}"
+    shown = FitScores.shown(postings.keys).values
+    shown = shown.select { |entry| entry.score.score >= ENV["MIN"].to_i } if ENV["MIN"].present?
+    shown = shown.sort_by { |entry| [ -entry.score.score, postings[entry.score.posting_id].role_title.downcase ] }
+    shown = shown.first(ENV["LIMIT"].to_i) if ENV["LIMIT"].present?
+    shown.each do |entry|
+      posting = postings[entry.score.posting_id]
+      puts "#{entry.score.score.to_s.rjust(3)}  #{posting.id}  #{named.call(posting)} (#{posting.tracking}" \
+           "#{', applied' if posting.application})#{"  stale: #{entry.stale.to_sentence} changed" if entry.stale?}"
     end
   end
 

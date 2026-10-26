@@ -50,6 +50,9 @@
 <h2>Description</h2>
 <%= render "roles/description", role: @role, descriptions: @descriptions, run: @describe_run %>
 
+<h2 id="fit">Fit</h2>
+<%= render "roles/fit", role: @role, fit: @fit, earlier: @earlier_fits, descriptions: @descriptions, run: @fit_run %>
+
 <h2>Is it still listed?</h2>
 <%= render "check_runs/panel", record: @role, run: @run %>
 

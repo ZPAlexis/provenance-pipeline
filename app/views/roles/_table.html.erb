@@ -6,6 +6,9 @@
           <th><input type="checkbox" aria-label="Select every role listed" data-bulk-target="all" data-action="bulk#all"></th>
         <% end %>
         <th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th>
+        <% if local_assigns[:fits] %>
+          <th><%= link_to "Fit#{' ↓' if local_assigns[:sorted]}", local_assigns[:sort], title: (local_assigns[:sorted] ? "Back to company order" : "Best fit first") %></th>
+        <% end %>
         <% if local_assigns[:fit] %><th>Why suggested</th><% else %><th>Own page</th><% end %>
         <th>Watch list</th>
       </tr>
@@ -22,6 +25,7 @@
           <td class="muted"><%= role.location %></td>
           <td><%= answer_badge(role.verification_state) %></td>
           <td><%= ago(role.last_checked_at) %></td>
+          <% if local_assigns[:fits] %><td><%= fit_cell(fits[role.id]) %></td><% end %>
           <% if local_assigns[:fit] %>
             <td class="reason"><%= fit_reasons(role) %></td>
           <% else %>

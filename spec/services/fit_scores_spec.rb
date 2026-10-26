@@ -93,7 +93,7 @@ RSpec.describe FitScores do
     expect(AgentCredential.sole).to have_attributes(purpose: "fit: 2 roles", scopes: %w[fit:write])
     expect(result).to have_attributes(finished?: true, cost_usd: 0.009, tally: { "weighed" => 1, "not weighed" => 2 },
                                       summary: "Weighed: 81 for Sales Engineer at Acme (1 match, 1 gap); 2 roles not weighed.")
-    expect(result.unweighed.to_h).to eq(third => "its description isn't read yet", other => "the AI could not weigh it (llm_refusal)")
+    expect(result.unweighed.to_h).to eq(third => "no description on record", other => "the AI could not weigh it (llm_refusal)")
     expect(LlmCall.where(purpose: "fit").count).to eq(2) # the failed call is billed all the same
   end
 

@@ -66,6 +66,26 @@ RSpec.describe CheckNowJob do
     expect(asked.reload).to have_attributes(status: "done", answer: "reviewed", summary: /3 strengths/, cost_usd: 0.056)
   end
 
+  it "weighs the fit of the roles a fit run names, reading the descriptions they lack first, and keeps what it cost" do
+    described = create(:posting, company: company, role_title: "Sales Engineer", job_url: "https://acme.example/jobs/1")
+    described.role_descriptions.create!(text: "Discovery.", content_hash: "h", read_via: "render", url: described.job_url, run_id: "r",
+                                        first_read_at: 1.day.ago, last_read_at: 1.day.ago)
+    unread = create(:posting, company: company, role_title: "SE II", job_url: "https://acme.example/jobs/2")
+    asked = create(:check_run, kind: "fit", company: nil, request: { "posting_ids" => [ described.id, unread.id ] })
+    weighed = FitScores::Weighed.new(scores: [ FitScore.new ], unweighed: [ [ unread, "no description on record" ] ],
+                                     summary: "Weighed: 72 for Sales Engineer at Acme (1 match, 1 gap); 1 role not weighed.",
+                                     cost_usd: 0.007, run_id: "20261026T120000Z-fit")
+    allow(Verifier::Descriptions).to receive(:read!).and_return([])
+    allow(FitScores).to receive(:weigh!).and_return(weighed)
+
+    described_class.perform_now(asked)
+
+    expect(Verifier::Descriptions).to have_received(:read!).with([ unread ], purpose: "fit: descriptions to weigh", issued_by: "human:operator")
+    expect(FitScores).to have_received(:weigh!).with(contain_exactly(described, unread), issued_by: "human:operator")
+    expect(asked.reload).to have_attributes(status: "done", answer: "weighed", cost_usd: 0.007, summary: /72 for Sales Engineer/,
+                                            tally: { "weighed" => 1, "not weighed" => 1 })
+  end
+
   it "writes a draft for a draft run, as it was asked, and keeps what it cost" do
     application = create(:application, posting: create(:posting, company: company))
     ana = Contacts.save!(company, { name: "Ana Lima", kind: "recruiter" })
