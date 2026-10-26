@@ -223,6 +223,37 @@ module Verifier
       errors
     end
 
+    # A fit score (2f): on ok, a score from 0 to 100, why, and its matches (each line with its text) and gaps.
+    def fit_score_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be fit" unless result["kind"] == "fit"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "unknown outcome #{result['outcome'].inspect}" unless %w[ok error].include?(result["outcome"])
+      errors.concat(llm_errors(result["llm"]).map { |error| "llm #{error}" }) if result["llm"]
+      errors << "llm purpose must be fit" if result["llm"].is_a?(Hash) && result["llm"]["purpose"] != "fit"
+      return errors unless result["outcome"] == "ok"
+
+      errors << "score must be a whole number from 0 to 100" unless result["score"].is_a?(Integer) && result["score"].between?(0, 100)
+      errors << "why is missing" unless result["why"].is_a?(String) && result["why"].strip.present?
+      errors << "level must be text or null" unless result["level"].nil? || result["level"].is_a?(String)
+      errors << "dropped_lines must be a count" unless count?(result["dropped_lines"])
+      matches, gaps = result["matches"], result["gaps"]
+      return errors << "matches and gaps must be lists" unless matches.is_a?(Array) && gaps.is_a?(Array)
+
+      matches.each_with_index do |match, index|
+        next if match.is_a?(Hash) && match["point"].is_a?(String) && match["lines"].is_a?(Array) &&
+                match["lines"].all? { |line| line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) }
+
+        errors << "match #{index + 1} must say its point and its lines with their text"
+      end
+      gaps.each_with_index do |gap, index|
+        errors << "gap #{index + 1} must say what the role asks and a note" unless gap.is_a?(Hash) && %w[asks note].all? { |key| gap[key].is_a?(String) }
+      end
+      errors
+    end
+
     RULED_OUT = %w[excluded level place work_mode].freeze
     FIT_NOTES = %w[work_mode_not_stated place_not_stated level_not_stated].freeze
     WORK_MODES = [ *SearchProfile::WORK_MODES, "unknown" ].freeze

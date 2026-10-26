@@ -14,6 +14,7 @@ uv run verifier describe --targets roles.json --out results.jsonl   # read roles
 uv run verifier related --targets profile.json --out results.jsonl   # propose titles in the same area as a profile's (one LLM call)
 uv run verifier draft   --targets drafts.json --out results.jsonl    # write a cover letter or outreach note (one LLM call, never sent)
 uv run verifier review  --targets reviews.json --out results.jsonl   # review the resume against a role (one LLM call)
+uv run verifier fit     --targets roles.json --out results.jsonl     # weigh roles against the resume, 0 to 100 (one LLM call each)
 ```
 
 Every command takes `--model` (default `claude-haiku-4-5`; `claude-opus-5-5` for `draft` and `review`) and `--delay` (seconds between requests to one host, default 5). `verify`, `check`, and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards`, `suggest` and `describe` never call the LLM. The browser and the LLM client are imported only by the commands that use them: from a checkout under `/mnt` in WSL the LLM client alone takes about 15 seconds to import, and `suggest` starts in about one. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
@@ -99,6 +100,10 @@ The resume's non-blank lines are numbered in the prompt, and the draft names the
 
 `review` takes the same record and returns a review of the resume against the role, for the operator: strengths with the lines that show them, gaps, suggestions naming the lines they touch, and a note, each line cited by number and mapped back as `draft` maps them. Its system prompt is built from the same `writing_rules.md` (grounding, and the resume review's own section), with the same model, effort and limit; an answer with nothing in it is an `error` that keeps what it cost.
 
+## Weighing a role's fit
+
+`fit` takes one role per target: its title, company and place, its description as its own page states it, the resume, and the titles the operator searches for. It fetches nothing and makes one structured-output call per role with the default model, Haiku 4.5 (the operator's choice; no effort setting, and 4k `max_tokens` bounds its worst case at 2 cents, where one costs under a cent). Its rules are the shared grounding rule and the `fit` section of [`writing_rules.md`](src/verifier/writing_rules.md), which anchors the 0-100 scale: 85 and up for every must-have at the level asked, down to under 25 for another field. The result carries the score, the level the role asks beside the resume's, the strongest matches with the resume lines behind them (mapped back and dropped as `draft`'s are), the gaps, and one line why. A score outside 0-100, an empty why, a refusal or a cut-off is an `error` that keeps what it cost.
+
 ## Paying for a read only when something may have changed
 
 Claude's reading of rendered pages is nearly all of a run's cost, so verification avoids it in two ways, both decided by free signals:
@@ -108,7 +113,7 @@ Claude's reading of rendered pages is nearly all of a run's cost, so verificatio
 
 ## Code map
 
-`cli` runs a command over its targets; the orchestrators do one job each: `resolve` (finding the careers page), `verify` (reading it in full and matching), `check` (one role now), `describe` (a role's description), `draft` (a cover letter or outreach note), `related` (titles near a profile's), `boards` (the board search), `match` (posting against listings), `profiles` (which stored roles fit a search profile, and why). Under them: `pipeline` (one page read: robots, render, ATS API, extraction, reuse), `render`, `extract` (the LLM steps), `ats` (vendors, their APIs, whose board a board is), `robots`, `politeness`. `contract` is the boundary with Rails; `config` holds the model, limits, and delays; `errors` holds why a whole run stops early.
+`cli` runs a command over its targets; the orchestrators do one job each: `resolve` (finding the careers page), `verify` (reading it in full and matching), `check` (one role now), `describe` (a role's description), `draft` (a cover letter or outreach note), `review` (the resume against a role), `fit` (a role weighed against the resume), `related` (titles near a profile's), `boards` (the board search), `match` (posting against listings), `profiles` (which stored roles fit a search profile, and why). Under them: `pipeline` (one page read: robots, render, ATS API, extraction, reuse), `render`, `extract` (the LLM steps), `ats` (vendors, their APIs, whose board a board is), `robots`, `politeness`. `contract` is the boundary with Rails; `config` holds the model, limits, and delays; `errors` holds why a whole run stops early.
 
 **Helpers several modules share live in a neutral module, never inside an orchestrator:** `titles` (what a title is, word by word, and the level of experience it states: matching, board overlap, check now, and search profiles share one meaning of a title), `links` (whether two addresses name the same role or page), and `places` (what a location names, and whether a role there is open to where someone can work: a role in São Paulo, or open to Latin America, is open to Brazil). A change there changes every caller on purpose.
 

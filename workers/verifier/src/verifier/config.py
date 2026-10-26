@@ -49,6 +49,10 @@ MODEL_SETTINGS: dict[str, dict] = {
 DRAFT_MODEL = "claude-opus-5-5"
 DRAFT_MAX_OUTPUT_TOKENS = 16_000
 
+# A fit score (Stage 2f) is weighed by DEFAULT_MODEL, the operator's choice: a short structured answer, so this
+# bounds its worst case at 2 cents of Haiku output, where one takes well under a thousand tokens.
+FIT_MAX_OUTPUT_TOKENS = 4_000
+
 # USD per million tokens (input, output), from the API reference as cached
 # 2026-06-24 (Opus 5.5: 2026-10-19). Used only to estimate what a run cost.
 PRICES_PER_MTOK: dict[str, tuple[float, float]] = {

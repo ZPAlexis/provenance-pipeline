@@ -162,6 +162,31 @@ RSpec.describe Verifier::ResultContract do
     end
   end
 
+  describe ".fit_score_errors" do
+    def weighed(**overrides)
+      { "kind" => "fit", "target_id" => "p1", "outcome" => "ok", "score" => 72, "level" => "Mid-level", "why" => "Close.",
+        "dropped_lines" => 0, "matches" => [ { "point" => "Discovery", "lines" => [ { "line" => 3, "text" => "Ran discovery." } ] } ],
+        "gaps" => [ { "asks" => "Spanish", "note" => "None." } ],
+        "llm" => { "model" => "claude-haiku-4-5", "purpose" => "fit", "prompt_version" => "f1", "input_tokens" => 1,
+                   "output_tokens" => 1, "cost_usd" => 0.01 }, **overrides }
+    end
+
+    it "accepts a score from 0 to 100 whose matches carry their lines with their text" do
+      expect(described_class.fit_score_errors(weighed)).to be_empty
+      expect(described_class.fit_score_errors(weighed("level" => nil, "score" => 0))).to be_empty
+      expect(described_class.fit_score_errors(weighed("outcome" => "error", "reason" => "llm_refusal", "score" => nil))).to be_empty
+    end
+
+    it "refuses a score out of range or not whole, no why, a line that isn't one, or a call for another purpose" do
+      errors = described_class.fit_score_errors(weighed("score" => 101, "why" => " ", "matches" => [ { "point" => "x", "lines" => [ 3 ] } ],
+                                                        "llm" => weighed["llm"].merge("purpose" => "review")))
+      expect(errors).to eq([ "llm purpose must be fit", "score must be a whole number from 0 to 100", "why is missing",
+                             "match 1 must say its point and its lines with their text" ])
+      expect(described_class.fit_score_errors(weighed("score" => 71.5))).to include("score must be a whole number from 0 to 100")
+      expect(described_class.fit_score_errors(weighed("gaps" => "none"))).to include("matches and gaps must be lists")
+    end
+  end
+
   describe ".draft_errors" do
     def draft(**overrides)
       { "kind" => "draft", "target_id" => "a1", "draft_kind" => "cover_letter", "outcome" => "ok", "language" => "English",

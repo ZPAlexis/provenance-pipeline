@@ -52,7 +52,7 @@ class Listing(BaseModel):
 class LlmUsage(BaseModel):
     model: str  # the model the API reports having served
     settings: dict = Field(default_factory=dict)  # request settings, e.g. effort
-    purpose: Literal["extract", "resolve", "match", "relate", "draft", "review"] = "extract"
+    purpose: Literal["extract", "resolve", "match", "relate", "draft", "review", "fit"] = "extract"
     # A hash over the system prompt, output schema, and limits that produced this call.
     prompt_version: str = ""
     input_tokens: int = 0
@@ -516,6 +516,42 @@ class ReviewResult(BaseModel):
     gaps: list[Gap] = Field(default_factory=list)
     suggestions: list[ReviewSuggestion] = Field(default_factory=list)
     note: str | None = None
+    dropped_lines: int = 0  # line numbers it named that the resume doesn't have
+    llm: LlmUsage | None = None
+    duration_ms: int = 0
+
+
+class FitTarget(BaseModel):
+    """One role to weigh against the resume (Stage 2f): its description as its own page states it."""
+
+    id: str  # the posting's
+    label: str | None = None  # for progress output only
+    role_title: str
+    company: str
+    location: str | None = None
+    description: str
+    resume: str
+    titles: list[str] = Field(default_factory=list)  # the titles the person searches for: the field they work in
+
+
+class FitResult(BaseModel):
+    """How well one role fits the resume, for the operator to rank roles by: advice, never a claim.
+
+    ok     weighed: a score from 0 to 100, the level asked beside the resume's, the strongest matches with the resume
+           lines behind them, the gaps, and why
+    error  the call failed or its answer was unusable: `reason` says which
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["fit"] = "fit"
+    target_id: str
+    outcome: Literal["ok", "error"] = "ok"
+    reason: str | None = None
+    score: int | None = None
+    level: str | None = None
+    matches: list[ReviewPoint] = Field(default_factory=list)
+    gaps: list[Gap] = Field(default_factory=list)
+    why: str | None = None
     dropped_lines: int = 0  # line numbers it named that the resume doesn't have
     llm: LlmUsage | None = None
     duration_ms: int = 0

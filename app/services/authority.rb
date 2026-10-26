@@ -104,6 +104,14 @@ module Authority
         Rule.new(model: "LlmCall", actions: %i[create], only_if: ->(call) { call.purpose == "review" })
       ]
     },
+    "fit:write" => {
+      about: "Save how well a role fits the resume, weighed from its own description, and the LLM call that weighed it. " \
+             "Never track, dismiss or touch a role, nor edit or delete a score.",
+      rules: [
+        Rule.new(model: "FitScore", actions: %i[create]),
+        Rule.new(model: "LlmCall", actions: %i[create], only_if: ->(call) { call.purpose == "fit" })
+      ]
+    },
     "contacts:write" => {
       about: "Add a contact at a company, update one, or link one to an application at its company. Never delete one, " \
              "nor move it to another company.",
@@ -142,6 +150,9 @@ module Authority
     "agent:drafter" => { about: "Drafts cover letters and outreach notes, and reviews the resume against a role, from the " \
                                 "resume, the role's description and the profile, for the operator to edit, approve or read. " \
                                 "Sends nothing.", scopes: %w[drafts:write resume_reviews:write] },
+    "agent:fit_scorer" => { about: "Weighs roles against the resume, from each role's own description, with a score from 0 to " \
+                                   "100 and why, for the operator to rank roles by. Tracks, dismisses and sends nothing.",
+                            scopes: %w[fit:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
                                   "contacts, activities), one credential per save holding only that tool's scopes. Approves, " \
                                   "deletes, moves a stage, and sends nothing.",
