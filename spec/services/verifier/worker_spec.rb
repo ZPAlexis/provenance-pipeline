@@ -27,6 +27,14 @@ RSpec.describe Verifier::Worker do
 
   def fake_process(**options) = fake_process_class.new(**options)
 
+  # Found 2026-10-26: `fit` was added to the worker but not here, and every spec used a stand-in worker, so the first
+  # real run was refused. The commands Rails may run are the worker's own, read from its CLI.
+  it "knows every command the worker's CLI has, and no other" do
+    cli = Rails.root.join("workers/verifier/src/verifier/cli.py").read
+
+    expect(described_class::COMMANDS).to match_array(cli.scan(/add_parser\(\s*"(\w+)"/).flatten)
+  end
+
   let(:dir) { Pathname.new(Dir.mktmpdir) }
   let(:credential_file) { dir.join("anthropic.env") }
   let(:targets) { [ { id: "c1", url: "https://acme.example/careers", label: "Acme" } ] }
