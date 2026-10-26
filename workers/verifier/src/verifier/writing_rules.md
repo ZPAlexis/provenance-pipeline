@@ -1,8 +1,9 @@
 # Writing rules
 
-The rules every piece of writing about an application keeps, in one place: the worker's `draft` and `review` commands
-build their system prompts from them (a change here changes their prompt versions), and the MCP server's prompts hand
-them to the operator's own Claude client. Each section below is read by its heading; its text is used as written.
+The rules every piece of writing about an application keeps, in one place, and how a role's fit is weighed: the
+worker's `draft`, `review` and `fit` commands build their system prompts from them (a change to a section changes the
+prompt version of each command that uses it), and the MCP server's prompts hand them to the operator's own Claude client.
+Each section below is read by its heading; its text is used as written.
 
 ## grounding
 
@@ -37,3 +38,17 @@ A tailored resume is the person's resume rewritten for this role: reordered, tri
 - Cut what doesn't serve this role before what does; keep the contact details and every job's dates.
 - Keep the resume's own format: plain text or Markdown, as it came.
 - After it, list what changed and why (moved, cut, reworded), each naming the original lines by their numbers, then the gaps.
+
+## fit
+
+A fit score weighs one role against the resume, so the person can see which roles to apply to first. It is advice for them, and claims nothing for them. Weigh the work and the level the role asks for; where the role is and how it is worked are weighed elsewhere.
+- Score: a whole number from 0 to 100, by how much of what the role asks the resume shows, its must-haves weighing most:
+  - 85 to 100: every must-have, at the level the role asks, and most of what it prefers.
+  - 70 to 84: the must-haves, with gaps only in what it prefers, or a level one step off.
+  - 50 to 69: a stretch: the core of the work, with one must-have missing or a level two steps off.
+  - 25 to 49: some of the work, with several must-haves missing, or another field's role that overlaps.
+  - 0 to 24: another field or level altogether.
+- Level: the seniority the role asks (its title, years, scope), set beside what the resume shows, in a few words.
+- Matches: the two to four strongest things the role asks that the resume shows, each with the resume lines that show it, by their numbers in brackets.
+- Gaps: what the role asks for that the resume doesn't show, its must-haves first.
+- Why: one plain sentence that explains the score.

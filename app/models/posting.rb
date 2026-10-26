@@ -6,6 +6,7 @@ class Posting < ApplicationRecord
   has_one :application, dependent: :restrict_with_exception
   # What its own page says it is, version by version (Stage 2b); they go with a withdrawn suggestion (the key cascades).
   has_many :role_descriptions, dependent: nil
+  has_many :fit_scores, dependent: nil # removed with it by the database (2f)
   # No `dependent:` on purpose. The audit trail outlives the records it
   # describes: when a record is deleted its events keep target_type and
   # target_id, so its whole history stays queryable by id and no audit event is

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_23_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_26_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -190,6 +190,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000003) do
     t.index ["resume_id"], name: "index_drafts_on_resume_id"
     t.index ["revises_id"], name: "index_drafts_on_revises_id"
     t.index ["role_description_id"], name: "index_drafts_on_role_description_id"
+  end
+
+  create_table "fit_scores", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "posting_id", null: false
+    t.integer "score", null: false
+    t.string "level"
+    t.jsonb "matches", default: [], null: false
+    t.jsonb "gaps", default: [], null: false
+    t.text "why", null: false
+    t.integer "dropped_lines", default: 0, null: false
+    t.uuid "resume_id"
+    t.string "resume_hash", null: false
+    t.uuid "role_description_id"
+    t.string "description_hash", null: false
+    t.string "written_by", null: false
+    t.string "reported_model"
+    t.uuid "llm_call_id"
+    t.string "run_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["llm_call_id"], name: "index_fit_scores_on_llm_call_id"
+    t.index ["posting_id", "created_at"], name: "index_fit_scores_on_posting_id_and_created_at"
+    t.index ["posting_id"], name: "index_fit_scores_on_posting_id"
+    t.index ["resume_id"], name: "index_fit_scores_on_resume_id"
+    t.index ["role_description_id"], name: "index_fit_scores_on_role_description_id"
+    t.check_constraint "score >= 0 AND score <= 100", name: "fit_scores_score_range"
   end
 
   create_table "llm_calls", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -373,6 +399,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_23_000003) do
   add_foreign_key "drafts", "llm_calls"
   add_foreign_key "drafts", "resumes", on_delete: :nullify
   add_foreign_key "drafts", "role_descriptions", on_delete: :nullify
+  add_foreign_key "fit_scores", "llm_calls"
+  add_foreign_key "fit_scores", "postings", on_delete: :cascade
+  add_foreign_key "fit_scores", "resumes", on_delete: :nullify
+  add_foreign_key "fit_scores", "role_descriptions", on_delete: :nullify
   add_foreign_key "llm_calls", "page_checks"
   add_foreign_key "page_checks", "companies"
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify

@@ -24,6 +24,8 @@ draft    writes a cover letter or an outreach note from what is on record (the
          Nothing is fetched, and nothing is ever sent.
 review   reviews the resume against an application's role, from the same record:
          one ReviewResult per target, one LLM call each, with the draft's model.
+fit      weighs each role against the resume, from its description and the
+         resume: one FitResult per role, one LLM call each, with the default model.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -58,6 +60,8 @@ from verifier.contract import (
     DescriptionResult,
     DraftResult,
     DraftTarget,
+    FitResult,
+    FitTarget,
     MatchResult,
     MatchTarget,
     PageResult,
@@ -88,6 +92,20 @@ EXIT_OK, EXIT_BAD_INPUT, EXIT_CREDIT, EXIT_CREDENTIAL, EXIT_LLM_UNAVAILABLE = 0,
 _OUTAGE = re.compile(r"^llm_(http_5\d\d|connection_error|rate_limited)$")
 OUTAGE_LIMIT = 3
 
+# The results that read no page: what they cost is their own call's, and they carry their own reason.
+_NO_PAGES = (
+    MatchResult,
+    BoardResult,
+    SuggestionResult,
+    RelatedResult,
+    DescriptionResult,
+    DraftResult,
+    ReviewResult,
+    FitResult,
+)
+_OWN_CALL = (MatchResult, RelatedResult, DraftResult, ReviewResult, FitResult)
+_OWN_REASON = (MatchResult, VerificationResult, RelatedResult, DescriptionResult, DraftResult, ReviewResult, FitResult)
+
 Result = (
     PageResult
     | ResolutionResult
@@ -99,6 +117,7 @@ Result = (
     | DescriptionResult
     | DraftResult
     | ReviewResult
+    | FitResult
 )
 
 
@@ -235,6 +254,15 @@ def run_review(targets: list[ReviewTarget], out_path: Path, reviewer, log=sys.st
     return _run(targets, out_path, lambda target: review(target, reviewer), failed, log)
 
 
+def run_fit(targets: list[FitTarget], out_path: Path, weigher, log=sys.stderr) -> RunSummary:
+    from verifier.fit import fit
+
+    def failed(target: FitTarget, reason: str) -> FitResult:
+        return FitResult(target_id=target.id, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: fit(target, weigher), failed, log)
+
+
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
     summary = RunSummary()
     outage_streak = 0
@@ -268,32 +296,19 @@ def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -
 
 
 def _pages(result: Result) -> list[PageResult]:
-    if isinstance(
-        result,
-        MatchResult | BoardResult | SuggestionResult | RelatedResult | DescriptionResult | DraftResult | ReviewResult,
-    ):
+    if isinstance(result, _NO_PAGES):
         return []
     return result.checks if isinstance(result, ResolutionResult | VerificationResult) else [result]
 
 
 def _usages(result: Result) -> list:
     usages = [page.llm for page in _pages(result) if page.llm]
-    extra = (
-        result.llm
-        if isinstance(result, MatchResult | RelatedResult | DraftResult | ReviewResult)
-        else getattr(result, "match_llm", None)
-    )
+    extra = result.llm if isinstance(result, _OWN_CALL) else getattr(result, "match_llm", None)
     return usages + [extra] if extra else usages
 
 
 def _reasons(result: Result) -> list[str | None]:
-    own = (
-        [result.reason]
-        if isinstance(
-            result, MatchResult | VerificationResult | RelatedResult | DescriptionResult | DraftResult | ReviewResult
-        )
-        else []
-    )
+    own = [result.reason] if isinstance(result, _OWN_REASON) else []
     return [page.reason for page in _pages(result)] + own
 
 
@@ -317,6 +332,11 @@ def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, resu
             return f"{target.label or target.id}: error, {result.reason} {timing}"
         said = f"{len(result.strengths)} strengths, {len(result.gaps)} gaps, {len(result.suggestions)} suggestions"
         return f"{target.label or target.id}: review in {result.language}, {said} {timing}"
+    if isinstance(result, FitResult):
+        if result.outcome != "ok":
+            return f"{target.label or target.id}: error, {result.reason} {timing}"
+        weighed = f"fit {result.score}, {len(result.matches)} matches, {len(result.gaps)} gaps"
+        return f"{target.label or target.id}: {weighed} {timing}"
     if isinstance(result, SuggestionResult):
         if result.outcome != "ok":
             return f"{target.label or target.id}: {result.outcome}, {result.reason} {timing}"
@@ -373,6 +393,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     commands.add_parser("draft", parents=[common], help="write cover letters and outreach notes; never sends them")
     commands.add_parser("review", parents=[common], help="review the resume against an application's role")
+    commands.add_parser("fit", parents=[common], help="weigh roles against the resume, from their descriptions")
     args = parser.parse_args(argv)
     llm_model = args.model or (DRAFT_MODEL if args.command in ("draft", "review") else DEFAULT_MODEL)
 
@@ -387,6 +408,7 @@ def main(argv: list[str] | None = None) -> int:
         "describe": DescribeTarget,
         "draft": DraftTarget,
         "review": ReviewTarget,
+        "fit": FitTarget,
     }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
@@ -417,6 +439,14 @@ def main(argv: list[str] | None = None) -> int:
 
         summary = run_review(targets, args.out, LlmReviewer(model=llm_model))
         print(f"\n{summary.targets}/{len(targets)} reviews, est. ${summary.cost_usd:.4f}", file=sys.stderr)
+        return _exit_code(summary)
+
+    if args.command == "fit":
+        # Nothing is fetched: one LLM call per role, from what Rails sent.
+        from verifier.fit import LlmWeigher
+
+        summary = run_fit(targets, args.out, LlmWeigher(model=llm_model))
+        print(f"\n{summary.targets}/{len(targets)} roles weighed, est. ${summary.cost_usd:.4f}", file=sys.stderr)
         return _exit_code(summary)
 
     from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher, LlmTitleProposer

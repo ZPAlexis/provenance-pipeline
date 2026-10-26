@@ -4,7 +4,7 @@
 
 The CRM half is deliberately minimal. The point of this system is the governance layer around what agents are allowed to do — the data model exists to make that layer meaningful.
 
-> **Status: Stage 1 complete; Stage 2 under way.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Stage 2 has begun with the pipeline itself: an application per role, moved through its stages by the operator alone (no agent scope allows it, and an agent that tries is refused on the record), with what happened along the way. Each role's description is read from its own page, free and never by the LLM, and kept version by version; the operator's resume is held with the profile, in the database only. A draft agent writes cover letters and outreach notes from them, claiming only what the resume shows and flagging what the role asks that it doesn't; the operator edits and approves each one, and nothing is ever sent; it also reviews the resume against a role. The same writing, and a resume tailored to each application, can come from the operator's own Claude client on their subscription, through an MCP server that reads the record and saves what the client writes back under a credential per save. The people the operator deals with are kept as contacts at each company, linked to its applications: an outreach note can be addressed to one, and the client can add a contact and log what happened when told, but never move an application. Next: fit scoring and a review agent. See [Build stages](#build-stages).
+> **Status: Stage 1 complete; Stage 2 under way.** The verifier finds each watched company's careers page, reads it in full, and records a verdict on every tracked posting through one audited write path; a repeat run pays the LLM only for pages whose roles may have changed. From the operator's pages any role or company can be checked now, a company or a role found elsewhere is added by its link, and a search profile has an agent of its own suggest the roles on watched pages that fit it, at no cost; only the operator tracks one. What an agent can't settle (a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone) waits in a review queue, with what was seen, for the operator to decide. Every agent write is checked against a credential issued for its run, with only the scopes that run needs; a write no scope allows is refused, and the refusal is on the record. Everything watched is checked at once from the dashboard, and a what-changed view reports what each check found, including lists that changed so much they may be another page now. Stage 2 has begun with the pipeline itself: an application per role, moved through its stages by the operator alone (no agent scope allows it, and an agent that tries is refused on the record), with what happened along the way. Each role's description is read from its own page, free and never by the LLM, and kept version by version; the operator's resume is held with the profile, in the database only. A draft agent writes cover letters and outreach notes from them, claiming only what the resume shows and flagging what the role asks that it doesn't; the operator edits and approves each one, and nothing is ever sent; it also reviews the resume against a role. The same writing, and a resume tailored to each application, can come from the operator's own Claude client on their subscription, through an MCP server that reads the record and saves what the client writes back under a credential per save. The people the operator deals with are kept as contacts at each company, linked to its applications: an outreach note can be addressed to one, and the client can add a contact and log what happened when told, but never move an application. Under way: fit scoring, each role weighed against the resume from its own description, with a score from 0 to 100 and why. See [Build stages](#build-stages).
 
 ---
 
@@ -92,8 +92,9 @@ Before 1.3 every agent write went through an audited service under a named actor
 | Review queue (a system grant) | `review:keep` (raise, restate, and close what resolved) | Decide an item |
 | Review agent (planned) | `review:recommend` (write a recommendation on an open item) | Decide an item, or make the write it recommends |
 | Draft agent | `drafts:write` (a new draft as it wrote it, and the LLM call that wrote it), `resume_reviews:write` (a review of the resume against a role, and its call); each run holds only the one it needs | Edit or approve a draft, delete a review, or send anything |
+| Fit scorer | `fit:write` (how well a role fits the resume, and the LLM call that weighed it) | Track, dismiss or touch a role, change a score, or send anything |
 | Assistant (the operator's own Claude client, through MCP) | only the scopes of the save tool it calls, a credential per call: `drafts:write` (a cover letter, an outreach note or a tailored resume), `resume_reviews:write`, `contacts:write` (add a contact, or update one without moving it to another company, and link one to an application), `activities:write` (log what the operator tells it, as the activity logger, and link the contact it names) | Edit, approve or delete what it saved; delete a contact; edit or delete an activity; move a stage; or send anything |
-| **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); editing or approving a draft; tracking a role; deciding a review item | **Human-only by design** |
+| **— no agent —** | `applications:advance_stage` (starting an application or moving it between stages, enforced since 2a); editing or approving a draft; tracking a role; deciding a review item; deleting a contact | **Human-only by design** |
 
 The last row is the point: the most consequential write is withheld from every agent. Read and enrich is safe to automate; drafting is safe-with-review; stage advancement and anything outbound is human-gated.
 
@@ -161,6 +162,12 @@ drafts        application_id, kind (cover_letter | outreach |
               (whom an outreach note is to), edited_at, approved_at
               (audited by size and hash, never the text)
 
+fit_scores    posting_id, score (0 to 100), level, matches (jsonb, each with
+              the resume lines behind it), gaps, why, dropped_lines,
+              resume_id, resume_hash, role_description_id, description_hash,
+              written_by, llm_call_id (every score kept, the newest shown;
+              audited by its score, counts and hashes, never the text)
+
 resume_reviews  application_id, language, strengths, gaps, suggestions
               (jsonb, each point with the resume lines behind it), note,
               dropped_lines, resume_id, resume_hash, role_description_id,
@@ -184,7 +191,8 @@ review_items  kind, company_id, subject (polymorphic: the company or one role),
 agent_credentials  actor, scopes, token_digest, purpose, issued_by,
                    expires_at, revoked_at (one per agent run)
 
-llm_calls     page_check_id, run_id, purpose (extract | resolve | match | relate | draft), model,
+llm_calls     page_check_id, run_id, purpose (extract | resolve | match | relate | draft |
+              review | fit), model,
               settings, prompt_version, input_tokens, output_tokens, cost_usd
 
 audit_events  actor, action, target (polymorphic), changes_made (jsonb),
@@ -249,16 +257,21 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 - **2c — The draft agent** ✅ a cover letter or an outreach note for an application, written by Opus 5.5 from the resume, the role's description, the profile and the operator's notes, in the description's language unless another is asked: it claims only what the resume shows, cites the resume lines it drew on, and lists what the role asks that the resume doesn't show. Written in the background from the application's page, where the operator edits, approves and copies it; nothing is ever sent. `drafts:` commands.
 - **2d — Writing through MCP** ✅ an MCP server (grown from the operator's read-only learning server) through which the operator's own Claude client, on their subscription rather than API credits, reads an application's materials and the shared writing rules, writes a resume review, a cover letter, an outreach note or a tailored resume, and saves it back as `agent:assistant` under a credential per call, read against the resume version it saw. The resume review also runs in the app, written by the drafter. `reviews:` commands.
 - **2e — Contacts and the activity logger** ✅ the people the operator deals with at each company (recruiters, hiring managers, referrers, interviewers), kept with the company and linked to its applications, on both pages; an activity names whom it was with, and an outreach note, from the drafter or the client, can be addressed to one, opening with their first name. Through MCP the client adds and updates contacts and logs what the operator tells it, never moving a stage. `contacts:` commands.
+- **2f — Fit scoring** (in progress) each role weighed against the resume from its own description, by Haiku 4.5: a score from 0 to 100, the level the role asks, the strongest matches by resume line, the gaps, and why; only when asked, a batch with its cost shown first. `fit:` commands so far.
+- Still to come: a review agent that recommends on the review queue's items but never decides them.
 
 **Stage 3 — Governance completion.** Full audit views, a review queue for drafts, analytics.
 
-**Stage 4 — Showcase and distribution.** A local app anyone can run on their own machine, on a bundled made-up demo dataset: it works with no API key through free boards and stored reads, takes the user's own key for pages the LLM must read, and their own MCP client connects to it. Alongside it, a hosted read-only showcase of the same demo data. A schedule, a digest, and the production setup come with it. Last by design, so it ships a finished system, and nothing before it depends on it.
+**Stage 4 — Showcase and distribution.** A local app anyone can run on their own machine, on a bundled made-up demo dataset: it works with no API key through free boards and stored reads, takes the user's own key for pages the LLM must read, and their own MCP client connects to it. Alongside it, a hosted read-only showcase of the same demo data. A schedule, a digest, and the production setup come with it, with a full review of the experience (the UI and its flows) and the project's write-up for the portfolio site. Last by design, so it ships a finished system, and nothing before it depends on it.
 
 ## Stack
 
 - **Rails 8.1 / Ruby 3.4.8 / PostgreSQL** — core application and system of record
 - **solid_queue** — for a schedule, once there is a host; until then the verifier runs on demand
-- **Python + Playwright** — agent workers. Required rather than preferred: the verification step needs headless rendering plus LLM tooling, and both are strongest there.
+- **Hotwire (Turbo, Stimulus) and importmap** — the operator's pages, plain Rails views with no build step
+- **Python + Playwright** — agent workers (managed with uv). Required rather than preferred: the verification step needs headless rendering plus LLM tooling, and both are strongest there.
+- **Claude, through the Anthropic API** — Haiku 4.5 reads pages, decides near-miss matches, and weighs fit; Opus 5.5 writes drafts and resume reviews. The key stays outside the repo and reaches the worker process alone.
+- **MCP, through the Ruby SDK (gem `mcp`)** — the server the operator's own Claude client connects to
 - **RSpec, Rubocop, Brakeman, bundler-audit**
 
 ## Setup
@@ -325,6 +338,10 @@ bin/rails drafts:list                            # drafts, newest first, with wh
 bin/rails "drafts:show[id]"                      # its text, its gaps, the resume lines it drew on, what it was written from
 bin/rails "drafts:approve[id]"                   # approve it as it stands; nothing is sent
 bin/rails "reviews:write[application_id]"         # a resume review by the drafter (LANGUAGE=); Opus 5.5, ~5 cents
+bin/rails fit:score                              # the unscored roles as a plan with its cost; GO=1 weighs them (LIMIT=)
+bin/rails "fit:score[posting_id]"                # how well one role fits the resume; Haiku 4.5, under a cent
+bin/rails fit:list                               # roles by fit, best first, stale scores marked (MIN=70, LIMIT=)
+bin/rails "fit:show[posting_id]"                 # its score, why, the level, matches by resume line, gaps
 bin/rails reviews:list                           # reviews, newest first, who wrote each and its cost (APPLICATION=)
 bin/rails "reviews:show[id]"                     # its strengths, gaps and suggestions with their lines, and its note
 ```
