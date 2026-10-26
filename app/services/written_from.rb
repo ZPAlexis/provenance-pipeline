@@ -6,17 +6,20 @@ module WrittenFrom
   module_function
 
   def sources!(application, resume_version)
-    resumes = SearchProfile.current&.resumes&.newest_first.to_a
-    raise ArgumentError, "no resume is saved: it is pasted on the Profile page" if resumes.empty?
-
-    resume = resumes.find { |version| version.version == resume_version.to_s.strip.downcase }
-    raise ArgumentError, "resume version #{resume_version.inspect} isn't on record: read the application's materials again, " \
-                         "and cite the lines as they are now" unless resume
-
+    resume = resume!(resume_version, reread: "the application's materials")
     description = application.posting.role_descriptions.newest_first.first
     raise ArgumentError, "the role's description isn't read yet: it is read from the role's page in the app" unless description
 
     [ resume, description ]
+  end
+
+  # The resume version the client read, by the short version it was given; `reread` names where to read it again.
+  def resume!(resume_version, reread:)
+    resumes = SearchProfile.current&.resumes&.newest_first.to_a
+    raise ArgumentError, "no resume is saved: it is pasted on the Profile page" if resumes.empty?
+
+    resumes.find { |version| version.version == resume_version.to_s.strip.downcase } or
+      raise ArgumentError, "resume version #{resume_version.inspect} isn't on record: read #{reread} again, and cite the lines as they are now"
   end
 
   # A letter's or a note's lines drawn on: [{ "line", "text", "used_for" }], as the in-app drafter keeps them.

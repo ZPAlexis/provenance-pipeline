@@ -138,6 +138,28 @@ module FitScores
     [ score, cost, nil ]
   end
 
+  # A score the operator's own Claude client weighed through MCP (2f step 3), saved as `actor` under the credential of
+  # that one call: read against the resume version the client saw and the role's newest description, its matches'
+  # lines resolved to the resume's own. Returns the score and what was saved, in words.
+  def save!(posting, score:, why:, resume_version:, level: nil, matches: [], gaps: [], reported_model: nil, actor: "agent:assistant")
+    raise ArgumentError, "a score is a whole number from 0 to 100" unless score.is_a?(Integer) && score.between?(0, 100)
+    raise ArgumentError, "say why, in a sentence" if why.to_s.strip.empty?
+
+    resume = WrittenFrom.resume!(resume_version, reread: "the roles to weigh")
+    description = posting.role_descriptions.newest_first.first or
+      raise ArgumentError, "#{posting.role_title}'s description isn't read yet: read_descriptions reads it, free"
+    matches, dropped = WrittenFrom.with_lines(resume, matches, "point")
+    saved = posting.fit_scores.create!(
+      score: score, level: level.to_s.strip.presence, matches: matches, gaps: WrittenFrom.gaps(gaps), why: why.to_s.strip,
+      dropped_lines: dropped, resume: resume, resume_hash: resume.content_hash, role_description: description,
+      description_hash: description.content_hash, written_by: actor, reported_model: WrittenFrom.reported(reported_model),
+      run_id: "mcp:#{Authority.credential&.id}"
+    )
+    AuditEvent.record!(actor: actor, action: "create", target: saved, reasoning: "Saved through MCP: #{said(saved)}.",
+                       changes_made: facts(saved).transform_values { |value| [ nil, value ] })
+    [ saved, "#{said(saved)}." ]
+  end
+
   def record_call(llm, run)
     return unless llm
 

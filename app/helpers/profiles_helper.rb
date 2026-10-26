@@ -26,7 +26,8 @@ module ProfilesHelper
   def fit_reasons(posting)
     return tag.span("—", class: "muted") unless posting.fit
 
-    safe_join([ posting.fit["reasoning"], fit_notes(Array(posting.fit["notes"])) ], " ")
+    by_client = "Your Claude client: " if Verifier::Suggestions.proposed_by_client?(posting)
+    safe_join([ "#{by_client}#{posting.fit['reasoning']}", fit_notes(Array(posting.fit["notes"])) ], " ")
   end
 
   def work_mode_label(mode) = WORK_MODE_LABELS.fetch(mode) { tag.span("Not stated", class: "muted") }
