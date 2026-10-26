@@ -14,8 +14,22 @@ module ApplicationHelper
 
   def answer_badge(state) = tag.span(answer_label(state), class: [ "badge", answer_tone(state) ])
 
+  # A fit score (2f) as a badge: green from 70, amber from 50, plain below.
+  def fit_badge(score)
+    tag.span(score, class: [ "badge", "fit", ("live" if score >= 70), ("unsure" if score.between?(50, 69)) ], title: "Fit, out of 100")
+  end
+
+  # A role's newest fit in a table cell: its badge, marked when the resume or its description changed since.
+  def fit_cell(shown)
+    return tag.span("—", class: "muted", title: "Not weighed yet") unless shown
+
+    safe_join([ fit_badge(shown.score.score),
+                (tag.span(" stale", class: "muted small", title: "#{shown.stale.to_sentence.upcase_first} changed since") if shown.stale?) ])
+  end
+
   # A finished check run's answer: the role's verdict, or that a company was checked.
   def run_answer(run)
+    return tag.span(run.answer == "weighed" ? "Weighed" : "Not weighed", class: [ "badge", run.answer == "weighed" ? "live" : "unsure" ]) if run.kind == "fit"
     return tag.span(run.answer == "read" ? "Read" : "Not read", class: [ "badge", run.answer == "read" ? "live" : "unsure" ]) if run.kind == "describe"
     return tag.span(run.answer == "drafted" ? "Drafted" : "Not drafted", class: [ "badge", run.answer == "drafted" ? "live" : "unsure" ]) if run.kind == "draft"
     return tag.span(run.answer == "reviewed" ? "Reviewed" : "Not reviewed", class: [ "badge", run.answer == "reviewed" ? "live" : "unsure" ]) if run.kind == "review"

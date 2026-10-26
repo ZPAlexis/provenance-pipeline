@@ -1,6 +1,7 @@
 # A check the operator asked for from the pages, run in the background (CheckNowJob):
 # one role, one company, everything (1.4), a role's description read (2b), a
-# draft written for its application (2c), or a resume review written for it (2d).
+# draft written for its application (2c), a resume review written for it (2d), or
+# the fit of one role or many weighed against the resume (2f).
 # The page polls it until it is done.
 # Evidence and changes are recorded as for any check, under run_id; this row is the
 # request and its outcome.
@@ -8,20 +9,22 @@ class CheckRun < ApplicationRecord
   belongs_to :company, optional: true # none for everything
   belongs_to :posting, optional: true
 
-  KINDS = %w[role company all describe draft review].freeze
+  KINDS = %w[role company all describe draft review fit].freeze
   STATUSES = %w[queued running done failed].freeze
   ACTIVE = %w[queued running].freeze
   # Longer than any check takes (a ten-page list read by the LLM, or a 2,000-role
   # Workday board, take minutes): a run still active after this was cut off.
   STALE_AFTER = 1.hour
-  # Everything takes longer: about 40 minutes for 133 companies (2026-10-05).
+  # Everything takes longer: about 40 minutes for 133 companies (2026-10-05). So may weighing many roles' fit, each
+  # description read first.
   ALL_STALE_AFTER = Authority::BATCH
+  LONG = %w[all fit].freeze
 
   validates :kind, inclusion: { in: KINDS }
   validates :status, inclusion: { in: STATUSES }
   validates :requested_by, presence: true
   validates :posting, presence: true, if: -> { kind.in?(%w[role describe draft review]) }
-  validates :company, presence: true, unless: -> { kind == "all" }
+  validates :company, presence: true, unless: -> { kind == "all" || (kind == "fit" && posting.nil?) }
 
   scope :active, -> { where(status: ACTIVE) }
   scope :newest_first, -> { order(created_at: :desc) }
@@ -34,7 +37,7 @@ class CheckRun < ApplicationRecord
     boot = (booted_at if in_process_queue?)
     one = [ STALE_AFTER.ago, boot ].compact.max
     all = [ ALL_STALE_AFTER.ago, boot ].compact.max
-    active.where.not(kind: "all").where(updated_at: ...one).or(active.where(kind: "all", updated_at: ...all))
+    active.where.not(kind: LONG).where(updated_at: ...one).or(active.where(kind: LONG, updated_at: ...all))
           .update_all(status: "failed", error: "Cut off: the server stopped before the check finished.",
                       finished_at: Time.current, updated_at: Time.current)
   end
@@ -81,6 +84,18 @@ class CheckRun < ApplicationRecord
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
+  # The fit of `postings` weighed against the resume (2f), or the weighing already under way: one at a time, since a
+  # batch reads descriptions first. One role's run is that role's; a batch's (from the Roles page, even of one role)
+  # names its roles in `request` alone.
+  def self.start_fit!(postings, batch: postings.size > 1, requested_by: AuditEvent::OPERATOR)
+    abandon_stale!
+    one = postings.first unless batch
+    where(kind: "fit").active.first || create!(
+      kind: "fit", company: one&.company, posting: one, requested_by: requested_by,
+      ceiling_usd: (FitScores.estimate * postings.size).round(4), request: { "posting_ids" => postings.map(&:id) }
+    ).tap { |run| CheckNowJob.perform_later(run) }
+  end
+
   # Everything checked at once, or the run already under way: one at a time.
   def self.start_all!(requested_by: AuditEvent::OPERATOR)
     abandon_stale!
@@ -90,6 +105,9 @@ class CheckRun < ApplicationRecord
   end
 
   def active? = ACTIVE.include?(status)
+
+  # How many roles a fit run weighs.
+  def fit_size = Array(request["posting_ids"]).size
 
   # How many companies a check of everything has read so far, from its results file as the worker writes it.
   def progress
@@ -105,6 +123,7 @@ class CheckRun < ApplicationRecord
     when "describe" then "the description of #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "draft" then "#{Draft::A_LABEL.fetch(request['kind'])} for #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "review" then "a resume review for #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
+    when "fit" then posting ? "the fit of #{posting.role_title} at #{company.name}" : "the fit of #{ActionController::Base.helpers.pluralize(fit_size, 'role')}"
     when "all" then "everything"
     else company.name
     end

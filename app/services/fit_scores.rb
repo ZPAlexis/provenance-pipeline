@@ -21,6 +21,11 @@ module FitScores
     def tally = { "weighed" => scores.size, "not weighed" => unweighed.size }.select { |_, count| count.positive? }
   end
 
+  # A role's newest score as the pages show it: with what has changed since it was weighed (empty when nothing has).
+  Shown = Data.define(:score, :stale) do
+    def stale? = stale.any?
+  end
+
   module_function
 
   # What a score costs, on the record; a cautious guess before the first one.
@@ -36,15 +41,25 @@ module FitScores
     scores.index_by(&:posting_id)
   end
 
+  # The newest score of each of `postings` that has one, by posting id, with whether the resume or its description has
+  # changed since.
+  def shown(postings)
+    resume = SearchProfile.current&.resumes&.newest_first&.first
+    descriptions = RoleDescription.where(posting: postings).select(:id, :posting_id, :content_hash, :first_read_at, :created_at)
+                                  .newest_first.group_by(&:posting_id) # their hashes, not their text
+    newest(postings).transform_values { |score| Shown.new(score:, stale: score.stale_for(resume, descriptions[score.posting_id]&.first)) }
+  end
+
   # Those of `postings` with no score yet, or whose newest is stale: the resume or the description changed since.
   def unscored(postings)
-    resume = SearchProfile.current&.resumes&.newest_first&.first
-    descriptions = RoleDescription.where(posting: postings).newest_first.group_by(&:posting_id)
-    scores = newest(postings)
-    postings.reject do |posting|
-      score = scores[posting.id]
-      score && score.stale_for(resume, descriptions[posting.id]&.first).empty?
-    end
+    scores = shown(postings)
+    postings.reject { |posting| scores[posting.id] && !scores[posting.id].stale? }
+  end
+
+  # Those of `postings` whose description is on record, or can be read first: a page of their own.
+  def weighable(postings)
+    described = RoleDescription.where(posting: postings).distinct.pluck(:posting_id)
+    postings.select { |posting| posting.job_url.present? || described.include?(posting.id) }
   end
 
   # Those of `postings` whose description can be read before weighing (a page of their own) but isn't on record yet.
@@ -76,7 +91,7 @@ module FitScores
     profile = SearchProfile.current
     resume = profile.resumes.newest_first.first
     descriptions = postings.index_with { |posting| posting.role_descriptions.newest_first.first }
-    unweighed = postings.reject { |posting| descriptions[posting] }.map { |posting| [ posting, "its description isn't read yet" ] }
+    unweighed = postings.reject { |posting| descriptions[posting] }.map { |posting| [ posting, "no description on record" ] }
     ready = postings.select { |posting| descriptions[posting] }
     return weighed([], unweighed, 0.0, nil, nil) if ready.empty?
 

@@ -1,0 +1,71 @@
+<%# How well this role fits your resume (2f): its newest score, weighed from its description by the fit scorer, and
+    the ones before it. Weighed only when you ask; what it costs is asked first. %>
+<% resume = SearchProfile.current&.resumes&.newest_first&.first %>
+<section class="check-now">
+  <% if fit %>
+    <% score = fit.score %>
+    <p class="fit-head"><%= fit_badge(score.score) %> <span class="muted small">of 100</span> <%= score.why %></p>
+    <% if score.level %><p class="small"><span class="muted">Level:</span> <%= score.level %></p><% end %>
+    <div class="fit-lists">
+      <div>
+        <p class="small"><strong>What it asks that your resume shows</strong></p>
+        <% if score.matches.any? %>
+          <ul class="small drew-on">
+            <% score.matches.each do |match| %>
+              <li><%= match["point"] %>
+                <% match["lines"].each do |line| %><br><span class="muted">[<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p class="muted small">Nothing it found.</p>
+        <% end %>
+      </div>
+      <div>
+        <p class="small"><strong>What it asks that your resume doesn't show</strong></p>
+        <% if score.gaps.any? %>
+          <ul class="small drew-on">
+            <% score.gaps.each do |gap| %><li><strong><%= gap["asks"] %></strong>: <%= gap["note"] %></li><% end %>
+          </ul>
+        <% else %>
+          <p class="muted small">Nothing it found.</p>
+        <% end %>
+      </div>
+    </div>
+    <% if score.dropped_lines.positive? %>
+      <p class="small warn">It named <%= pluralize(score.dropped_lines, "line") %> your resume doesn't have; they were left out.</p>
+    <% end %>
+    <% call = score.llm_call %>
+    <p class="muted small">
+      Weighed <%= ago(score.created_at) %> by <%= score.writer %><%= " with #{call.model} for #{cost(call.cost_usd)}" if call %>,
+      from your resume <%= score.resume ? "saved #{score.resume.created_at.to_date}" : "(since deleted)" %> and its description
+      <%= score.role_description ? "read #{score.role_description.first_read_at.to_date}" : "(no longer on record)" %>.
+      Advice for ranking roles: it claims nothing for you.
+    </p>
+    <% if fit.stale? %>
+      <p class="small warn"><%= fit.stale.to_sentence.upcase_first %> changed since it was weighed: weigh it again for a current score.</p>
+    <% end %>
+    <% if earlier.any? %>
+      <p class="muted small">Before: <%= safe_join(earlier.map { |before| "#{before.score} on #{before.created_at.to_date}" }, ", ") %>.</p>
+    <% end %>
+  <% end %>
+
+  <% if resume.nil? %>
+    <p class="muted small">Weighing its fit needs your resume, saved on <%= link_to "the Profile page", profile_path(anchor: "resume") %>.</p>
+  <% elsif role.job_url.blank? && descriptions.empty? %>
+    <p class="muted small">No description to weigh it from: it has no page of its own to read one from.</p>
+  <% elsif !run&.active? %>
+    <% estimate = FitScores.estimate %>
+    <%= form_with url: fit_scores_path, class: "check-form",
+                  data: { turbo_confirm: "Haiku 4.5 weighs it against your resume#{', its description read first (free)' if descriptions.empty?}: " \
+                                         "about #{cost(estimate)}. Weigh it?" } do |form| %>
+      <%= hidden_field_tag :posting_id, role.id %>
+      <%= form.submit fit ? "Weigh it again" : "Weigh its fit", class: "btn small" %>
+      <span class="muted small">
+        Haiku 4.5 weighs it from <%= descriptions.empty? ? "its description (read first, free)" : "its description" %> and your resume,
+        claiming only what your resume shows: about <%= cost(estimate) %>.
+      </span>
+    <% end %>
+  <% end %>
+  <%# The latest weighing, while it runs (this role's, or a batch's) or when it weighed nothing (why not). %>
+  <%= render "check_runs/run", run: run, poll: false if run && (run.active? || run.answer != "weighed") %>
+</section>

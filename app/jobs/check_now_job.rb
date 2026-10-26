@@ -1,5 +1,5 @@
 # Runs a check the operator asked for from the pages (a role, a company,
-# everything, a description read, a draft or a review written), and keeps its outcome on
+# everything, a description read, a draft or a review written, roles' fit weighed), and keeps its outcome on
 # the CheckRun the page polls. One at a time: development runs jobs on a single
 # in-process thread, so politeness per site holds across checks.
 class CheckNowJob < ApplicationJob
@@ -24,6 +24,12 @@ class CheckNowJob < ApplicationJob
         application = check_run.posting.application
         Drafts.write!(application, kind: asked["kind"], language: asked["language"], guidance: asked["guidance"],
                                    contact: application.company.contacts.find_by(id: asked["contact_id"]), issued_by: check_run.requested_by)
+      when "fit"
+        # Descriptions first, for the roles with a page of their own but none on record (free); then the weighing.
+        roles = Posting.includes(:company).where(id: check_run.request["posting_ids"]).to_a
+        missing = FitScores.undescribed(roles)
+        Verifier::Descriptions.read!(missing, purpose: "fit: descriptions to weigh", issued_by: check_run.requested_by) if missing.any?
+        FitScores.weigh!(roles, issued_by: check_run.requested_by)
       when "role" then Verifier::CheckNow.role(check_run.posting)
       else Verifier::CheckNow.company(check_run.company)
       end

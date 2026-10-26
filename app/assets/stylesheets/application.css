@@ -86,6 +86,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 48px; }
 
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
 .page-head .sub { color: var(--muted); }
+.head-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 
 /* Flash */
 
@@ -173,6 +174,7 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 /* Answer filters */
 
 .filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.filters > .muted { align-self: center; }
 .filter {
   padding: 3px 10px;
   border: 1px solid var(--line);
@@ -445,6 +447,14 @@ td form.button_to { display: inline-block; }
 .draft .gaps ul, .draft ul.drew-on { margin: 4px 0 8px; padding-left: 20px; }
 .draft .gaps li, .draft ul.drew-on li { margin-bottom: 3px; }
 .warn { color: var(--unsure); }
+
+/* A role's fit (2f): the score and why, then what the role asks that the resume shows and doesn't, side by side. */
+.fit-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 0 0 6px; }
+.badge.fit { font-variant-numeric: tabular-nums; min-width: 2.2em; text-align: center; }
+.fit-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+.fit-lists ul.drew-on { margin: 4px 0 8px; padding-left: 20px; }
+.fit-lists ul.drew-on li { margin-bottom: 4px; }
+@media (max-width: 700px) { .fit-lists { grid-template-columns: 1fr; } }
 
 /* A row of buttons, a button_to's form among them */
 
