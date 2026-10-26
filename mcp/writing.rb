@@ -71,6 +71,18 @@ module ProvenanceMcp
         "Then wait for what I want changed, and keep every change to these rules." ].compact.join("\n\n")
     end
 
+    # How a role's fit is weighed and saved (2f step 3), in the operator's voice: the shared rules, then the answer's shape.
+    def fit_instructions
+      [ "Weigh how well each role below fits my resume, for me to rank roles by: advice, never a claim. Write in English.",
+        rules.fetch("grounding"), rules.fetch("fit"),
+        <<~TEXT.strip ].join("\n\n")
+          Weigh each role on its own, from its description and my resume alone. Save each with save_fit_score as you go:
+          the role's id, the resume version from here, the score, the level, the matches with the resume lines by their
+          numbers, the gaps, why, and the model you are. Then give me the roles you weighed, best first, each with its
+          score and why in a line.
+        TEXT
+    end
+
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out.
     FENCES = %w[role_description resume profile notes contacts contact review].freeze
 

@@ -166,4 +166,53 @@ RSpec.describe Verifier::Suggestions do
       expect(worker.asked).to be_nil
     end
   end
+
+  # The operator's own Claude client proposing roles by meaning, through MCP (2f step 3).
+  describe ".propose!" do
+    before { allow(DatabaseBackup).to receive(:daily) }
+
+    def propose(key, why: "Recruiting operations is close to the work.")
+      saved = profile # saved before the agent acts: an agent may not create one
+      as_agent("agent:assistant") { described_class.propose!(key, why: why, profile: saved) }
+    end
+
+    def refresh(*results) = described_class.refresh!(profile: profile, worker: worker_class.new(run_dir, results))
+
+    it "proposes a listed role by its key as the client's suggestion, with why, as its page listed it" do
+      posting = propose("#{read.id}:1")
+
+      expect(posting).to have_attributes(role_title: "Recruiter", job_url: "https://acme.example/jobs/2", tracking: "suggested",
+                                         verification_state: "verified_live", work_mode: "remote", roles_listed_count: 2)
+      expect(posting.fit).to eq("by" => "agent:assistant", "profile_id" => profile.id, "title" => "Recruiter",
+                                "reasoning" => "Recruiting operations is close to the work.")
+      expect(AuditEvent.find_by!(target: posting)).to have_attributes(
+        actor: "agent:assistant", action: "create", reasoning: start_with("Suggested by the operator's Claude client: Recruiting operations")
+      )
+    end
+
+    it "refuses a key it doesn't know, no why, a role on record, and a read replaced since" do
+      expect { propose("nonsense") }.to raise_error(ArgumentError, 'no role "nonsense": find_roles gives each one\'s key')
+      expect { propose("#{read.id}:9") }.to raise_error(ArgumentError, /no role/)
+      expect { propose("#{read.id}:0", why: " ") }.to raise_error(ArgumentError, "say why it fits, in a sentence or two")
+      create(:posting, company: company, role_title: "Solutions Engineer", job_url: "https://acme.example/jobs/1")
+      expect { propose("#{read.id}:0") }.to raise_error(ArgumentError, "Solutions Engineer at Acme is on record already (tracked)")
+
+      create(:page_check, company: company, purpose: "verification", step: nil, url: company.careers_page_url,
+                          run_id: "20261009T100000Z-verify", checked_at: 1.hour.ago, listings: [ listing("Recruiter", 2) ])
+      expect { propose("#{read.id}:1") }.to raise_error(ArgumentError, "Acme's page was read again since: find its roles again")
+      expect(company.postings.where(tracking: "suggested")).to be_empty
+    end
+
+    it "stays the client's: a refresh neither refits nor withdraws it while its page lists it, and withdraws it once gone" do
+      proposed = propose("#{read.id}:1")
+
+      expect(refresh(result(company, [], listed: { proposed.id => 1 })).withdrawn).to eq(0)
+      expect(refresh(result(company, [ fit("Recruiter", index: 1, on_record: proposed.id) ], listed: { proposed.id => 1 })).updated).to eq(0)
+      expect(proposed.reload.fit["by"]).to eq("agent:assistant")
+
+      proposed.update_columns(verification_state: "not_found", last_checked_at: Time.current) # its check found it gone
+      expect(refresh(result(company, [])).withdrawn).to eq(1)
+      expect(AuditEvent.find_by!(target_id: proposed.id, action: "destroy").reasoning).to start_with("Withdrawn: it is no longer listed")
+    end
+  end
 end

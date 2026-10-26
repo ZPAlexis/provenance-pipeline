@@ -154,9 +154,9 @@ module Authority
                                    "100 and why, for the operator to rank roles by. Tracks, dismisses and sends nothing.",
                             scopes: %w[fit:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
-                                  "contacts, activities), one credential per save holding only that tool's scopes. Approves, " \
-                                  "deletes, moves a stage, and sends nothing.",
-                           scopes: %w[drafts:write resume_reviews:write contacts:write activities:write] }
+                                  "contacts, activities, the roles it proposes and the fit it weighs), one credential per save " \
+                                  "holding only that tool's scopes. Tracks, approves, deletes, moves a stage, and sends nothing.",
+                           scopes: %w[drafts:write resume_reviews:write contacts:write activities:write postings:suggest fit:write] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.

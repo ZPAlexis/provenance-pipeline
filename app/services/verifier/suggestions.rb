@@ -10,16 +10,24 @@ module Verifier
   # verification matches. A suggestion the operator never acted on is withdrawn
   # (deleted, its whole record kept in the audit) when it no longer fits the
   # profile, or when its latest check found it gone from the whole list.
+  #
+  # The operator's own Claude client may propose roles too (2f step 3), judged by meaning rather than the profile's
+  # words: from the same stored lists, through MCP as agent:assistant. Its suggestions are marked as the client's, and
+  # a refresh neither refits nor withdraws them while their page still lists them.
   module Suggestions
     ACTOR = "agent:suggester".freeze
+    # The operator's own Claude client, proposing roles through MCP (2f step 3).
+    CLIENT = "agent:assistant".freeze
     SCOPES = %w[postings:suggest].freeze
     # One refresh writes at a time: a check finishing as the profile is saved must not suggest a role twice.
     LOCK = 0x5355_4747
 
     # One role holding a profile title: suggested, or ruled out by `ruled_out`, with the worker's reasoning.
-    # `on_record`: the posting it already is, or nil.
+    # `on_record`: the posting it already is, or nil. `key`: the read it was listed in and its place there.
     Fit = Data.define(:company, :listing, :title, :level, :place, :work_mode, :suggested, :ruled_out, :notes, :reasoning,
-                      :on_record)
+                      :on_record, :key) do
+      def initialize(key: nil, **fields) = super
+    end
 
     # What a profile would suggest now. `unread`: watched companies whose page has no read to weigh;
     # `problems`: companies whose result could not be used, and why.
@@ -55,7 +63,7 @@ module Verifier
       run = worker.run(targets, command: "suggest")
       results, problems = usable(run, companies)
       postings = Posting.where(company_id: results.map { |company, _| company.id }).index_by(&:id)
-      fits = results.flat_map { |company, result| result["roles"].map { |role| fit(company, role, postings) } }
+      fits = results.flat_map { |company, result| result["roles"].map { |role| fit(company, role, postings, result["page_check_id"]) } }
       Preview.new(**shown, weighed: results.sum { |_, result| result["weighed"] }, fits: fits, problems: problems)
     ensure
       FileUtils.rm_rf(run.dir) if run
@@ -110,8 +118,50 @@ module Verifier
       [ results, problems ]
     end
 
-    def fit(company, role, postings)
-      Fit.new(company: company, on_record: postings[role["on_record"]], **FIT_FIELDS.to_h { |field| [ field.to_sym, role[field] ] })
+    def fit(company, role, postings, check_id)
+      Fit.new(company: company, on_record: postings[role["on_record"]], key: "#{check_id}:#{role['listing_index']}",
+              **FIT_FIELDS.to_h { |field| [ field.to_sym, role[field] ] })
+    end
+
+    # A suggestion the operator's own Claude client proposed (2f step 3): the client's, not the profile's words.
+    def proposed_by_client?(posting) = posting.fit.is_a?(Hash) && posting.fit["by"] == CLIENT
+
+
+    # A role on a watched page proposed by the operator's own Claude client (2f step 3), named by its key from a
+    # preview (the read it was listed in, and its place there): a suggestion as the suggester's are, marked as the
+    # client's, with its reason. Refused when the role is on record already, or the page was read again since. Under
+    # the caller's credential (postings:suggest).
+    def propose!(key, why:, profile: SearchProfile.current, actor: CLIENT)
+      why = why.to_s.strip
+      raise ArgumentError, "say why it fits, in a sentence or two" if why.empty? || why.size > 600
+
+      check_id, index = key.to_s.split(":", 2)
+      check = PageCheck.includes(:company).find_by(id: check_id.to_s) if check_id.to_s.match?(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+      raise ArgumentError, "no role #{key.inspect}: find_roles gives each one's key" unless check
+
+      company = check.company
+      latest, listings = Targets.latest_list(company)
+      raise ArgumentError, "#{company.name}'s page was read again since: find its roles again" unless latest&.id == check.id
+
+      listing = listings[index.to_i] if index.to_s.match?(/\A\d+\z/) && index.to_i < listings.size
+      raise ArgumentError, "no role #{key.inspect}: find_roles gives each one's key" unless listing
+
+      url = listing["url"] if ResultContract.web_url?(listing["url"])
+      on_record = url ? company.postings.find_by(job_url: url) : company.postings.find_by(role_title: listing["title"], location: listing["location"])
+      raise ArgumentError, "#{listing['title']} at #{company.name} is on record already (#{on_record.tracking})" if on_record
+
+      posting = company.postings.create!(
+        role_title: listing["title"], location: listing["location"], job_url: url, tracking: "suggested",
+        fit: { "by" => actor, "profile_id" => profile&.id, "title" => listing["title"], "reasoning" => why },
+        verification_state: "verified_live", last_checked_at: latest.checked_at, roles_listed_count: listings.size,
+        work_mode: (listing["work_mode"] unless listing["work_mode"].in?([ nil, "unknown" ]))
+      )
+      AuditEvent.record_write!(
+        posting, actor: actor,
+        reasoning: "Suggested by the operator's Claude client: #{why} Listed on its company's careers page when read at " \
+                   "#{latest.checked_at.utc.iso8601} (check #{latest.id}, run #{latest.run_id})."
+      )
+      posting
     end
 
     # One company's result: new suggestions, refits, withdrawals. Only under the suggester's credential.
@@ -124,7 +174,7 @@ module Verifier
         posting = postings[role["on_record"]]
         if posting.nil?
           tally[:created] += 1 if suggest!(company, role, check, profile, result["weighed"], run_id)
-        elsif posting.tracking == "suggested"
+        elsif posting.tracking == "suggested" && !proposed_by_client?(posting) # the client's reasons stay its own
           tally[:updated] += 1 if refit!(posting, role, profile, run_id)
         end
       end
@@ -133,7 +183,7 @@ module Verifier
       postings.each_value do |posting|
         next if posting.tracking != "suggested" || fits_now.include?(posting.id)
 
-        why = withdrawal(posting, result) or next
+        why = (proposed_by_client?(posting) ? gone(posting) : withdrawal(posting, result)) or next
         AuditEvent.record_destroy!(posting, actor: ACTOR, reasoning: "Withdrawn: #{why} Run #{run_id}.")
         posting.destroy!
         tally[:withdrawn] += 1
@@ -177,9 +227,14 @@ module Verifier
         elsif role["suggested"] then "another role on record is the same one."
         else "it no longer fits the profile. #{role['reasoning']}"
         end
-      elsif posting.verification_state == "not_found"
-        "it is no longer listed: its latest check found it gone from the whole list."
+      else
+        gone(posting)
       end
+    end
+
+    # Why a suggestion no longer stands whatever the profile says: its latest check found it gone from the whole list.
+    def gone(posting)
+      "it is no longer listed: its latest check found it gone from the whole list." if posting.verification_state == "not_found"
     end
 
     # How the role fits, as stored on it for the operator and the agents to come.
