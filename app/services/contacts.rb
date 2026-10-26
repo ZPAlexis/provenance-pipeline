@@ -27,6 +27,16 @@ module Contacts
     end
   end
 
+  # One of `company`'s contacts, by its id or its name (case aside); nil when none is. For a command or a client
+  # that names one.
+  def named(company, text)
+    text = text.to_s.strip
+    return if text.empty?
+
+    found = company.contacts.find_by(id: text) if text.match?(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+    found || company.contacts.find_by("lower(contacts.name) = ?", text.downcase)
+  end
+
   # Links `contact` to `application`, at the same company; nothing when it is linked already.
   def link!(contact, application, actor: AuditEvent::OPERATOR)
     return if application.application_contacts.exists?(contact: contact)

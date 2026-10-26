@@ -51,8 +51,7 @@ module ProvenanceMcp
       text = text.to_s.strip
       raise Refusal, "Name a contact: their name, or their id." if text.empty?
 
-      found = company.contacts.find_by(id: text) if text.match?(UUID)
-      found ||= company.contacts.find_by("lower(contacts.name) = ?", text.downcase)
+      found = Contacts.named(company, text)
       return found if found
 
       known = company.contacts.to_a.map { |contact| "- #{contact.label}: #{contact.id}" }
