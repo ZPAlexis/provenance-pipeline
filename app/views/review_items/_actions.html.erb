@@ -1,30 +1,32 @@
-<%# The operator's choices on one item, by its kind; the proposed action first. %>
+<%# The operator's choices on one item, by its kind; the proposed action first, unless a recommendation's Accept is. %>
 <% url = decide_review_item_path(item) %>
+<% proposed = item.proposal unless item.recommended? %>
+<% lead = (" primary" unless item.recommended?) %>
 <% role = item.subject if item.subject.is_a?(Posting) %>
 <div class="decide">
   <% case item.kind %>
   <% when "careers_page_candidate" %>
     <%= outside_link(item.evidence_key, label: "Open the page") %>
-    <%= button_to "Confirm it", url, method: :patch, params: { decision: "confirm" }, class: "btn primary small" %>
+    <%= button_to "Confirm it", url, method: :patch, params: { decision: "confirm" }, class: "btn small#{lead}" %>
     <%= button_to "Reject it", url, method: :patch, params: { decision: "reject" }, class: "btn small" %>
   <% when "company_kind" %>
     <% Company::KINDS.each do |kind| %>
       <%= button_to kind.capitalize, url, method: :patch, params: { decision: "set_kind", kind: kind },
-                                         class: [ "btn", "small", ("primary" if item.proposal == "set_kind:#{kind}") ] %>
+                                         class: [ "btn", "small", ("primary" if proposed == "set_kind:#{kind}") ] %>
     <% end %>
   <% when "no_careers_page" %>
     <%= button_to "Find it again", url, method: :patch, params: { decision: "find_again" },
-                                        class: [ "btn", "small", "check-button", ("primary" if item.proposal == "find_again") ],
+                                        class: [ "btn", "small", "check-button", ("primary" if proposed == "find_again") ],
                                         data: { turbo_confirm: "Finding its careers page and reading it: at most #{cost(Verifier::CheckNow.ceiling(item.company))}. Go?" } %>
   <% when "page_changed" %>
     <%= outside_link(item.company.careers_page_url, label: "Open the page") %>
     <%= button_to "Still its list", url, method: :patch, params: { decision: "leave", note: "Still this company's own list of roles." },
-                                         class: "btn small primary" %>
+                                         class: "btn small#{lead}" %>
   <% when "suspect_verdict", "unconfirmed_role" %>
     <% if role %>
       <%= outside_link(role.job_url, label: "Open its page") if role.job_url %>
       <%= button_to "Check it again", url, method: :patch, params: { decision: "check_again" },
-                                           class: [ "btn", "small", "check-button", ("primary" if item.proposal == "check_again") ],
+                                           class: [ "btn", "small", "check-button", ("primary" if proposed == "check_again") ],
                                            data: { turbo_confirm: "Checking it now: its own page first; at most #{cost(Verifier::CheckNow.ceiling(role))}. Go?" } %>
     <% end %>
   <% end %>
@@ -33,7 +35,7 @@
 <% if role && %w[suspect_verdict unconfirmed_role].include?(item.kind) %>
   <%= form_with url: url, method: :patch, class: "add-form" do |form| %>
     <label>What you saw <%= form.text_field :note, required: true, placeholder: "Its page lists it, posted last week" %></label>
-    <%= form.button "Still listed", name: "decision", value: "still_listed", class: "btn small primary" %>
+    <%= form.button "Still listed", name: "decision", value: "still_listed", class: "btn small#{lead}" %>
     <%= form.button "No longer listed", name: "decision", value: "no_longer_listed", class: "btn small" %>
     <% if item.kind == "suspect_verdict" %>
       <%= form.button "Undo the verdict", name: "decision", value: "undo", class: "btn small",
@@ -43,7 +45,7 @@
 <% end %>
 
 <% if %w[careers_page_candidate no_careers_page partial_list page_changed].include?(item.kind) %>
-  <details class="add" <%= "open" if item.proposal == "set_page" %>>
+  <details class="add" <%= "open" if proposed == "set_page" %>>
     <summary class="muted small">
       <%= { "partial_list" => "Set a page listing them all", "page_changed" => "Set the right page" }.fetch(item.kind, "Set its careers page by hand") %>
     </summary>

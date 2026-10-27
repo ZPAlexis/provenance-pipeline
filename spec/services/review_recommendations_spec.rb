@@ -101,6 +101,17 @@ RSpec.describe ReviewRecommendations do
     end
   end
 
+  # Found 2026-10-27: a hash condition on the jsonb column was read as one on an associated table, and dropped.
+  it "counts only the items that carried a recommendation" do
+    plain = create(:company, name: "Beta", domain: "beta.example", resolution_status: "failed", resolution_failure: "not_found")
+    unrecommended = ReviewQueue.sync!(plain) && plain.review_items.open.sole
+    ReviewQueue.act!(unrecommended, "leave", note: "No public list.", check: nil)
+    recommend
+
+    expect(ReviewItem.recommended).to eq([ item ])
+    expect(described_class.agreement).to eq("no_careers_page" => { "pending" => 1 })
+  end
+
   it "says a recommendation's action as a person would" do
     expect(described_class.said("decision" => "set_page", "url" => "https://acme.example/careers")).to eq("Set the page to https://acme.example/careers")
     expect(described_class.said("decision" => "check_again")).to eq("Check it again")

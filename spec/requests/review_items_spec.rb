@@ -139,3 +139,82 @@ RSpec.describe "Deciding a review item", type: :request do
     expect(flash[:alert]).to match(/unknown decision/i)
   end
 end
+
+# Recommendations from the operator's own Claude client (2g step 2): shown on their items, accepted in one click as the
+# operator's decision, and agreement measured.
+RSpec.describe "Accepting a recommended decision", type: :request do
+  include ActiveJob::TestHelper
+
+  let!(:company) { create(:company, name: "Acme", domain: "acme.example", resolution_status: "failed", resolution_failure: "not_found") }
+  let!(:item) { ReviewQueue.sync!(company) && company.review_items.open.sole }
+
+  def recommend(decision: "set_page", url: "https://acme.example/careers", confidence: "high", **fields)
+    target = item
+    as_agent("agent:assistant") do
+      ReviewRecommendations.save!(target, decision: decision, url: url, confidence: confidence, checked: [ "https://acme.example", "its sitemap" ],
+                                          reasoning: "Its homepage links Careers to this page, which lists 12 roles.",
+                                          reported_model: "claude-opus-5-5", **fields)
+    end
+  end
+
+  it "shows the recommendation on its item, with what it checked, who made it, and Accept; and filters by it" do
+    get review_path
+    expect(response.body).not_to include("With a recommendation", "Recommended:")
+
+    recommend
+    get review_path
+    expect(response.body).to include("Recommended:", ">https://acme.example/careers</a>", "high confidence",
+                                     "Its homepage links Careers to this page, which lists 12 roles.", ">https://acme.example</a> · its sitemap",
+                                     "By your Claude client, through MCP", "(claude-opus-5-5, as reported)", ">Accept<",
+                                     "With a recommendation <span class=\"count\">1</span>")
+
+    other = create(:company, name: "Beta", domain: "beta.example", resolution_status: "failed", resolution_failure: "blocked")
+    ReviewQueue.sync!(other)
+    get review_path(recommended: 1)
+    expect(response.body).to include("Acme").and(not_include(">Beta</a>"))
+  end
+
+  it "accepts a page as the operator's decision, noting they followed it, and counts the agreement" do
+    recommend
+
+    patch accept_review_item_path(item)
+
+    expect(company.reload).to have_attributes(careers_page_url: "https://acme.example/careers", resolution_status: "resolved")
+    expect(item.reload).to have_attributes(status: "done", decision: "set_page", decided_by: "human:operator")
+    expect(item.note).to eq("Accepted the recommendation of your Claude client, through MCP (high confidence): " \
+                            "Its homepage links Careers to this page, which lists 12 roles.")
+    expect(ReviewRecommendations.outcome(item)).to eq("agreed")
+
+    get review_path
+    expect(response.body).to include("Recommendations so far:", "No careers page: 1 of 1 you decided agreed.")
+    get agents_path
+    expect(response.body).to include("Its recommendations on the review queue: 1 of 1 you decided agreed.")
+  end
+
+  it "accepts leaving it with its reasoning as the note, and asks first for a check, which runs in the background" do
+    recommend(decision: "find_again", url: nil, confidence: "medium")
+    get review_path
+    expect(response.body).to include("Find its careers page again: at most", "medium confidence")
+
+    expect { patch accept_review_item_path(item) }.to have_enqueued_job(CheckNowJob)
+    expect(item.reload).to have_attributes(status: "open", recommendation: include("taken" => include("decision" => "find_again")))
+
+    other = create(:company, name: "Beta", domain: "beta.example", resolution_status: "failed", resolution_failure: "not_found")
+    left = ReviewQueue.sync!(other) && other.review_items.open.sole
+    as_agent("agent:assistant") do
+      ReviewRecommendations.save!(left, decision: "leave", confidence: "high", reasoning: "Its site has no public list of roles.")
+    end
+    patch accept_review_item_path(left)
+    expect(left.reload).to have_attributes(status: "left", note: end_with("(high confidence): Its site has no public list of roles."))
+  end
+
+  it "refuses an item with no recommendation, and one already decided" do
+    patch accept_review_item_path(item)
+    expect(flash[:alert]).to eq("That item carries no recommendation")
+
+    recommend
+    patch accept_review_item_path(item)
+    patch accept_review_item_path(item)
+    expect(flash[:alert]).to eq("That item is already decided.")
+  end
+end

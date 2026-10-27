@@ -8,9 +8,14 @@ class ReviewItemsController < ApplicationController
   def index
     @counts = ReviewItem.open.group(:kind).count
     @kind = params[:kind] if ReviewItem::KINDS.include?(params[:kind])
-    items = ReviewItem.open.includes(:company, :subject).oldest_first
-    @items = @kind ? items.where(kind: @kind) : items
+    @recommended = params[:recommended] == "1"
+    items = ReviewItem.open
+    items = items.where(kind: @kind) if @kind
+    @recommended_count = items.recommended.count
+    items = items.recommended if @recommended
+    @items = items.includes(:company, :subject).oldest_first
     @runs = latest_checks(@items)
+    @agreement = ReviewRecommendations.agreement
   end
 
   # A check started from the queue runs in the background; the item closes if it settles it.
@@ -18,6 +23,15 @@ class ReviewItemsController < ApplicationController
     item = ReviewItem.includes(:company, :subject).find(params[:id])
     done = ReviewQueue.act!(item, params[:decision].to_s, note: params[:note], url: params[:url], kind: params[:kind],
                                                           check: ->(record) { CheckRun.start_for!(record) })
+    redirect_back_or_to review_path, notice: done, status: :see_other
+  rescue ArgumentError, Verifier::Candidates::NotACandidate, ActiveRecord::RecordInvalid => e
+    redirect_back_or_to review_path, alert: e.message.upcase_first, status: :see_other
+  end
+
+  # The item's recommendation accepted in one click (2g): carried out as the operator's decision, noting they followed it.
+  def accept
+    item = ReviewItem.includes(:company, :subject).find(params[:id])
+    done = ReviewRecommendations.accept!(item, check: ->(record) { CheckRun.start_for!(record) })
     redirect_back_or_to review_path, notice: done, status: :see_other
   rescue ArgumentError, Verifier::Candidates::NotACandidate, ActiveRecord::RecordInvalid => e
     redirect_back_or_to review_path, alert: e.message.upcase_first, status: :see_other

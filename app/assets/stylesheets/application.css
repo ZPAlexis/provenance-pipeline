@@ -324,6 +324,11 @@ details.add > summary::-webkit-details-marker { display: none; }
 .item-closed { color: var(--live); font-weight: 600; }
 .review-item p { margin: 6px 0; overflow-wrap: anywhere; }
 details.guidance > summary { cursor: pointer; }
+/* A recommended decision (2g): set apart from what was seen, with Accept beside who made it. */
+.review-item .recommendation { margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--live); background: var(--bg); border-radius: 4px; }
+.review-item .recommendation p { margin: 4px 0; }
+.review-item .recommendation .decide { align-items: center; flex-wrap: wrap; }
+.review-item:has(.item-closed) .recommendation .decide { display: none; }
 
 /* Agents (1.3) */
 

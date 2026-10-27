@@ -24,6 +24,12 @@
         <%= pluralize(@writes.fetch(actor, 0), "write") %> in 30 days<% if @refusals[actor].to_i.positive? %>,
           <strong class="refused"><%= @refusals[actor] %> refused</strong><% end %>
       </p>
+      <% if actor == "agent:assistant" && @recommendations.any? %>
+        <p class="muted small">
+          Its recommendations on the review queue: <%= ReviewRecommendations.summary(@recommendations) %>.
+          <%= link_to "By kind", review_path(recommended: 1) %>
+        </p>
+      <% end %>
     </section>
   <% end %>
 

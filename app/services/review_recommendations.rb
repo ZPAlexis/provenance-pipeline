@@ -57,6 +57,36 @@ module ReviewRecommendations
     item
   end
 
+  # Who made a recommendation, in words.
+  WRITERS = { "agent:assistant" => "your Claude client, through MCP" }.freeze
+
+  def writer(actor) = WRITERS.fetch(actor.to_s, actor.to_s)
+
+  # The operator accepting an item's recommendation in one click (2g step 2): its action carried out as theirs, through
+  # the path every decision takes (ReviewQueue.act!), noting that they followed it. Returns what was done, in a sentence.
+  def accept!(item, check:)
+    recommendation = item.recommendation.presence or raise ArgumentError, "that item carries no recommendation"
+
+    ReviewQueue.act!(item, recommendation["decision"], url: recommendation["url"], kind: recommendation["kind"],
+                                                       note: accepted(recommendation), check: check)
+  end
+
+  # The note an accepted recommendation leaves on the record: whose it was, and why.
+  def accepted(recommendation)
+    "Accepted the recommendation of #{writer(recommendation['by'])} (#{recommendation['confidence']} confidence): " \
+      "#{recommendation['reasoning']}".truncate(600)
+  end
+
+  # All kinds' outcomes added up: { outcome => count }.
+  def totals(agreement = self.agreement) = agreement.values.reduce({}) { |sum, tally| sum.merge(tally) { |_, a, b| a + b } }
+
+  # One kind's outcomes in words: "3 of 4 you decided agreed, 2 pending".
+  def summary(tally)
+    decided = tally.fetch("agreed", 0) + tally.fetch("differed", 0)
+    [ ("#{tally.fetch('agreed', 0)} of #{decided} you decided agreed" if decided.positive?),
+      ("#{tally['resolved']} resolved on their own" if tally["resolved"]), ("#{tally['pending']} pending" if tally["pending"]) ].compact.join(", ")
+  end
+
   # What the operator did on an item carrying a recommendation, as kept beside it: the action, and the page or kind.
   def taken(item, decision, url: nil, kind: nil)
     return unless item.recommendation.present?
@@ -76,7 +106,7 @@ module ReviewRecommendations
   end
 
   # Agreement per kind over every item that carried a recommendation: { kind => { outcome => count } }.
-  def agreement(items = ReviewItem.where.not(recommendation: {}))
+  def agreement(items = ReviewItem.recommended)
     items.to_a.group_by(&:kind).transform_values { |list| list.map { |item| outcome(item) }.tally }
   end
 

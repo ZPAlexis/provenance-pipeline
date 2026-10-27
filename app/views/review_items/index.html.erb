@@ -9,6 +9,12 @@
       What an agent saw that needs your judgment, each with what was seen and a proposed action. Raised by the agent
       that saw it; closed by your decision, or when the record resolves it.
     </p>
+    <% if @agreement.any? %>
+      <p class="muted small">
+        Recommendations so far:
+        <%= safe_join(@agreement.sort.map { |kind, tally| "#{review_kind_label(kind)}: #{ReviewRecommendations.summary(tally)}" }, "; ") %>.
+      </p>
+    <% end %>
   </div>
 </div>
 
@@ -22,6 +28,16 @@
     <% end %>
   <% end %>
 </nav>
+
+<% if @recommended_count.positive? || @recommended %>
+  <nav class="filters" aria-label="Filter by recommendation">
+    <%= link_to review_path(kind: @kind), class: [ "filter", ("current" unless @recommended) ] do %>
+      All<% end %>
+    <%= link_to review_path(kind: @kind, recommended: 1), class: [ "filter", ("current" if @recommended) ] do %>
+      With a recommendation <span class="count"><%= @recommended_count %></span>
+    <% end %>
+  </nav>
+<% end %>
 
 <% if @items.any? %>
   <ol class="review-list">
@@ -37,6 +53,7 @@
           <span class="muted">Proposed:</span> <%= review_proposal(item) %>
           · <span class="muted">Raised by <%= actor_label(item.raised_by) %> <%= ago(item.created_at) %></span>
         </p>
+        <%= render "recommendation", item: item if item.recommended? %>
         <% if (run = @runs[item.id]) %>
           <%= render "check_runs/run", run: run, poll: false, item: item %>
         <% end %>
@@ -51,5 +68,5 @@
     <% end %>
   </ol>
 <% else %>
-  <p class="empty">Nothing to review<%= " of this kind" if @kind %>.</p>
+  <p class="empty">Nothing to review<%= " of this kind" if @kind %><%= " with a recommendation" if @recommended %>.</p>
 <% end %>

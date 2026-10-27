@@ -19,5 +19,7 @@ class AgentsController < ApplicationController
     @wrote = AuditEvent.where(credential_id: ids).where.not(action: "denied").group(:credential_id).count
     @refused = AuditEvent.denied.where(credential_id: ids).group(:credential_id).count
     @denied = AuditEvent.denied.order(occurred_at: :desc).limit(RECENT).preload(:target, :credential)
+    # How the assistant's recommendations on the review queue came out (2g): agreement, the ground for any autonomy.
+    @recommendations = ReviewRecommendations.totals
   end
 end

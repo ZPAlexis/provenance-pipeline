@@ -1,0 +1,35 @@
+<%# A recommended decision on the item (2g), from the operator's own Claude client through MCP: what it recommends,
+    how sure it is, what it checked and why, and Accept, which carries it out as the operator's decision. A check
+    it recommends asks first, with what it could cost; the rest is one click. %>
+<% recommendation = item.recommendation %>
+<% decision = recommendation["decision"] %>
+<% record = decision == "find_again" ? item.company : (item.subject if decision == "check_again") %>
+<div class="recommendation">
+  <p class="small">
+    <strong>Recommended:</strong>
+    <% if decision == "set_page" %>
+      Set the page to <%= outside_link(recommendation["url"], label: recommendation["url"]) %>
+    <% else %>
+      <%= ReviewRecommendations.said(recommendation) %>
+    <% end %>
+    <%= tag.span("#{recommendation['confidence']} confidence",
+                 class: [ "badge", { "high" => "live", "medium" => "unsure" }.fetch(recommendation["confidence"], nil) ]) %>
+  </p>
+  <p class="small"><%= recommendation["reasoning"] %></p>
+  <% if recommendation["checked"].present? %>
+    <p class="muted small">
+      Checked:
+      <%= safe_join(recommendation["checked"].map { |said| Verifier::ResultContract.web_url?(said) ? outside_link(said, label: said) : said }, " · ") %>
+    </p>
+  <% end %>
+  <div class="decide">
+    <% confirm = ("#{ReviewRecommendations.said(recommendation)}: at most #{cost(Verifier::CheckNow.ceiling(record))}. Go?" if record) %>
+    <%= button_to "Accept", accept_review_item_path(item), method: :patch,
+                            class: [ "btn", "primary", "small", ("check-button" if record) ], data: { turbo_confirm: confirm } %>
+    <span class="muted small">
+      By <%= ReviewRecommendations.writer(recommendation["by"]) %>,
+      <%= ago(Time.iso8601(recommendation["at"])) if recommendation["at"] %><%= " (#{recommendation['model']}, as reported)" if recommendation["model"] %>.
+      Accepting decides it as yours, noting you followed it; or pick another action below.
+    </span>
+  </div>
+</div>
