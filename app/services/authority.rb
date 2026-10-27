@@ -129,6 +129,14 @@ module Authority
         Rule.new(model: "ApplicationContact", actions: %i[create]) # the contact an activity names, linked to its application
       ]
     },
+    "review:recommend" => {
+      about: "Recommend a decision on an open review item: one of its own actions, with what was checked and why, kept " \
+             "on the item for the operator to accept or not. Never decide one, nor make the write it recommends.",
+      rules: [
+        Rule.new(model: "ReviewItem", actions: %i[update], attributes: %w[recommendation],
+                 only_if: ->(item) { item.status == "open" && item.status_in_database == "open" })
+      ]
+    },
     "review:keep" => {
       about: "Review items kept in step with the record: raised, restated, and closed when what was seen resolves. " \
              "Never decided.",
@@ -154,9 +162,11 @@ module Authority
                                    "100 and why, for the operator to rank roles by. Tracks, dismisses and sends nothing.",
                             scopes: %w[fit:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
-                                  "contacts, activities, the roles it proposes and the fit it weighs), one credential per save " \
-                                  "holding only that tool's scopes. Tracks, approves, deletes, moves a stage, and sends nothing.",
-                           scopes: %w[drafts:write resume_reviews:write contacts:write activities:write postings:suggest fit:write] }
+                                  "contacts, activities, the roles it proposes, the fit it weighs, and what it recommends on the " \
+                                  "review queue), one credential per save holding only that tool's scopes. Tracks, decides, " \
+                                  "approves, deletes, moves a stage, and sends nothing.",
+                           scopes: %w[drafts:write resume_reviews:write contacts:write activities:write postings:suggest fit:write
+                                      review:recommend] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.

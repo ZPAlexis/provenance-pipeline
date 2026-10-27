@@ -20,9 +20,28 @@ namespace :review do
       puts "\n#{item.id}  [#{helpers.review_kind_label(item.kind)}]  #{helpers.review_question(item)}"
       puts "  #{item.evidence.truncate(300)}"
       puts "  Proposed: #{helpers.review_proposal(item)}   (raised by #{item.raised_by}, #{item.created_at.to_date})"
+      next unless item.recommended?
+
+      said = item.recommendation
+      puts "  Recommended: #{ReviewRecommendations.said(said)} (#{said['confidence']} confidence; #{said['by']}, #{said['at'].to_s.first(10)})"
+      puts "    #{said['reasoning'].to_s.truncate(300)}"
     end
     puts "\n#{items.size} open. Decide one with: DECISION=... [NOTE=\"...\"] [URL=...] [KIND=...] " \
          "bin/rails \"review:decide[item_id]\" (#{ReviewQueue::DECISIONS.join(', ')})"
+  end
+
+  desc "How the recommendations on review items came out, per kind: agreed (you did as recommended), differed, resolved " \
+       "(the record settled it first), and pending (still open). Read-only."
+  task agreement: :environment do
+    agreement = ReviewRecommendations.agreement
+    abort "No item has carried a recommendation yet." if agreement.empty?
+
+    agreement.sort.each do |kind, tally|
+      decided = tally.fetch("agreed", 0) + tally.fetch("differed", 0)
+      rate = decided.positive? ? " (#{(100.0 * tally.fetch('agreed', 0) / decided).round}% of those you decided)" : ""
+      counts = ReviewRecommendations::OUTCOMES.filter_map { |outcome| "#{tally[outcome]} #{outcome}" if tally[outcome] }
+      puts "#{ReviewGuidance.label(kind)}: #{counts.join(', ')}#{rate}"
+    end
   end
 
   desc "Decide one item, as on the Review page, audited as you; backs up first. A check asked for runs now and prints " \
