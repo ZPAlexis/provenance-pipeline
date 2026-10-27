@@ -15,6 +15,10 @@ class ReviewItem < ApplicationRecord
   validates :status, inclusion: { in: STATUSES }
   validates :evidence, :evidence_key, :raised_by, presence: true
 
+  # A decision recommended on it (2g): ReviewRecommendations.
+  def recommended? = recommendation.present?
+
   scope :open, -> { where(status: "open") }
+  scope :recommended, -> { where.not(recommendation: {}) }
   scope :oldest_first, -> { order(:created_at) }
 end

@@ -15,6 +15,9 @@
 # This bookkeeping is written by the queue itself, under a grant fixed in code
 # (Authority::SYSTEM, 1.3): it raises, restates, and closes what resolved, and
 # never decides. Each item still names whose evidence raised it.
+#
+# An item may carry a recommendation (2g, ReviewRecommendations): what the operator then does is kept beside it, in
+# the same write, so agreement can be measured.
 module ReviewQueue
   Finding = Data.define(:kind, :subject, :evidence, :key, :proposal)
 
@@ -70,14 +73,19 @@ module ReviewQueue
     raise ArgumentError, "unknown decision #{decision.inspect}: one of #{DECISIONS.join(', ')}" unless DECISIONS.include?(decision)
 
     company, role, note = item.company, item.subject, note.to_s.strip.presence
+    taken = ReviewRecommendations.taken(item, decision, url: url, kind: kind)
     if %w[find_again check_again].include?(decision)
       record = decision == "find_again" ? company : role or raise ArgumentError, "the role asked about is no longer on record"
       why = Verifier::CheckNow.refusal(record) and raise ArgumentError, why
+      if taken # the item stays open until the check settles it; what was asked is kept now
+        item.update!(recommendation: taken)
+        AuditEvent.record_write!(item, actor: AuditEvent::OPERATOR, reasoning: "Asked for a check from the queue: #{decision.humanize.downcase}.")
+      end
       said = check.call(record)
       return said.is_a?(String) ? said : "Checking it now, in the background: the item shows how it goes, and closes if the check settles it."
     end
 
-    decide!(item, decision, note: note) do
+    decide!(item, decision, note: note, taken: taken) do
       case decision
       when "confirm" then Verifier::Candidates.confirm!(company)
       when "reject" then Verifier::Candidates.reject!(company)
@@ -94,13 +102,13 @@ module ReviewQueue
   # The operator's decision on an item, carried out by the block through the
   # services every such write goes through. The item closes with the decision in
   # the same transaction: a write that fails leaves it open. "leave" closes it as
-  # left, and it comes back only when the evidence changes.
-  def decide!(item, decision, note: nil, actor: AuditEvent::OPERATOR)
+  # left, and it comes back only when the evidence changes. `taken`: its recommendation with what was done kept beside it.
+  def decide!(item, decision, note: nil, taken: nil, actor: AuditEvent::OPERATOR)
     left = decision == "leave"
     raise ArgumentError, "say why you leave it as is: your note goes on the record" if left && note.blank?
 
     ApplicationRecord.transaction do
-      close!(item, left ? "left" : "done", decision, actor: actor, note: note,
+      close!(item, left ? "left" : "done", decision, actor: actor, note: note, recommendation: taken,
                                                      reasoning: left ? "Left as is by hand: #{note}" : "Decided by hand: #{decision.humanize.downcase}.#{" #{note}" if note}")
       yield if block_given?
     end
@@ -124,8 +132,10 @@ module ReviewQueue
   end
 
   # Closes an item as `actor`'s; audited as the queue when its bookkeeping closes it (`audit_as`).
-  def close!(item, status, decision, actor:, reasoning:, note: nil, audit_as: actor)
-    item.update!(status: status, decision: decision, decided_by: actor, decided_at: Time.current, note: note)
+  def close!(item, status, decision, actor:, reasoning:, note: nil, recommendation: nil, audit_as: actor)
+    closed = { status: status, decision: decision, decided_by: actor, decided_at: Time.current, note: note }
+    closed[:recommendation] = recommendation if recommendation
+    item.update!(closed)
     AuditEvent.record_write!(item, actor: audit_as, reasoning: reasoning)
   end
 
