@@ -19,6 +19,7 @@ class ReviewItem < ApplicationRecord
   def recommended? = recommendation.present?
 
   scope :open, -> { where(status: "open") }
-  scope :recommended, -> { where.not(recommendation: {}) }
+  # SQL, not a hash: Active Record reads `recommendation: {}` as a condition on an associated table, and drops it.
+  scope :recommended, -> { where("review_items.recommendation <> '{}'::jsonb") }
   scope :oldest_first, -> { order(:created_at) }
 end

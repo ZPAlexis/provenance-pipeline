@@ -48,6 +48,7 @@ Rails.application.routes.draw do
   get "review", to: "review_items#index", as: :review
   resources :review_items, only: [] do
     patch :decide, on: :member
+    patch :accept, on: :member
   end
   get "agents", to: "agents#index", as: :agents
   resources :agent_credentials, only: :show, path: "agents/credentials" do
