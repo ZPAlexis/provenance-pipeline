@@ -35,10 +35,14 @@ module ProvenanceMcp
     To find roles that fit the person and weigh them against their resume, use the find_roles prompt (or weigh_roles
     for roles already on record): find_roles, suggest_roles (which reads each role's own page first and suggests only
     those still up), get_roles_to_weigh, save_fit_score; read_descriptions reads a description a role on record lacks.
-    Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score) save
-    what you wrote, were told, or weighed back to the record: use them only when the person asks you to. Each save is
-    recorded as yours, for them to edit, approve, dismiss or delete; nothing is ever sent, no tool tracks a role, and
-    no tool moves an application between stages.
+    To recommend decisions on the review queue (what the app's agents couldn't settle), use the review_queue prompt:
+    list_review_items, get_review_item, save_recommendation. A recommendation decides nothing: the person accepts it
+    or decides otherwise, in the app.
+    Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score,
+    save_recommendation) save what you wrote, were told, weighed or recommend back to the record: use them only when
+    the person asks you to. Each save is recorded as yours, for them to edit, approve, accept, dismiss or delete;
+    nothing is ever sent, no tool tracks a role or decides a review item, and no tool moves an application between
+    stages.
   TEXT
 
   # A tool's answer that is a refusal the client should read (no such company, a missing input), not a failure.
@@ -94,16 +98,20 @@ module ProvenanceMcp
       .tap { |server| server.completion_handler { |params| complete(params) } }
   end
 
-  # What a prompt's argument could be, as the operator types it: an application's company and role, or the
-  # contact an outreach note is for (2e).
+  # What a prompt's argument could be, as the operator types it: an application's company and role, the contact an
+  # outreach note is for (2e), or a kind of review item (2g).
   def complete(params)
     argument = params.dig(:argument, :name).to_s
-    return { completion: { values: [] } } unless %w[application contact].include?(argument)
+    return { completion: { values: [] } } unless %w[application contact kind].include?(argument)
 
     ready!
     typed = params.dig(:argument, :value).to_s
     values = read_only do
-      argument == "application" ? applications(typed) : contacts(typed, params.dig(:context, :arguments, :application))
+      case argument
+      when "application" then applications(typed)
+      when "contact" then contacts(typed, params.dig(:context, :arguments, :application))
+      else ReviewItem::KINDS.select { |kind| kind.include?(typed.strip.downcase.tr(' ', '_')) }
+      end
     end
     { completion: { values: values.uniq.first(100), hasMore: values.size > 100 } }
   end
@@ -217,3 +225,4 @@ end
 
 require_relative "writing"
 require_relative "lookup"
+require_relative "review"

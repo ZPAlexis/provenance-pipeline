@@ -138,7 +138,7 @@ RSpec.describe "Writing about an application through MCP" do
     it "are the four kinds of writing, each taking the application, and the language and what to stress where they apply; and two for fit" do
       prompts = ProvenanceMcp.server.prompts
 
-      expect(prompts.keys).to eq(%w[cover_letter find_roles outreach_note resume_review tailored_resume weigh_roles])
+      expect(prompts.keys).to eq(%w[cover_letter find_roles outreach_note review_queue resume_review tailored_resume weigh_roles])
       expect(prompts["cover_letter"].to_h[:arguments].map { |argument| argument[:name] }).to eq(%w[application language stress])
       expect(prompts["resume_review"].to_h[:arguments].map { |argument| argument[:name] }).to eq(%w[application language])
       expect(prompts["outreach_note"].to_h[:arguments].map { |argument| argument[:name] }).to eq(%w[application contact language stress])

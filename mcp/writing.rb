@@ -84,7 +84,7 @@ module ProvenanceMcp
     end
 
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out.
-    FENCES = %w[role_description resume profile notes contacts contact review].freeze
+    FENCES = %w[role_description resume profile notes contacts contact review evidence record].freeze
 
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
     # the newest resume numbered by line, the profile, the notes, its contacts, the one it is to (when the writing is to
