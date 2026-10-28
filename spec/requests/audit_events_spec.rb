@@ -65,6 +65,24 @@ RSpec.describe "The audit log", type: :request do
       .and(not_include("Denied: may not"))
   end
 
+  # Found by the operator, 2026-10-28: an id in what changed is the only way to narrow, and an update rarely sets one.
+  it "narrows to any event's record from its row, and names a review item's kind and company" do
+    history
+    beta = create(:company, name: "Beta", domain: "beta.example", resolution_status: "failed", resolution_failure: "blocked")
+    create(:posting, company: beta, role_title: "Recruiter")
+    create(:page_check, company: beta, purpose: "resolution", step: "path_probe", url: "https://beta.example/careers", run_id: "r0",
+                        outcome: "blocked", reason: "robots_txt", checked_at: 1.day.ago)
+    ReviewQueue.sync!(beta)
+    item = beta.review_items.open.sole
+
+    get audit_path
+    expect(response.body).to include(">its events</a>", %(href="#{audit_path(record: role.id)}"), %(href="#{audit_path(record: company.id)}"),
+                                     %(href="#{audit_path(record: item.id)}"), "No careers page at Beta")
+
+    get audit_path(record: role.id)
+    expect(response.body).not_to include(">its events</a>")
+  end
+
   it "says why it can't apply a filter, and shows everything instead" do
     get audit_path(who: "nobody")
     expect(response).to redirect_to(audit_path)

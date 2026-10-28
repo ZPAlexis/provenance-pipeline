@@ -1,6 +1,6 @@
 # The audit log, searchable (3.1): every event on record, newest first, narrowed by who wrote it, the kind of
 # record, the action, a date range, one record or the credential behind it, and an attribute it changed.
-# Read-only: the Audit log page reads it, and (step 2) `audit:list` and the `query_audit_log` MCP tool.
+# Read-only: the Audit log page reads it, and so do `audit:list` and the `query_audit_log` MCP tool, as plain text.
 class AuditLog
   PER_PAGE = 50
   FILTERS = %i[who kind action attribute from to record credential].freeze
@@ -9,11 +9,15 @@ class AuditLog
   KIND_NAMES = { "Posting" => "role", "AgentCredential" => "credential", "ApplicationContact" => "contact_link" }.freeze
   # What a page of events shows of each subject, loaded with the page rather than row by row.
   SUBJECTS = {
-    "Posting" => :company, "Application" => :posting, "Activity" => { application: :posting }, "Draft" => { application: :posting },
-    "ResumeReview" => { application: :posting }, "ApplicationContact" => { application: :posting },
-    "FitScore" => :posting, "Contact" => :company
+    "Posting" => :company, "Application" => %i[posting company], "Activity" => { application: %i[posting company] },
+    "Draft" => { application: %i[posting company] }, "ResumeReview" => { application: %i[posting company] },
+    "ApplicationContact" => { application: %i[posting company] }, "FitScore" => { posting: :company },
+    "Contact" => :company, "ReviewItem" => :company
   }.freeze
   UUID = /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/
+  # One attribute an event set. A create shows what it set and a delete what the record held, so only `after` (`pair`
+  # false); an update or a refused write shows both. A JSONB field's keys come one by one (`enrichment.Founded`).
+  Change = Data.define(:attribute, :before, :after, :pair)
 
   attr_reader(*FILTERS)
 
@@ -64,6 +68,73 @@ class AuditLog
 
   def self.kind_label(type) = kind_name(type).humanize
 
+  def self.changes(event)
+    event.changes_made.flat_map do |attribute, change|
+      next change.map { |key, pair| change(event, "#{attribute}.#{key}", pair) } if change.is_a?(Hash)
+
+      [ change(event, attribute, change) ]
+    end
+  end
+
+  def self.change(event, attribute, change)
+    return Change.new(attribute, nil, change, false) unless change.is_a?(Array) && change.size == 2
+
+    before, after = change
+    case event.action
+    when "create" then Change.new(attribute, nil, after, false)
+    when "destroy" then Change.new(attribute, nil, before, false)
+    else Change.new(attribute, before, after, true)
+    end
+  end
+
+  # An event as plain text, for the command and the MCP tool: when, who (any human is the operator), what was done
+  # to which record (its id in brackets, to narrow to it) and under which credential; then what changed, and why.
+  def self.describe(event, cut: 200)
+    by = event.actor.start_with?("human:") ? "operator" : event.actor
+    under = " (credential: #{event.credential.purpose} [#{event.credential_id}])" if event.credential
+    changed = changes(event).map do |change|
+      "#{change.attribute}: #{change.pair ? "#{text(change.before, cut)} → #{text(change.after, cut)}" : text(change.after, cut)}"
+    end
+    [ "#{event.occurred_at.utc.strftime('%Y-%m-%d %H:%M')} UTC  #{by} #{ACTIONS.fetch(event.action, event.action)} #{subject(event)}#{under}",
+      ("  Changed: #{changed.join('; ')}" if changed.any?),
+      ("  Why: #{event.reasoning.truncate(cut * 3)}" if event.reasoning.present?) ].compact
+  end
+
+  # What an event is about, in words: its kind, what names it, and its id. A contact is named by its company only.
+  def self.subject(event)
+    return "a new record" unless event.target_id
+
+    [ event.target_type && kind_name(event.target_type).tr("_", " "), subject_name(event), "[#{event.target_id}]" ].compact.join(" ")
+  end
+
+  def self.subject_name(event)
+    case (target = event.target)
+    when Posting then %("#{target.role_title}" at #{target.company.name})
+    when Company then target.name
+    when ReviewItem then "(#{ReviewGuidance.label(target.kind).downcase}) at #{target.company.name}"
+    when AgentCredential then target.purpose
+    when Application, Activity, Draft, ResumeReview, ApplicationContact
+      application = target.is_a?(Application) ? target : target.application
+      %(for "#{application.posting.role_title}" at #{application.company.name})
+    when FitScore then %(of "#{target.posting.role_title}" at #{target.posting.company.name})
+    when Contact then "at #{target.company.name}"
+    when nil
+      title = Array(event.changes_made["role_title"]).compact.first
+      title ? %("#{title}", since deleted) : "since deleted"
+    end
+  end
+
+  def self.text(value, cut)
+    case value
+    when nil then "—"
+    when Array then value.map(&:to_s).join(", ").truncate(cut)
+    when Hash then value.to_json.truncate(cut)
+    else value.to_s.truncate(cut)
+    end
+  end
+
+  private_class_method :change, :subject_name, :text
+
   # The attributes the log's events changed, for one kind of record or every kind.
   def self.attributes(kind = nil)
     events = kind ? AuditEvent.where(target_type: kind) : AuditEvent.all
@@ -77,8 +148,11 @@ class AuditLog
   def pages = [ (count + PER_PAGE - 1) / PER_PAGE, 1 ].max
 
   # One page of events, newest first, with what each is about loaded alongside.
-  def page(number = 1)
-    events = self.events.offset((number - 1) * PER_PAGE).limit(PER_PAGE).preload(:credential, :target).to_a
+  def page(number = 1) = slice((number - 1) * PER_PAGE, PER_PAGE)
+
+  # `limit` events past the newest `offset`, with what each is about loaded alongside.
+  def slice(offset, limit)
+    events = self.events.offset(offset).limit(limit).preload(:credential, :target).to_a
     events.map(&:target).compact.group_by { |target| target.class.name }.each do |type, targets|
       ActiveRecord::Associations::Preloader.new(records: targets, associations: SUBJECTS[type]).call if SUBJECTS[type]
     end
@@ -96,6 +170,9 @@ class AuditLog
   def to_params = FILTERS.to_h { |filter| [ filter, param(filter) ] }.compact
 
   def filtered? = to_params.any?
+
+  # The filters given, in a line: "who agent:verifier, kind role, from 2026-10-01".
+  def description = to_params.map { |filter, value| "#{filter} #{value}" }.join(", ")
 
   # The latest event about the record filtered on: what the page names it by, even once it is deleted.
   def record_event = (AuditEvent.where(target_id: record).order(occurred_at: :desc).preload(:target).first if record)

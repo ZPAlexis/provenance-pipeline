@@ -107,6 +107,29 @@ RSpec.describe AuditLog do
     expect(log.page(1).first.association(:target)).to be_loaded
   end
 
+  it "reads each event's changes: what a create set, what a delete held, both sides of an update, JSONB key by key" do
+    created = event("human:operator", company, action: "create", changes: { "name" => [ nil, "Acme" ], "enrichment" => { "Founded" => [ nil, "2001" ] } })
+    deleted = event("agent:suggester", role, action: "destroy", changes: { "role_title" => [ "Sales Engineer", nil ] })
+    changed = event("agent:verifier", role, changes: { "verification_state" => %w[pending not_found] })
+
+    expect(described_class.changes(created)).to eq([ AuditLog::Change.new("name", nil, "Acme", false),
+                                                     AuditLog::Change.new("enrichment.Founded", nil, "2001", false) ])
+    expect(described_class.changes(deleted).sole).to have_attributes(attribute: "role_title", after: "Sales Engineer", pair: false)
+    expect(described_class.changes(changed).sole).to have_attributes(before: "pending", after: "not_found", pair: true)
+  end
+
+  it "says an event in plain text, naming its record's id; any human is the operator, and a contact only its company" do
+    contact = Authority.unchecked { company.contacts.create!(name: "Pat Example", kind: "recruiter") }
+    renamed = event("human:earlier", contact, changes: { "notes" => [ nil, "Met at a meetup." ] }, reasoning: "Saved by hand.")
+    gone = event("agent:suggester", nil, action: "destroy", changes: { "role_title" => [ "Partner Manager", nil ] })
+    gone.update_columns(target_type: "Posting", target_id: SecureRandom.uuid) # a role deleted since
+
+    expect(described_class.describe(renamed)).to eq([ "#{renamed.occurred_at.utc.strftime('%Y-%m-%d %H:%M')} UTC  operator changed "                                                       "contact at Acme [#{contact.id}]", "  Changed: notes: — → Met at a meetup.",
+                                                      "  Why: Saved by hand." ])
+    expect(described_class.describe(gone.reload).first).to end_with(%(agent:suggester deleted role "Partner Manager", since deleted [#{gone.target_id}]))
+    expect(described_class.subject(build(:audit_event, :without_target))).to eq("a new record")
+  end
+
   it "gives back the filters it holds, by the names a page or a command uses" do
     credential = history
 
@@ -114,5 +137,6 @@ RSpec.describe AuditLog do
 
     expect(log.to_params).to eq(who: "agent:verifier", kind: "role", action: "denied", from: "2026-10-01", credential: credential.id)
     expect(log).to be_filtered
+    expect(log.description).to eq("who agent:verifier, kind role, action denied, from 2026-10-01, credential #{credential.id}")
   end
 end
