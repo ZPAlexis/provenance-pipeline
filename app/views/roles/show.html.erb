@@ -67,7 +67,10 @@
 <%= render "roles/watch", role: @role %>
 
 <h2>History</h2>
-<p class="muted small">Every change to this role: who made it, and why. Checks that confirmed the answer change nothing and are listed below.</p>
+<p class="muted small">
+  Every change to this role: who made it, and why. Checks that confirmed the answer change nothing and are listed below.
+  <%= link_to "Narrow it in the audit log", audit_path(record: @role.id) %>
+</p>
 <div class="table-wrap">
   <table>
     <thead><tr><th>When</th><th>Change</th><th>By</th><th>Why</th></tr></thead>

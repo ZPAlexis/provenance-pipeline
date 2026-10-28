@@ -123,6 +123,13 @@ th, td { padding: 7px 10px; text-align: left; vertical-align: top; border-bottom
 th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg); }
 tr:last-child td { border-bottom: none; }
 td.reason { max-width: 520px; color: var(--muted); overflow-wrap: anywhere; }
+/* The audit log: each event's changes as a list, folded past a few. */
+td.change-list { min-width: 200px; max-width: 420px; overflow-wrap: anywhere; font-size: 13px; }
+ul.changes { margin: 0; padding: 0; list-style: none; }
+ul.changes code { color: var(--muted); }
+td.change-list details > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+table.audit td.reason { min-width: 220px; }
+.pager { display: flex; gap: 10px; align-items: center; margin: 12px 0; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Facts */

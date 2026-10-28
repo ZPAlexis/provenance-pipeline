@@ -68,6 +68,10 @@
 <% end %>
 
 <h2>Timeline</h2>
+<p class="muted small">
+  Its stages come from the audit log, dated as you dated them.
+  <%= link_to "This application in the audit log", audit_path(record: @application.id) %>
+</p>
 <% if @timeline.any? %>
   <div class="table-wrap">
     <table>

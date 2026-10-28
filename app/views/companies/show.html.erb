@@ -129,6 +129,7 @@
       </tbody>
     </table>
   </div>
+  <p class="muted small"><%= link_to "Every change to this company, in the audit log", audit_path(record: @company.id) %></p>
 <% else %>
   <p class="empty">No changes recorded.</p>
 <% end %>

@@ -61,7 +61,7 @@
   </div>
   <p class="muted small">
     Audited changes only: the evidence it recorded (page checks, LLM calls) and checks that confirmed an answer are under
-    each company's checks.
+    each company's checks. <%= link_to "Narrow them in the audit log", audit_path(credential: @credential.id) %>
   </p>
 <% else %>
   <p class="empty">No audited change: its run confirmed what was on record, or wrote nothing.</p>

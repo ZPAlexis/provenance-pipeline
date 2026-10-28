@@ -5,6 +5,7 @@
     <p class="sub">
       Who may write what. Every agent run holds a credential issued for that run, with only the scopes it needs, and
       every write it makes is checked against it. A write no scope allows is refused, and the refusal is on the record.
+      <%= link_to "Every write, yours included, is in the audit log", audit_path %>.
     </p>
   </div>
 </div>
@@ -21,7 +22,7 @@
       </ul>
       <p class="muted small">
         Last run <%= ago(@last_issued[actor]) %> · <%= pluralize(@issued.fetch(actor, 0), "credential") %> issued ·
-        <%= pluralize(@writes.fetch(actor, 0), "write") %> in 30 days<% if @refusals[actor].to_i.positive? %>,
+        <%= link_to pluralize(@writes.fetch(actor, 0), "write"), audit_path(who: actor, from: 30.days.ago.to_date) %> in 30 days<% if @refusals[actor].to_i.positive? %>,
           <strong class="refused"><%= @refusals[actor] %> refused</strong><% end %>
       </p>
       <% if actor == "agent:assistant" && @recommendations.any? %>
@@ -42,7 +43,7 @@
           <li><code class="scope"><%= scope %></code> <span class="small"><%= scope_about(scope) %></span></li>
         <% end %>
       </ul>
-      <p class="muted small"><%= pluralize(@writes.fetch(grant.actor, 0), "write") %> in 30 days</p>
+      <p class="muted small"><%= link_to pluralize(@writes.fetch(grant.actor, 0), "write"), audit_path(who: grant.actor, from: 30.days.ago.to_date) %> in 30 days</p>
     </section>
   <% end %>
 
@@ -112,6 +113,7 @@
       </tbody>
     </table>
   </div>
+  <p class="muted small"><%= link_to "Every refused write, in the audit log", audit_path(act: "denied") %></p>
 <% else %>
   <p class="empty">None refused: every agent write so far was one its credential allows.</p>
 <% end %>

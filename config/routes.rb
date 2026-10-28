@@ -38,6 +38,7 @@ Rails.application.routes.draw do
   resources :check_runs, only: %i[create show]
   resource :check_all, only: %i[show create], controller: "check_all"
   get "changes", to: "changes#index", as: :changes
+  get "audit", to: "audit_events#index", as: :audit
   resources :suggestions, only: :create
   resource :profile, only: %i[show update] do
     patch :preview
