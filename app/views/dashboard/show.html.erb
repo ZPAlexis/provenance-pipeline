@@ -128,7 +128,10 @@
 <% end %>
 
 <h2>Recent verdict changes</h2>
-<p class="muted small"><%= link_to "Everything that changed since the last check of everything", changes_path %>: suggestions, careers pages, lists that changed a lot, and more.</p>
+<p class="muted small">
+  <%= link_to "Everything that changed since the last check of everything", changes_path %>: suggestions, careers pages, lists that changed a lot, and more.
+  <%= link_to "Every write on record, searchable", audit_path %>: the audit log.
+</p>
 <% if @changes.any? %>
   <div class="table-wrap">
     <table>

@@ -1,0 +1,99 @@
+<% content_for :title, "Audit log · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Audit log</h1>
+    <p class="sub">
+      Every write on record, newest first: who made it, under which credential, what it changed, and why. Refused
+      writes are here too. The app never changes or deletes an event, for anyone.
+    </p>
+  </div>
+</div>
+
+<nav class="filters" aria-label="Who wrote it">
+  <% audit_who_chips(@log, @by_who).each do |who, label, count| %>
+    <%= link_to audit_path(audit_params(@log, who: who, page: nil)), class: [ "filter", ("current" if @log.who == who) ] do %>
+      <%= label %> <span class="count"><%= count %></span>
+    <% end %>
+  <% end %>
+</nav>
+
+<%= form_with url: audit_path, method: :get, class: "check-form audit-form" do %>
+  <% audit_params(@log).slice(:who, :record, :credential).each do |name, value| %>
+    <%= hidden_field_tag name, value, id: nil %>
+  <% end %>
+  <label class="small">Record
+    <%= select_tag :kind, options_for_select(@kinds.map { |name, type| [ AuditLog.kind_label(type), name ] }, @log.to_params[:kind]),
+                   include_blank: "Every kind" %>
+  </label>
+  <label class="small">Action
+    <%= select_tag :act, options_for_select(AuditLog::ACTIONS.map { |key, label| [ label.capitalize, key ] }, @log.action),
+                   include_blank: "Any" %>
+  </label>
+  <label class="small">Changed
+    <%= select_tag :attribute, options_for_select(@attributes, @log.attribute), include_blank: "Anything" %>
+  </label>
+  <label class="small">From <%= date_field_tag :from, @log.from %></label>
+  <label class="small">To <%= date_field_tag :to, @log.to %></label>
+  <%= submit_tag "Show", class: "btn small", name: nil %>
+  <%= link_to "Clear all", audit_path, class: "small" if @log.filtered? %>
+<% end %>
+
+<% if @log.record %>
+  <p class="small">
+    <% if (about = @log.record_event) %>
+      On <%= event_subject(about) %> <span class="muted">(<%= AuditLog.kind_label(about.target_type).downcase %>)</span>
+    <% else %>
+      On record <code><%= @log.record %></code>, which no event is about
+    <% end %>
+    · <%= link_to "Every record", audit_path(audit_params(@log, record: nil)) %>
+  </p>
+<% end %>
+<% if @log.credential %>
+  <p class="small">
+    <% if (credential = @log.credential_record) %>
+      Written under <%= link_to credential.purpose, agent_credential_path(credential) %>
+      <span class="muted">(<%= actor_label(credential.actor) %>'s credential)</span>
+    <% else %>
+      Written under credential <code><%= @log.credential %></code>, which isn't on record
+    <% end %>
+    · <%= link_to "Any credential", audit_path(audit_params(@log, credential: nil)) %>
+  </p>
+<% end %>
+
+<% if @events.any? %>
+  <p class="muted small">
+    <%= pluralize(number_with_delimiter(@log.count), "event") %><%= (@log.count == 1 ? " matches" : " match") if @log.filtered? %>.
+    <% if @pages > 1 %>
+      Showing <%= (@page - 1) * AuditLog::PER_PAGE + 1 %>–<%= (@page - 1) * AuditLog::PER_PAGE + @events.size %>.
+    <% end %>
+  </p>
+  <div class="table-wrap">
+    <table class="audit">
+      <thead><tr><th>When</th><th>By</th><th>On</th><th>Action</th><th>What changed</th><th>Why</th></tr></thead>
+      <tbody>
+        <% @events.each do |event| %>
+          <tr>
+            <td class="nowrap">
+              <%= event.occurred_at.utc.strftime("%Y-%m-%d %H:%M") %>
+              <div class="small"><%= ago(event.occurred_at) %></div>
+            </td>
+            <td><%= actor_cell(event) %></td>
+            <td><%= audit_subject(event) %></td>
+            <td><%= audit_action_badge(event) %></td>
+            <td class="change-list"><%= audit_changes(event) %></td>
+            <td class="reason"><%= event.reasoning %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <% if @pages > 1 %>
+    <nav class="pager" aria-label="Pages">
+      <%= link_to "Newer", audit_path(audit_params(@log, page: @page - 1)), class: "btn small" if @page > 1 %>
+      <span class="muted small">Page <%= @page %> of <%= @pages %></span>
+      <%= link_to "Older", audit_path(audit_params(@log, page: @page + 1)), class: "btn small" if @page < @pages %>
+    </nav>
+  <% end %>
+<% else %>
+  <p class="empty"><%= @log.filtered? ? "No event matches." : "Nothing on record yet." %></p>
+<% end %>
