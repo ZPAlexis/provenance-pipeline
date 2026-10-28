@@ -24,12 +24,12 @@
   <% end %>
   <div class="decide">
     <% confirm = ("#{ReviewRecommendations.said(recommendation)}: at most #{cost(Verifier::CheckNow.ceiling(record))}. Go?" if record) %>
-    <%= button_to "Accept", accept_review_item_path(item), method: :patch,
+    <%= button_to accept_label(recommendation), accept_review_item_path(item), method: :patch,
                             class: [ "btn", "primary", "small", ("check-button" if record) ], data: { turbo_confirm: confirm } %>
     <span class="muted small">
       By <%= ReviewRecommendations.writer(recommendation["by"]) %>,
       <%= ago(Time.iso8601(recommendation["at"])) if recommendation["at"] %><%= " (#{recommendation['model']}, as reported)" if recommendation["model"] %>.
-      Accepting decides it as yours, noting you followed it; or pick another action below.
+      <%= accept_effect(item, recommendation) %> Accepting decides it as yours, noting you followed it; or pick another action below.
     </span>
   </div>
 </div>

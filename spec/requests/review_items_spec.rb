@@ -165,7 +165,9 @@ RSpec.describe "Accepting a recommended decision", type: :request do
     get review_path
     expect(response.body).to include("Recommended:", ">https://acme.example/careers</a>", "high confidence",
                                      "Its homepage links Careers to this page, which lists 12 roles.", ">https://acme.example</a> · its sitemap",
-                                     "By your Claude client, through MCP", "(claude-opus-5-5, as reported)", ">Accept<",
+                                     "By your Claude client, through MCP", "(claude-opus-5-5, as reported)", ">Accept: set this page<",
+                                     "Watches this page as Acme&#39;s careers page; its roles are read at its next check.",
+                                     "1 item carries a recommendation from your", "See them",
                                      "With a recommendation <span class=\"count\">1</span>")
 
     other = create(:company, name: "Beta", domain: "beta.example", resolution_status: "failed", resolution_failure: "blocked")
@@ -194,7 +196,8 @@ RSpec.describe "Accepting a recommended decision", type: :request do
   it "accepts leaving it with its reasoning as the note, and asks first for a check, which runs in the background" do
     recommend(decision: "find_again", url: nil, confidence: "medium")
     get review_path
-    expect(response.body).to include("Find its careers page again: at most", "medium confidence")
+    expect(response.body).to include("Find its careers page again: at most", "medium confidence", ">Accept: find it again<",
+                                     "Looks for Acme&#39;s careers page again, in the background")
 
     expect { patch accept_review_item_path(item) }.to have_enqueued_job(CheckNowJob)
     expect(item.reload).to have_attributes(status: "open", recommendation: include("taken" => include("decision" => "find_again")))
@@ -204,6 +207,8 @@ RSpec.describe "Accepting a recommended decision", type: :request do
     as_agent("agent:assistant") do
       ReviewRecommendations.save!(left, decision: "leave", confidence: "high", reasoning: "Its site has no public list of roles.")
     end
+    get review_path(kind: "no_careers_page")
+    expect(response.body).to include(">Accept: leave it as is<", "Closes the item with the reasoning above as your note; nothing else changes.")
     patch accept_review_item_path(left)
     expect(left.reload).to have_attributes(status: "left", note: end_with("(high confidence): Its site has no public list of roles."))
   end

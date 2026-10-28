@@ -7,12 +7,14 @@ module ProvenanceMcp
     ACTIONS = {
       "confirm" => "confirm: the page found at low confidence is the company's own careers page",
       "reject" => "reject: it isn't (another company's, a job board, no roles)",
-      "set_page" => "set_page, with url: a page listing all of the company's open roles (its own, or an ATS board the app may read)",
+      "set_page" => "set_page, with url: a page listing all of the company's open roles (its own, or an ATS board), even one " \
+                    "the app may not read: say so, as its roles then come back to the operator to check by hand",
       "set_kind" => "set_kind, with kind: employer, recruiter or aggregator",
       "find_again" => "find_again: the app's resolver looks for the careers page again (a check the operator runs; it may cost a little)",
       "check_again" => "check_again: the app checks the role again (a check the operator runs; it may cost a little)",
       "undo" => "undo: restore the verdict before this one, when it came from a read that went wrong",
-      "leave" => "leave: nothing to change, and say why (your reasoning becomes the operator's note)"
+      "leave" => "leave: nothing to change (no public list of roles exists, or the record is already right), and say why: " \
+                 "your reasoning becomes the operator's note"
     }.freeze
 
     module_function

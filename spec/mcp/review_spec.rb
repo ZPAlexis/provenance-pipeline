@@ -31,16 +31,27 @@ RSpec.describe "Recommending decisions on the review queue through MCP" do
     end
   end
 
+  # Found by the operator, 2026-10-28: asked plainly to "review the queue", the client reviewed 7 items without asking.
+  it "gives the counts alone with no kind, so the client asks which kind and how many first" do
+    raise_items
+
+    counts = said(call(:ListReviewItems))
+
+    expect(counts).to eq("Open: 2 (no careers page 1, part of a list 1).\nAsk the operator which kind to review, and how many, " \
+                         "before reading any; then call again with that kind (or all_kinds, if they want every kind).")
+    expect(ProvenanceMcp::INSTRUCTIONS).to include("show the counts by kind and ask which kind and how many before reading any item")
+  end
+
   it "lists the open items with their counts, by kind (its name or its label), and those with no recommendation yet" do
     list, page = raise_items
     recommend(page)
 
-    all = said(call(:ListReviewItems))
+    all = said(call(:ListReviewItems, all_kinds: true))
     expect(all).to start_with("Open: 2 (no careers page 1, part of a list 1).")
     expect(all).to include("- #{list.id}: [Part of a list] Is there a page listing all of Acme's roles?",
                            "- #{page.id}: [No careers page] Where does Beta list its open roles? Recommended: leave it as is (low).")
     expect(said(call(:ListReviewItems, kind: "Part of a list"))).to include("1 part of a list item:", list.id).and(not_include(page.id))
-    expect(said(call(:ListReviewItems, without_recommendation: true))).to include(list.id).and(not_include(page.id))
+    expect(said(call(:ListReviewItems, all_kinds: true, without_recommendation: true))).to include(list.id).and(not_include(page.id))
     expect(said(call(:ListReviewItems, kind: "typo"))).to start_with("Review items are of these kinds: careers_page_candidate")
   end
 
@@ -56,7 +67,8 @@ RSpec.describe "Recommending decisions on the review queue through MCP" do
                             "#{partial.careers_page_url}: ok, 20 roles via render+llm, read only in part, next page https://acme.example/careers?page=2",
                             "Sales Engineer (tracked, no answer yet", "https://acme.example/jobs/1")
     expect(text).not_to include("still_listed", "confirm:")
-    expect(blocked).to include("failed: blocked", "The resolver's last search", "path_probe https://beta.example/careers: blocked (robots_txt)",
+    expect(blocked).to include("even one the app may not read", "leave: nothing to change (no public list of roles exists",
+                               "failed: blocked", "The resolver's last search", "path_probe https://beta.example/careers: blocked (robots_txt)",
                                "- set_page, with url:", "- find_again:", "Recruiter (tracked")
     expect(said(call(:ReviewItemDetail, item: "nope"))).to start_with('No review item "nope"')
   end
@@ -85,9 +97,11 @@ RSpec.describe "Recommending decisions on the review queue through MCP" do
 
     expect(one).to start_with("Work through 5 of my open review items of the kind part of a list, recommending a decision on each.")
     expect(one).to include("list_review_items with kind partial_list", "get_review_item", "save_recommendation", "You decide nothing",
+                           "recommend set_page with it, even when its robots.txt keeps the app off",
+                           "Recommend leave only when the company has no public list of roles at all",
                            "suggest I dismiss it", "- Part of a list: #{ReviewGuidance.guidance('partial_list')}")
     expect(one).not_to include("- No careers page:")
-    expect(every).to include("Work through 10", "- No careers page:", "- Couldn't confirm:")
+    expect(every).to include("Work through 10", "list_review_items with all_kinds", "- No careers page:", "- Couldn't confirm:")
     expect(ProvenanceMcp.complete({ argument: { name: "kind", value: "page" } }))
       .to eq(completion: { values: %w[careers_page_candidate no_careers_page page_changed], hasMore: false })
   end

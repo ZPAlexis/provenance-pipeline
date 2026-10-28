@@ -329,6 +329,8 @@ details.guidance > summary { cursor: pointer; }
 .review-item .recommendation p { margin: 4px 0; }
 .review-item .recommendation .decide { align-items: center; flex-wrap: wrap; }
 .review-item:has(.item-closed) .recommendation .decide { display: none; }
+.recommended-callout { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 12px; padding: 8px 12px;
+  border-left: 3px solid var(--live); background: var(--surface); border-radius: 4px; font-size: 14px; }
 
 /* Agents (1.3) */
 
