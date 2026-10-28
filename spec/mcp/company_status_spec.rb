@@ -158,7 +158,7 @@ RSpec.describe ProvenanceMcp do
     begin
       client.connect(mode: :modern)
       expect(client.tools.map(&:name)).to include("get_company_status", "get_application_materials", "save_draft", "save_resume_review",
-                                                   "list_contacts", "save_contact", "log_activity")
+                                                   "list_contacts", "save_contact", "log_activity", "query_audit_log")
 
       response = client.call_tool(name: "get_company_status", arguments: { company: "no-such-company.example" })
       expect(response.dig("result", "isError")).to be(true)

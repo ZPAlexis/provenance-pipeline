@@ -18,12 +18,17 @@ module AuditHelper
       *counts.map { |who, count| [ who, actor_label(who), count ] } ].compact
   end
 
-  # What an event is about; a role with its company, since titles repeat from one company to the next.
-  def audit_subject(event)
-    subject = event_subject(event)
-    return subject unless event.target.is_a?(Posting)
+  # What an event is about, linked to its page: a role with its company (titles repeat from one company to the
+  # next), a review item with its kind and company. Below it, "its events" narrows the log to that record.
+  def audit_subject(event, log)
+    context = case (target = event.target)
+    when Posting then "at #{target.company.name}"
+    when ReviewItem then "#{ReviewGuidance.label(target.kind)} at #{target.company.name}"
+    end
+    narrow = link_to("its events", audit_path(record: event.target_id), title: "Every event about this record") if event.target_id && event.target_id != log.record
+    return event_subject(event) unless context || narrow
 
-    safe_join([ subject, tag.div("at #{event.target.company.name}", class: "muted small") ])
+    safe_join([ event_subject(event), tag.div(safe_join([ context, narrow ].compact, " · "), class: "muted small") ])
   end
 
   def audit_action_badge(event)
@@ -34,10 +39,10 @@ module AuditHelper
   # delete what the record held; a JSONB field shows each key that changed. What the log keeps as a hash (a
   # contact's details, a draft's text) is shown as that hash. An id links to the log narrowed to that record.
   def audit_changes(event)
-    lines = event.changes_made.flat_map do |attribute, change|
-      next [ audit_change(attribute, change, event) ] unless change.is_a?(Hash)
-
-      change.map { |key, pair| audit_change("#{attribute}.#{key}", pair, event) }
+    lines = AuditLog.changes(event).map do |change|
+      shown = change.pair ? safe_join([ audit_value(change.attribute, change.before), " → ", audit_value(change.attribute, change.after) ]) :
+                            audit_value(change.attribute, change.after)
+      tag.li(safe_join([ tag.code(change.attribute), " ", shown ]))
     end
     return tag.span("—", class: "muted") if lines.empty?
 
@@ -47,21 +52,6 @@ module AuditHelper
   end
 
   private
-
-  def audit_change(attribute, change, event)
-    tag.li(safe_join([ tag.code(attribute), " ", audit_change_text(attribute, change, event) ]))
-  end
-
-  def audit_change_text(attribute, change, event)
-    return audit_value(attribute, change) unless change.is_a?(Array) && change.size == 2
-
-    before, after = change
-    case event.action
-    when "create" then audit_value(attribute, after)
-    when "destroy" then audit_value(attribute, before)
-    else safe_join([ audit_value(attribute, before), " → ", audit_value(attribute, after) ])
-    end
-  end
 
   def audit_value(attribute, value)
     case value

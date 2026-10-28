@@ -78,7 +78,7 @@
               <div class="small"><%= ago(event.occurred_at) %></div>
             </td>
             <td><%= actor_cell(event) %></td>
-            <td><%= audit_subject(event) %></td>
+            <td><%= audit_subject(event, @log) %></td>
             <td><%= audit_action_badge(event) %></td>
             <td class="change-list"><%= audit_changes(event) %></td>
             <td class="reason"><%= event.reasoning %></td>

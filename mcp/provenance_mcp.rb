@@ -39,6 +39,8 @@ module ProvenanceMcp
     list_review_items, get_review_item, save_recommendation. Asked to review the queue without a kind or a number,
     show the counts by kind and ask which kind and how many before reading any item. A recommendation decides nothing:
     the person accepts it or decides otherwise, in the app.
+    To answer who did what and why (what an agent changed, when and why a role's answer changed, who changed a record),
+    use query_audit_log: every write on record, refused ones included, each naming its record's id to narrow to next.
     Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score,
     save_recommendation) save what you wrote, were told, weighed or recommend back to the record: use them only when
     the person asks you to. Each save is recorded as yours, for them to edit, approve, accept, dismiss or delete;
