@@ -18,6 +18,14 @@
   </div>
 </div>
 
+<% if @recommended_total.positive? && !@recommended %>
+  <p class="recommended-callout">
+    <%= pluralize(@recommended_total, "item") %> <%= @recommended_total == 1 ? "carries" : "carry" %> a recommendation from your
+    Claude client, ready to accept or decide.
+    <%= link_to "See them", review_path(recommended: 1), class: "btn small primary" %>
+  </p>
+<% end %>
+
 <nav class="tabs">
   <%= link_to review_path, class: ("current" unless @kind) do %>
     All <span class="count"><%= @counts.values.sum %></span>

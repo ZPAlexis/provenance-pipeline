@@ -8,7 +8,9 @@ module ProvenanceMcp
       title "Recommend a decision"
       description "Saves your recommended decision on an open review item: one of the actions get_review_item lists for " \
                   "it, with the url for set_page or the kind for set_kind, your confidence, what you checked (addresses " \
-                  "or searches), and why, in a few sentences. It replaces any earlier recommendation on the item. It " \
+                  "or searches), and why, in a few sentences. Recommend only on the items the operator asked you to " \
+                  "review. When you found the page that lists the company's roles, recommend set_page with it, even one " \
+                  "the app may not read (say so). It replaces any earlier recommendation on the item. It " \
                   "decides nothing: the operator accepts it in one click on the Review page, or decides otherwise."
       scopes "review:recommend"
       input_schema(

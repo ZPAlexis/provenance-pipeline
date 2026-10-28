@@ -12,6 +12,7 @@ class ReviewItemsController < ApplicationController
     items = ReviewItem.open
     items = items.where(kind: @kind) if @kind
     @recommended_count = items.recommended.count
+    @recommended_total = ReviewItem.open.recommended.count
     items = items.recommended if @recommended
     @items = items.includes(:company, :subject).oldest_first
     @runs = latest_checks(@items)

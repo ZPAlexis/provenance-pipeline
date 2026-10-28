@@ -36,8 +36,9 @@ module ProvenanceMcp
     for roles already on record): find_roles, suggest_roles (which reads each role's own page first and suggests only
     those still up), get_roles_to_weigh, save_fit_score; read_descriptions reads a description a role on record lacks.
     To recommend decisions on the review queue (what the app's agents couldn't settle), use the review_queue prompt:
-    list_review_items, get_review_item, save_recommendation. A recommendation decides nothing: the person accepts it
-    or decides otherwise, in the app.
+    list_review_items, get_review_item, save_recommendation. Asked to review the queue without a kind or a number,
+    show the counts by kind and ask which kind and how many before reading any item. A recommendation decides nothing:
+    the person accepts it or decides otherwise, in the app.
     Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score,
     save_recommendation) save what you wrote, were told, weighed or recommend back to the record: use them only when
     the person asks you to. Each save is recorded as yours, for them to edit, approve, accept, dismiss or delete;

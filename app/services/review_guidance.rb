@@ -15,8 +15,10 @@ module ReviewGuidance
     "company_kind" => "An employer lists its own roles. A recruiter's own board lists its clients' roles, and those are its openings: " \
                       "it is watched. An aggregator lists other companies' postings: its page says nothing about them, so it is never watched.",
     "no_careers_page" => "Look on the company's own site for Careers, Jobs, or Work with us, and where its job ads link (often an ATS: " \
-                         "Greenhouse, Lever, Workday, Oracle, Gupy). Blocked means its robots.txt keeps the verifier off that page; " \
-                         "a board on an ATS may still be readable. Set the page you find, or leave it when it has none in public.",
+                         "Greenhouse, Lever, Workday, Oracle, Gupy). Set the page you find, even one its robots.txt keeps the " \
+                         "verifier off (blocked): the right page goes on record, and its roles then come back to you to check " \
+                         "by hand; a board on an ATS the verifier may read is better when there is one. Leave it only when " \
+                         "the company has no public list of roles.",
     "partial_list" => "The page shows part of its roles: a first page, a search, a \"load more\" that stopped. Look for a page or an ATS " \
                       "board listing them all and set it, or leave it when there is none.",
     "page_changed" => "Open the page and compare it with what the company's own site links to as its jobs. Still its list (a " \
