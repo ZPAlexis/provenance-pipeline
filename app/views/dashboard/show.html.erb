@@ -21,6 +21,8 @@
 </div>
 <% if @applications.empty? %>
   <p class="muted small">No application yet: start one from a role's page.</p>
+<% else %>
+  <p class="muted small"><%= link_to "How the pipeline is going", analytics_path %>: how far applications get, how long they sit in each stage, and how they end.</p>
 <% end %>
 
 <h2>Tracked roles</h2>
