@@ -172,7 +172,7 @@
   </div>
   <div class="tile <%= "unsure" if fresh.stale.positive? %>">
     <div class="value"><%= fresh.stale %></div>
-    <div class="label">Checked longer ago<%= " (the oldest #{pluralize(fresh.oldest, 'day')})" if fresh.oldest %></div>
+    <div class="label">Checked longer ago<%= " (the oldest #{pluralize(fresh.oldest, 'day')})" if fresh.stale.positive? %></div>
   </div>
   <div class="tile">
     <div class="value"><%= fresh.never %></div>
