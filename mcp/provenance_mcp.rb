@@ -41,6 +41,8 @@ module ProvenanceMcp
     the person accepts it or decides otherwise, in the app.
     To answer who did what and why (what an agent changed, when and why a role's answer changed, who changed a record),
     use query_audit_log: every write on record, refused ones included, each naming its record's id to narrow to next.
+    To say how the search is going (the pipeline, the watch, the agents' cost and agreement), use get_analytics; where
+    it says there are too few to say, say so rather than reading a trend into a handful.
     Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score,
     save_recommendation) save what you wrote, were told, weighed or recommend back to the record: use them only when
     the person asks you to. Each save is recorded as yours, for them to edit, approve, accept, dismiss or delete;
