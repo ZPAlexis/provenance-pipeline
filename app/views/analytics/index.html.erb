@@ -1,0 +1,111 @@
+<% content_for :title, "Analytics · Provenance Pipeline" %>
+<div class="page-head">
+  <div>
+    <h1>Analytics</h1>
+    <p class="sub">
+      How the search is going, worked out from the record: each application's stages come from the audit log, dated
+      as you dated them. A rate needs at least <%= Analytics::FLOOR %> to go on; below that it says so.
+    </p>
+  </div>
+</div>
+
+<%= form_with url: analytics_path, method: :get, class: "check-form" do %>
+  <label class="small">Applications started since <%= date_field_tag :since, @since %></label>
+  <%= submit_tag "Show", class: "btn small", name: nil %>
+  <%= link_to "All of them", analytics_path, class: "small" if @since %>
+<% end %>
+
+<% pipeline = @pipeline %>
+<h2 id="pipeline">Pipeline</h2>
+<% if pipeline.applications.zero? %>
+  <p class="empty">No application started <%= @since ? "since #{@since}" : "yet" %>: start one from a role's page.</p>
+<% else %>
+  <p class="muted small">
+    <%= pluralize(pipeline.applications, "application") %> started<%= " since #{@since}" if @since %>.
+    <%= link_to "Each one in the pipeline", applications_path %>.
+  </p>
+
+  <h3>How far they get</h3>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Stage</th><th class="num">Reached it</th><th class="num">Of those at the stage before</th></tr></thead>
+      <tbody>
+        <% pipeline.steps.each do |step| %>
+          <tr>
+            <td><%= Application.stage_label(step.stage) %></td>
+            <td class="num"><%= step.reached %></td>
+            <td class="num"><%= step.before.nil? ? tag.span("—", class: "muted") : rate_cell(step.rate, step.before) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">
+    An application counts at every stage up to the furthest it reached, so one started at Applied passed Interested,
+    and an accepted offer passed Offer. Closing as rejected, withdrawn or no response reaches nothing further.
+  </p>
+
+  <h3>How long they sit</h3>
+  <% if pipeline.stays.any? %>
+    <div class="table-wrap">
+      <table class="analytics">
+        <thead><tr><th>Stage</th><th class="num">Times there</th><th class="num">Median days</th><th class="num">Longest</th><th class="num">Still there</th></tr></thead>
+        <tbody>
+          <% pipeline.stays.each do |stay| %>
+            <tr>
+              <td><%= Application.stage_label(stay.stage) %></td>
+              <td class="num"><%= stay.times %></td>
+              <td class="num"><%= days_measured(stay.median) %></td>
+              <td class="num"><%= days_measured(stay.longest) %></td>
+              <td class="num"><%= stay.still %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">
+      From the day a stage began to the day the next began, as you dated them; an application still at a stage counts
+      its days so far.
+    </p>
+  <% else %>
+    <p class="empty">No stage to measure yet.</p>
+  <% end %>
+
+  <h3>How they end</h3>
+  <% outcome = pipeline.outcome %>
+  <div class="tiles">
+    <div class="tile">
+      <div class="value"><%= rate_cell(outcome.accepted_rate, outcome.closed) %></div>
+      <div class="label">Accepted, of <%= outcome.closed %> closed (<%= outcome.accepted %>)</div>
+    </div>
+    <div class="tile">
+      <div class="value"><%= rate_cell(outcome.offer_rate, outcome.applied) %></div>
+      <div class="label">Reached an offer, of <%= outcome.applied %> applied (<%= outcome.offers %>)</div>
+    </div>
+  </div>
+<% end %>
+
+<h3>Open now</h3>
+<% if pipeline.open.any? %>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Stage</th><th class="num">Applications</th><th class="num">Median days there</th><th class="num">Longest</th></tr></thead>
+      <tbody>
+        <% pipeline.open.each do |open| %>
+          <tr>
+            <td><%= link_to Application.stage_label(open.stage), applications_path(anchor: open.stage) %></td>
+            <td class="num"><%= open.applications %></td>
+            <td class="num"><%= days_measured(open.median) %></td>
+            <td class="num"><%= days_measured(open.longest) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">No application is open.</p>
+<% end %>
+<p class="muted small">
+  Beside them, <%= link_to pluralize(pipeline.unapplied, "tracked role"), roles_path(answer: "verified_live") %> still
+  listed <%= pipeline.unapplied == 1 ? "has" : "have" %> no application.
+</p>
