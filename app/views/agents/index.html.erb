@@ -5,7 +5,8 @@
     <p class="sub">
       Who may write what. Every agent run holds a credential issued for that run, with only the scopes it needs, and
       every write it makes is checked against it. A write no scope allows is refused, and the refusal is on the record.
-      <%= link_to "Every write, yours included, is in the audit log", audit_path %>.
+      <%= link_to "Every write, yours included, is in the audit log", audit_path %>, and
+      <%= link_to "what they cost and how their recommendations came out", analytics_path(anchor: "agents") %> is in the analytics.
     </p>
   </div>
 </div>

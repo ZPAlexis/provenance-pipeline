@@ -3,6 +3,8 @@ class AnalyticsController < ApplicationController
   def index
     @since = Date.iso8601(params[:since]) if params[:since].present?
     @pipeline = Analytics.pipeline(since: @since)
+    @watch = Analytics.watch(since: @since)
+    @agents = Analytics.agents(since: @since)
   rescue Date::Error
     redirect_to analytics_path, alert: "Since is a day as YYYY-MM-DD, not #{params[:since].inspect}.", status: :see_other
   end

@@ -36,11 +36,28 @@ RSpec.describe "Analytics", type: :request do
     applications
 
     get analytics_path(since: Date.tomorrow.to_s)
-    expect(response.body).to include("No application started since #{Date.tomorrow}", "All of them")
+    expect(response.body).to include("No application started since #{Date.tomorrow}", "Everything")
 
     get analytics_path(since: "last month")
     expect(response).to redirect_to(analytics_path)
     expect(flash[:alert]).to eq('Since is a day as YYYY-MM-DD, not "last month".')
+  end
+
+  it "shows the watch and the agents: how long roles stay listed, answers week by week, freshness, cost, reads, agreement, writes" do
+    role = create(:posting, :verified_live, company: company, role_title: "Sales Engineer")
+    create(:audit_event, actor: "agent:verifier", target: role, action: "update", occurred_at: 2.days.ago,
+                         changes_made: { "verification_state" => %w[pending verified_live] })
+    read = create(:page_check, company: company, purpose: "verification", checked_at: 2.days.ago,
+                               matches: [ { "posting_id" => role.id, "verdict" => "verified_live" } ])
+    create(:llm_call, page_check: read, cost_usd: 0.02, called_at: 2.days.ago)
+
+    get analytics_path
+
+    expect(response.body).to include("The watch", "How long roles stay listed", "for the 1 role listed still", "How often answers change",
+                                     "How fresh the answers are", "checked in the last 14 days", "The agents", "What the AI cost",
+                                     "$0.02 over 1 call", "By day, with the running total", "Reading the watched pages",
+                                     "A role confirmed listed (1 role)", "What each one wrote", "No recommendation made")
+    expect(response.body).to include(audit_path(who: "agent:verifier"))
   end
 
   it "is linked from the dashboard once there is an application" do

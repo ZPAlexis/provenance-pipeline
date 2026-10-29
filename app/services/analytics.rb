@@ -1,6 +1,7 @@
 # How the search is going (3.3), worked out from the record, never a copy of it: hand-written SQL over the audit
-# log and the tables it describes, every input a bound parameter. Read-only. Step 1 is the pipeline: how far
-# applications get, how long they sit in each stage, how they end, and what is open now.
+# log and the tables it describes, every input a bound parameter. Read-only. The pipeline is here: how far
+# applications get, how long they sit in each stage, how they end, and what is open now; the watch (Analytics::Watch)
+# and the agents (Analytics::Agents) have modules of their own.
 module Analytics
   # Below this many, a rate says nothing: the page says there is too little to measure.
   FLOOR = 5
@@ -81,6 +82,12 @@ module Analytics
   SQL
 
   module_function
+
+  # The watch: how long roles stay listed, how often answers change, how fresh they are.
+  def watch(since: nil, now: Time.current) = Watch.report(since: since, now: now)
+
+  # The agents: what the AI cost, how recommendations came out, what each actor wrote and was refused.
+  def agents(since: nil) = Agents.report(since: since)
 
   # The pipeline, for the applications started since a day (all of them when nil); what is open is as of today.
   def pipeline(since: nil, today: Date.current)
@@ -168,7 +175,8 @@ module Analytics
 
   def open_stage(row) = Open.new(row["stage"], row["applications"], row["median"]&.round(1), row["longest"])
 
+  # Rows from hand-written SQL, its inputs bound as $1, $2...: the one way the analytics read the record.
   def rows(sql, *binds) = ApplicationRecord.connection.select_all(sql, "Analytics", binds).to_a
 
-  private_class_method :steps, :stays, :outcome, :open, :unapplied, :staged, :stay, :open_stage, :rows
+  private_class_method :steps, :stays, :outcome, :open, :unapplied, :staged, :stay, :open_stage
 end

@@ -3,17 +3,23 @@
   <div>
     <h1>Analytics</h1>
     <p class="sub">
-      How the search is going, worked out from the record: each application's stages come from the audit log, dated
-      as you dated them. A rate needs at least <%= Analytics::FLOOR %> to go on; below that it says so.
+      How the search is going, worked out from the record: the audit log, the page reads and the AI calls. A rate needs
+      at least <%= Analytics::FLOOR %> to go on; below that it says so.
     </p>
   </div>
 </div>
 
 <%= form_with url: analytics_path, method: :get, class: "check-form" do %>
-  <label class="small">Applications started since <%= date_field_tag :since, @since %></label>
+  <label class="small">Since <%= date_field_tag :since, @since %></label>
   <%= submit_tag "Show", class: "btn small", name: nil %>
-  <%= link_to "All of them", analytics_path, class: "small" if @since %>
+  <%= link_to "Everything", analytics_path, class: "small" if @since %>
+  <span class="muted small">Applications started, roles first seen listed, and the reads, calls and writes made since then.</span>
 <% end %>
+<nav class="filters" aria-label="Sections">
+  <%= link_to "Pipeline", "#pipeline", class: "filter" %>
+  <%= link_to "The watch", "#watch", class: "filter" %>
+  <%= link_to "The agents", "#agents", class: "filter" %>
+</nav>
 
 <% pipeline = @pipeline %>
 <h2 id="pipeline">Pipeline</h2>
@@ -109,3 +115,175 @@
   Beside them, <%= link_to pluralize(pipeline.unapplied, "tracked role"), roles_path(answer: "verified_live") %> still
   listed <%= pipeline.unapplied == 1 ? "has" : "have" %> no application.
 </p>
+
+<% watch = @watch %>
+<h2 id="watch">The watch</h2>
+<h3>How long roles stay listed</h3>
+<% lasting = watch.lasting %>
+<div class="tiles">
+  <div class="tile">
+    <div class="value"><%= days_measured(lasting.closed_median) %> <span class="small muted">days</span></div>
+    <div class="label">Median, for the <%= pluralize(lasting.closed, "role") %> since seen gone (longest <%= days_measured(lasting.closed_longest) %>)</div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= days_measured(lasting.listed_median) %> <span class="small muted">days</span></div>
+    <div class="label">Median so far, for the <%= pluralize(lasting.listed, "role") %> listed still (longest <%= days_measured(lasting.listed_longest) %>)</div>
+  </div>
+</div>
+<p class="muted small">
+  From the first time a role was seen listed to the first time it was seen gone after that, by the days of the checks
+  themselves (an imported answer's check date, the verifier's time of reading).
+</p>
+
+<h3>How often answers change</h3>
+<% if watch.weeks.any? %>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Week of</th><th class="num">Roles the reads matched</th><th class="num">Answers changed</th><th class="num">To gone</th><th class="num">To listed</th><th class="num">To another</th><th class="num">Yours</th></tr></thead>
+      <tbody>
+        <% watch.weeks.each do |week| %>
+          <tr>
+            <td class="nowrap"><%= week.week %></td>
+            <td class="num"><%= week.checked %></td>
+            <td class="num"><%= week.changed %></td>
+            <td class="num"><%= week.gone %></td>
+            <td class="num"><%= week.listed %></td>
+            <td class="num"><%= week.other %></td>
+            <td class="num"><%= week.by_operator %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">
+    Weeks start on Monday (UTC). A check that confirms an answer changes nothing, so a quiet week of reads is a steady one.
+    <%= link_to "Each change in the audit log", audit_path(kind: "role", attribute: "verification_state", act: "update") %>.
+  </p>
+<% else %>
+  <p class="empty">No role read and no answer changed<%= " since #{@since}" if @since %>.</p>
+<% end %>
+
+<h3>How fresh the answers are</h3>
+<% fresh = watch.freshness %>
+<div class="tiles">
+  <div class="tile <%= "live" if fresh.tracked.positive? && fresh.fresh == fresh.tracked %>">
+    <div class="value"><%= fresh.fresh %></div>
+    <div class="label">Of <%= fresh.tracked %> tracked roles, checked in the last <%= Overview::STALE_AFTER.inspect %></div>
+  </div>
+  <div class="tile <%= "unsure" if fresh.stale.positive? %>">
+    <div class="value"><%= fresh.stale %></div>
+    <div class="label">Checked longer ago<%= " (the oldest #{pluralize(fresh.oldest, 'day')})" if fresh.oldest %></div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= fresh.never %></div>
+    <div class="label">Never checked</div>
+  </div>
+</div>
+<p class="muted small">Now, whatever the period. "Check everything" on the <%= link_to "dashboard", root_path %> reads them all again.</p>
+
+<% agents = @agents %>
+<h2 id="agents">The agents</h2>
+<h3>What the AI cost</h3>
+<% if agents.days.any? %>
+  <p class="muted small"><%= money(agents.cost) %> over <%= pluralize(agents.spend.sum(&:calls), "call") %><%= " since #{@since}" if @since %>.</p>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Purpose</th><th>Model</th><th class="num">Calls</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost</th><th class="num">Share</th></tr></thead>
+      <tbody>
+        <% agents.spend.each do |spend| %>
+          <tr>
+            <td><%= spend.purpose %></td>
+            <td class="small"><%= spend.model %></td>
+            <td class="num"><%= spend.calls %></td>
+            <td class="num"><%= number_with_delimiter(spend.tokens_in) %></td>
+            <td class="num"><%= number_with_delimiter(spend.tokens_out) %></td>
+            <td class="num"><%= cost(spend.cost) %></td>
+            <td class="num"><%= spend.share ? "#{(spend.share * 100).round(1)}%" : "—" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <details class="small by-day">
+    <summary>By day, with the running total</summary>
+    <div class="table-wrap">
+      <table class="analytics">
+        <thead><tr><th>Day</th><th class="num">Calls</th><th class="num">Cost</th><th class="num">Running total</th></tr></thead>
+        <tbody>
+          <% agents.days.reverse_each do |day| %>
+            <tr><td class="nowrap"><%= day.day %></td><td class="num"><%= day.calls %></td><td class="num"><%= cost(day.cost) %></td><td class="num"><%= money(day.running) %></td></tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </details>
+<% else %>
+  <p class="empty">No AI call<%= " since #{@since}" if @since %>.</p>
+<% end %>
+
+<h3>Reading the watched pages</h3>
+<% reads = agents.reads %>
+<div class="tiles">
+  <div class="tile">
+    <div class="value"><%= reads.reads %></div>
+    <div class="label">Verification reads, <%= reads.with_ai %> of them needing the AI</div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= reads.per_read ? cost(reads.per_read) : "—" %></div>
+    <div class="label">A read, on average (<%= money(reads.cost) %> in all)</div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= reads.per_confirmed ? cost(reads.per_confirmed) : "—" %></div>
+    <div class="label">A role confirmed listed (<%= pluralize(reads.confirmed, "role") %>)</div>
+  </div>
+</div>
+<p class="muted small">A read through a board's API needs no AI and still counts, so the cost of a read is never overstated.</p>
+
+<h3>How the recommendations came out</h3>
+<% if agents.agreement.any? %>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Kind</th><th class="num">Agreed</th><th class="num">Differed</th><th class="num">Resolved on their own</th><th class="num">Pending</th><th class="num">Agreement</th></tr></thead>
+      <tbody>
+        <% agents.agreement.each do |row| %>
+          <tr>
+            <td><%= link_to ReviewGuidance.label(row.kind), review_path(kind: row.kind, recommended: 1) %></td>
+            <td class="num"><%= row.agreed %></td>
+            <td class="num"><%= row.differed %></td>
+            <td class="num"><%= row.resolved %></td>
+            <td class="num"><%= row.pending %></td>
+            <td class="num"><%= rate_cell(row.rate, row.decided) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">
+    Your Claude client's recommendations on the review queue. Agreement is of those you decided: the only ground on
+    which a kind would ever act on its own.
+  </p>
+<% else %>
+  <p class="empty">No recommendation made<%= " since #{@since}" if @since %>.</p>
+<% end %>
+
+<h3>What each one wrote</h3>
+<% if agents.actors.any? %>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Who</th><th class="num">Writes</th><th class="num">Refused</th><th class="num">Credentials issued</th></tr></thead>
+      <tbody>
+        <% agents.actors.each do |row| %>
+          <% operator = row.actor == "operator" %>
+          <tr>
+            <td><%= link_to actor_label(operator ? AuditEvent::OPERATOR : row.actor), audit_path({ who: row.actor, from: @since }.compact) %></td>
+            <td class="num"><%= row.writes %></td>
+            <td class="num"><%= row.refused.positive? ? tag.strong(row.refused, class: "refused") : 0 %></td>
+            <td class="num"><%= operator ? tag.span("—", class: "muted", title: "Your writes need no credential") : row.credentials %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">Nothing written<%= " since #{@since}" if @since %>.</p>
+<% end %>
