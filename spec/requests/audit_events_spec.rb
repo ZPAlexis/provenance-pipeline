@@ -117,6 +117,7 @@ RSpec.describe "The audit log", type: :request do
     get application_path(application)
     expect(response.body).to include(audit_path(record: application.id))
     get agents_path
+    expect(response.body).to include(analytics_path(anchor: "agents"))
     expect(response.body).to include(audit_path(act: "denied"), audit_path(who: "agent:verifier", from: 30.days.ago.to_date).gsub("&", "&amp;"))
     get root_path
     expect(response.body).to include(%(href="#{audit_path}"))
