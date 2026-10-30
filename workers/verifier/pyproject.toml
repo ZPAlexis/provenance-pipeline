@@ -11,7 +11,7 @@ dependencies = [
     "anthropic>=1.13.0,<2",
     "playwright>=1.63,<2",
     "pydantic>=2,<3",
-    "httpx2>=2,<3"
+    "httpx2>=2.16.0,<3"
 ]
 
 [project.scripts]
