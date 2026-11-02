@@ -328,6 +328,7 @@ bin/rails verifier:suggest                       # suggestions from the search p
 URL="acme.com" bin/rails verifier:add            # add a company by its domain, careers page, or ATS board, and read it
 URL="https://..." bin/rails verifier:add_role    # add a role by its own page, tracked, and check it (TITLE, SOURCE optional)
 bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
+bin/rails verifier:forget_private_runs           # remove run folders that quote the resume, left from before (PREVIEW=1 lists)
 bin/rails review:sync                            # bring the review queue in line with the record (no API cost)
 bin/rails review:list                            # what waits for your judgment, with each item's id and recommendation (KIND=)
 bin/rails "review:accept[item_id]"               # accept an item's recommendation, as the Review page's Accept does
@@ -374,7 +375,7 @@ An application's page writes a cover letter or a short outreach note for it (the
 - **In the role's language** (the description's), unless another is asked.
 - **To someone, or to no one.** An outreach note can be addressed to one of the company's contacts: it opens with their first name and fits what they do (for a recruiter, how the role fits; for a hiring manager, the work itself). Without one it opens "Hi [name]," for the operator to fill in.
 - **Never sent.** The operator edits it, approves it (an edit after that returns it to a draft), and copies it out; only the operator can edit or approve one.
-- **Written in the background**, one at a time per application, with what a draft costs on the record shown first (about 6 cents each so far). The run's targets file holds the whole resume, so it is removed when the run ends.
+- **Written in the background**, one at a time per application, with what a draft costs on the record shown first (about 6 cents each so far). The run's targets and results quote the resume, so its files are removed as soon as its results are read; the record keeps what was written.
 
 **A resume review** weighs the resume against the role, for the operator to decide what to stress and what to add: strengths with the resume lines behind them, gaps, suggestions naming the lines they touch, and a note. The drafter writes one from the application's page (the worker's `review`, the same model and record, about 6 cents, in English unless another language is asked), under a credential holding `resume_reviews:write` alone; or the operator's own Claude client writes one through MCP and saves it back. Its rules are the shared ones. Advice only: it writes nothing to send and claims nothing.
 
@@ -457,4 +458,4 @@ It serves the operator's pages at `http://localhost:3000`: the pipeline (applica
 
 ## Note on data
 
-Source CSVs are **not committed** — they contain a live job-search target list. Keep exports outside the repo or in an ignored path. The verifier's run directories (`tmp/verifier/`) and database backups (`~/.local/share/provenance-pipeline/backups/`) hold the same list, so they stay out of the repo too.
+Source CSVs are **not committed** — they contain a live job-search target list. Keep exports outside the repo or in an ignored path. The verifier's run directories (`tmp/verifier/`) and database backups (`~/.local/share/provenance-pipeline/backups/`) hold the same list, so they stay out of the repo too. A draft's, a resume review's or a fit's run files quote the resume, so they are removed as soon as the run's results are read. The logs keep the record's private text out too: the resume, what is written for an application, notes, pay, what happened, and the people (a contact's name, role, link and notes) are filtered from a request's parameters, from the values in logged SQL, and from a record printed in a console.

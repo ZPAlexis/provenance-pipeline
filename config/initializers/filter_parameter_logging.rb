@@ -6,3 +6,14 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc
 ]
+
+# The record's private text, out of the logs (a request's parameters, the values in SQL lines) and out of a record
+# printed in a console or on an error page: the resume and a role's description (`resume_text`, `text`), what is
+# written for an application (a draft's body and subject, what to stress, a review's note), notes, pay, what happened,
+# and the people (a contact's name, role, link and notes: someone else's details). An audit event's changes carry some
+# of these too. Exact where a looser match would hide what isn't private (`role` is not `role_title`, `subject` is not
+# `subject_id`); a name is hidden wherever it is, a company's included, which keeps the private target list out too.
+Rails.application.config.filter_parameters += [
+  :resume_text, /\Atext\z/, :body, /subject\z/, :guidance, /\Anotes?\z/, :comp_expectation, :summary,
+  /\Aname\z/, /\Arole\z/, :linkedin, /\Achanges_made\z/
+]

@@ -33,6 +33,8 @@ RSpec.describe Drafts do
         @asked = { targets: targets, command: command }
         FileUtils.mkdir_p(@run_dir)
         @run_dir.join("targets.json").write(JSON.generate(targets: targets))
+        @run_dir.join("results.jsonl").write(@results.map { |result| JSON.generate(result) }.join("
+"))
         Verifier::Worker::Run.new(dir: @run_dir, results: @results, stopped: @stopped)
       end
     end
@@ -74,7 +76,7 @@ RSpec.describe Drafts do
                                 company: "Acme", location: "Remote - Brazil", resume: resume_text, notes: "They care about discovery.",
                                 description: "You will run technical discovery. Spanish required.", titles: [ "Sales Engineer" ],
                                 places: [ "Brazil" ], work_modes: [ "remote" ], guidance: nil, language: nil)
-      expect(run_dir.join("targets.json")).not_to exist # it held the whole resume
+      expect(run_dir).not_to exist # its targets and results quoted the resume; the record keeps the draft
 
       draft = application.drafts.sole
       expect(draft).to have_attributes(kind: "cover_letter", status: "draft", language: "English", asked_language: nil, body: body,

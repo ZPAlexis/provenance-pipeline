@@ -63,7 +63,7 @@ RSpec.describe ResumeReviews do
     expect(worker.asked[:command]).to eq("review")
     expect(worker.asked[:targets].sole).to include(id: application.id, resume: resume_text, description: "Discovery. Spanish required.",
                                                    notes: "They care about discovery.", language: "English", places: [ "Brazil" ])
-    expect(run_dir.join("targets.json")).not_to exist
+    expect(run_dir).not_to exist # its targets and results quoted the resume
     review = application.resume_reviews.sole
     expect(review).to have_attributes(written_by: "agent:drafter", resume: resume, role_description: description, note: "A close fit.",
                                       run_id: "20261023T120000Z-review-spec")

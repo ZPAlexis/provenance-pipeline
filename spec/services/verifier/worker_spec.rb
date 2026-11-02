@@ -140,4 +140,35 @@ RSpec.describe Verifier::Worker do
   it "refuses a command the worker does not have" do
     expect { worker(fake_process).run(targets, command: "delete") }.to raise_error(ArgumentError, /delete/)
   end
+
+  # Review pass R3: a draft's, a review's or a fit's files quote the resume, so they go once read.
+  it "forgets a run's targets and results, and its directory once nothing else is in it" do
+    Dir.mktmpdir do |root|
+      run = Pathname.new(root).join("20261102T120000Z-fit").tap(&:mkpath)
+      %w[targets.json results.jsonl].each { |name| run.join(name).write("{}") }
+      kept = Pathname.new(root).join("20261102T120000Z-draft").tap(&:mkpath)
+      kept.join("results.jsonl").write("{}")
+      kept.join("notes.txt").write("something else")
+
+      described_class.forget!(run)
+      described_class.forget!(kept)
+
+      expect(run).not_to exist
+      expect(kept.children.map { |file| file.basename.to_s }).to eq(%w[notes.txt])
+      expect { described_class.forget!(run) }.not_to raise_error # gone already
+    end
+  end
+
+  it "finds the run directories left by a command whose files quote the resume, and only those" do
+    Dir.mktmpdir do |root|
+      root = Pathname.new(root)
+      %w[20261019T120000Z-draft 20261026T120000Z-fit 20261027T120000Z-review 20261019T120000Z-probe-draft-7b21b2
+         20261014T120000Z-verify 20261016T120000Z-describe 20261009T120000Z-resolve].each { |name| root.join(name).mkpath }
+      root.join("20261020T120000Z-fit.log").write("a file, not a run")
+
+      expect(described_class.private_runs(root).map { |dir| dir.basename.to_s })
+        .to eq(%w[20261019T120000Z-draft 20261019T120000Z-probe-draft-7b21b2 20261026T120000Z-fit 20261027T120000Z-review])
+      expect(described_class.private_runs(root.join("missing"))).to eq([])
+    end
+  end
 end

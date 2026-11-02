@@ -100,7 +100,7 @@ module FitScores
       run = begin
         worker.run(ready.map { |posting| target(posting, resume:, description: descriptions[posting], profile:) }, command: "fit")
       ensure
-        FileUtils.rm_f(worker.run_dir.join("targets.json")) # it holds the whole resume
+        Verifier::Worker.forget!(worker.run_dir) # its targets and results quote the resume; the record keeps what was written
       end
       by_id = ready.index_by(&:id)
       scores, cost = [], 0.0

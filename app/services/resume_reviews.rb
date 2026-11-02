@@ -54,7 +54,7 @@ module ResumeReviews
       run = begin
         worker.run([ target(application, language:, resume:, description:, profile:) ], command: "review")
       ensure
-        FileUtils.rm_f(worker.run_dir.join("targets.json")) # it holds the whole resume
+        Verifier::Worker.forget!(worker.run_dir) # its targets and results quote the resume; the record keeps what was written
       end
       record(application, run, resume:, description:)
     end

@@ -16,6 +16,9 @@ module Verifier
     RESULT_SCHEMA_VERSION = 2
 
     COMMANDS = %w[extract resolve match verify check boards suggest related describe draft review fit].freeze
+    # The commands whose targets and results quote the resume (2c, 2d, 2f): a run's files are removed as soon as its
+    # results are read, since the record keeps what was written from them.
+    PRIVATE = %w[draft review fit].freeze
 
     # Exit codes from workers/verifier/src/verifier/cli.py for a run that
     # stopped early on purpose, keeping every result it finished.
@@ -36,6 +39,21 @@ module Verifier
     # results name real companies from the private target list).
     def self.dir_for(name)
       Rails.root.join("tmp/verifier/#{Time.current.utc.strftime('%Y%m%dT%H%M%SZ')}-#{name}")
+    end
+
+    # Removes a run's targets and results, and its directory once nothing else is in it: for a run whose files quote
+    # the resume. Its results are already read by then.
+    def self.forget!(run_dir)
+      dir = Pathname.new(run_dir)
+      %w[targets.json results.jsonl].each { |name| FileUtils.rm_f(dir.join(name)) }
+      dir.rmdir if dir.directory? && dir.empty?
+    end
+
+    # The run directories under `root` left by a command whose files quote the resume (kept before forget! existed).
+    def self.private_runs(root = Rails.root.join("tmp/verifier"))
+      return [] unless root.directory?
+
+      root.children.select { |dir| dir.directory? && dir.basename.to_s.split("-").intersect?(PRIVATE) }.sort
     end
 
     attr_reader :run_dir

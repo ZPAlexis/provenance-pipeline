@@ -63,7 +63,7 @@ RSpec.describe FitScores do
     expect(worker.asked[:targets].sole).to eq(id: role.id, label: "Acme / Sales Engineer", role_title: "Sales Engineer", company: "Acme",
                                               location: role.location, description: "Discovery. Spanish required.", resume: resume_text,
                                               titles: [ "Sales Engineer" ])
-    expect(run_dir.join("targets.json")).not_to exist # it held the whole resume
+    expect(run_dir).not_to exist # its targets and results quoted the resume
     score = role.fit_scores.sole
     expect(score).to have_attributes(score: 72, level: "Mid-level; the resume shows eight years", written_by: "agent:fit_scorer",
                                      resume: resume, role_description: description, why: "Strong on discovery; Spanish is missing.",

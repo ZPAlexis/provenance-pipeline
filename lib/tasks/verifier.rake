@@ -712,4 +712,15 @@ namespace :verifier do
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message
   end
+
+  desc "Remove the run folders whose files quote the resume (drafts, resume reviews, fit), left from before a run's " \
+       "files were removed as soon as read. The record keeps what was written. PREVIEW=1 lists them only."
+  task forget_private_runs: :environment do
+    runs = Verifier::Worker.private_runs
+    abort "No run folder quotes the resume." if runs.empty?
+
+    runs.each { |dir| puts "#{ENV['PREVIEW'].present? ? 'Would remove' : 'Removing'} #{dir.relative_path_from(Rails.root)}" }
+    runs.each { |dir| FileUtils.rm_rf(dir) } unless ENV["PREVIEW"].present?
+    puts ENV["PREVIEW"].present? ? "#{runs.size} would go; run again without PREVIEW to remove them." : "Removed #{runs.size}."
+  end
 end
