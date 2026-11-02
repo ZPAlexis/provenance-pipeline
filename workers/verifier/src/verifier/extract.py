@@ -228,6 +228,12 @@ class _LlmCaller:
             raise ExtractionFailed(f"llm_http_{error.status_code}") from error
         except anthropic.APIConnectionError as error:
             raise ExtractionFailed("llm_connection_error") from error
+        except TypeError as error:
+            # With no credential the SDK builds the client, then raises a plain TypeError at the first request,
+            # before sending anything (anthropic 1.x and 2.x alike). It is the credential, not this page.
+            if "could not resolve authentication method" in str(error).lower():
+                raise LlmConfigError("no API credential available") from error
+            raise
 
         usage = LlmUsage(
             model=response.model,
