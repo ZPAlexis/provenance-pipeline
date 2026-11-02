@@ -166,6 +166,18 @@ def test_stops_the_run_when_there_is_no_credential():
         LlmExtractor(client_factory=no_key).extract(PAGE)
 
 
+# Found upgrading to anthropic 2.x (2026-11-02), and true of 1.x too: the real SDK builds a client with no
+# credential and raises a plain TypeError at the first request, before sending anything, so each page failed as
+# "unexpected:TypeError" instead of the run stopping. The real client, offline: it never reaches the network.
+def test_stops_the_run_when_the_real_client_finds_no_credential(monkeypatch, tmp_path):
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE", "ANTHROPIC_CONFIG_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))  # no profile on disk either
+
+    with pytest.raises(LlmConfigError, match="no API credential"):
+        LlmExtractor(client_factory=anthropic.Anthropic).extract(PAGE)
+
+
 def test_fails_only_this_page_on_other_api_errors():
     error = api_error(anthropic.InternalServerError, 529, "overloaded")
 
