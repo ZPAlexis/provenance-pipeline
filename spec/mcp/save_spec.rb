@@ -91,7 +91,8 @@ RSpec.describe "Saving what the client wrote, through MCP" do
       expect(said(save(:SaveDraft, **letter(kind: "outreach_note", contact: "Bea")))).to start_with('No contact named "Bea" at Acme.')
       expect(application.drafts.count).to eq(1)
 
-      expect(said(save(:GetDraft, draft: draft.id))).to start_with("Outreach note for Acme / Sales Engineer, to Ana Lima (contact id #{ana.id}), in English: a draft.")
+      expect(said(save(:GetDraft, draft: draft.id)))
+        .to include("<record>\nOutreach note for Acme / Sales Engineer, to Ana Lima (contact id #{ana.id}), in English: a draft.")
       expect(ProvenanceMcp::Writing.written(application)).to include("- Outreach note to Ana Lima in English, 3 words, a draft")
     end
 

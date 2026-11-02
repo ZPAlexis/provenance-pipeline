@@ -126,7 +126,7 @@ RSpec.describe "Finding and weighing roles through MCP" do
       text = said(call(:ReadDescriptions, roles: [ role.id, "not-an-id" ]))
 
       expect(Verifier::Descriptions).to have_received(:read!).with([ role ], purpose: "mcp: read_descriptions")
-      expect(text).to include("Read 1 of 1:", "- Customer Engineer at Acme (#{role.id}): read, 412 words")
+      expect(text).to include("Read 1 of 1; between markers", "<record>\n- Customer Engineer at Acme (#{role.id}): read, 412 words")
       expect(said(call(:ReadDescriptions, roles: [ "not-an-id" ]))).to start_with("No role by those ids")
     end
 
