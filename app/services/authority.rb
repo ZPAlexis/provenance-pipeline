@@ -182,7 +182,8 @@ module Authority
   # What no scope grants: the operator's alone, whatever an agent holds.
   HUMAN_ONLY = [
     "Start an application, or move one between stages", "Edit or approve a draft", "Track or dismiss a role",
-    "Decide a review item", "Edit the search profile or the resume", "Ask for a check", "Name a company or set its kind",
+    "Decide a review item", "Edit the search profile or the resume",
+    "Ask for a check that writes a verdict or spends API credit", "Name a company or set its kind",
     "Issue or revoke a credential"
   ].freeze
 

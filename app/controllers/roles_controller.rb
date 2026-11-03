@@ -36,7 +36,6 @@ class RolesController < ApplicationController
 
   def show
     @role = Posting.includes(:company).find_by(id: params[:id]) or return withdrawn
-    CheckRun.abandon_stale!
     @run = @role.check_runs.where(kind: "role").newest_first.first
     @describe_run = @role.check_runs.where(kind: "describe").newest_first.first
     @descriptions = @role.role_descriptions.newest_first.to_a

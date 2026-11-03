@@ -57,7 +57,6 @@ class CompaniesController < ApplicationController
 
   def show
     @company = Company.find(params[:id])
-    CheckRun.abandon_stale!
     @run = @company.check_runs.where(kind: "company").newest_first.first
     @roles = @company.postings.order(:tracking, :role_title)
     @checks = @company.page_checks.order(checked_at: :desc).limit(10)

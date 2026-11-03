@@ -21,6 +21,17 @@ RSpec.describe CheckNowJob do
     expect([ run.started_at, run.finished_at ]).to all(be_present)
   end
 
+  # Review pass R5: the pages call it cut off without writing so; when its turn comes, it stays cut off.
+  it "runs nothing for a run whose time ran out while it waited, and says so on its row" do
+    run.update_columns(updated_at: 2.hours.ago)
+    allow(Verifier::CheckNow).to receive(:role)
+
+    described_class.perform_now(run)
+
+    expect(Verifier::CheckNow).not_to have_received(:role)
+    expect(run.reload).to have_attributes(status: "failed", error: CheckRun::CUT_OFF, started_at: nil, finished_at: be_present)
+  end
+
   it "checks a company's whole careers page for a company run" do
     company_run = create(:check_run, company: company)
     allow(Verifier::CheckNow).to receive(:company).with(company).and_return(outcome)

@@ -2,7 +2,6 @@
 # worked out after the page loads (it takes a moment), or the run under way.
 class CheckAllController < ApplicationController
   def show
-    CheckRun.abandon_stale!
     @run = CheckRun.where(kind: "all").newest_first.first
     @plan = Verifier::CheckAll.plan unless @run&.active?
   end

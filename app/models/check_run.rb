@@ -20,26 +20,40 @@ class CheckRun < ApplicationRecord
   ALL_STALE_AFTER = Authority::BATCH
   LONG = %w[all fit].freeze
 
+  CUT_OFF = "Cut off: the server stopped before the check finished.".freeze
+  # Whether a run's last word came before its cutoff.
+  BEFORE_CUTOFF = "check_runs.updated_at < CASE WHEN check_runs.kind IN (:long) THEN CAST(:all AS timestamp) " \
+                  "ELSE CAST(:one AS timestamp) END".freeze
+
   validates :kind, inclusion: { in: KINDS }
   validates :status, inclusion: { in: STATUSES }
   validates :requested_by, presence: true
   validates :posting, presence: true, if: -> { kind.in?(%w[role describe draft review]) }
   validates :company, presence: true, unless: -> { kind == "all" || (kind == "fit" && posting.nil?) }
 
-  scope :active, -> { where(status: ACTIVE) }
+  # Queued or running, and still within its time. A run past it will never finish (cut_off).
+  scope :active, -> { where(status: ACTIVE).where.not(BEFORE_CUTOFF, cutoffs) }
+  # Left queued or running past its time: active for over an hour (a batch's time for the long kinds), or, on an
+  # in-process queue, left active by an earlier server process, whose queue went with it. Otherwise a restart
+  # mid-check would block that role's next check for an hour.
+  scope :cut_off, ->(booted_at: Rails.configuration.x.booted_at) { where(status: ACTIVE).where(BEFORE_CUTOFF, cutoffs(booted_at:)) }
   scope :newest_first, -> { order(created_at: :desc) }
 
-  # Marks runs that will never finish as cut off: active for over an hour, or, on
-  # an in-process queue, left active by an earlier server process, whose queue
-  # went with it. Otherwise a restart mid-check would block that role's next
-  # check for an hour.
+  # A page reads a cut-off run as cut off, and writes nothing (review pass R5): its row says so once the next check
+  # starts. Not at boot either: every process boots the app, the MCP server's too, and on an in-process queue its
+  # boot would cut off the runs the web server is running.
   def self.abandon_stale!(booted_at: Rails.configuration.x.booted_at)
-    boot = (booted_at if in_process_queue?)
-    one = [ STALE_AFTER.ago, boot ].compact.max
-    all = [ ALL_STALE_AFTER.ago, boot ].compact.max
-    active.where.not(kind: LONG).where(updated_at: ...one).or(active.where(kind: LONG, updated_at: ...all))
-          .update_all(status: "failed", error: "Cut off: the server stopped before the check finished.",
-                      finished_at: Time.current, updated_at: Time.current)
+    cut_off(booted_at:).update_all(status: "failed", error: CUT_OFF, finished_at: Time.current, updated_at: Time.current)
+  end
+
+  # The time before which an active run will never finish: an hour ago, or a batch's time for the long kinds; on an
+  # in-process queue, no earlier than this server process's start.
+  def self.cutoff(long:, booted_at: Rails.configuration.x.booted_at)
+    [ (long ? ALL_STALE_AFTER : STALE_AFTER).ago, (booted_at if in_process_queue?) ].compact.max
+  end
+
+  def self.cutoffs(booted_at: Rails.configuration.x.booted_at)
+    { long: LONG, all: cutoff(long: true, booted_at:), one: cutoff(long: false, booted_at:) }
   end
 
   def self.in_process_queue? = CheckNowJob.queue_adapter.is_a?(ActiveJob::QueueAdapters::AsyncAdapter)
@@ -104,7 +118,17 @@ class CheckRun < ApplicationRecord
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
-  def active? = ACTIVE.include?(status)
+  def active? = ACTIVE.include?(status) && !cut_off?
+
+  # Left active past its time, though its row may not say so yet.
+  def cut_off?(booted_at: Rails.configuration.x.booted_at)
+    ACTIVE.include?(status) && updated_at < self.class.cutoff(long: kind.in?(LONG), booted_at:)
+  end
+
+  def failed? = status == "failed" || cut_off?
+
+  # Why it didn't finish.
+  def failure = cut_off? ? CUT_OFF : error
 
   # How many roles a fit run weighs.
   def fit_size = Array(request["posting_ids"]).size

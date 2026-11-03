@@ -10,24 +10,32 @@ RSpec.describe CheckRun do
   end
 
   # The in-process queue does not survive the server stopping.
-  it "marks a run still active an hour on as cut off, leaving recent and finished ones alone" do
+  it "reads a run still active an hour on as cut off, and says so on its row when asked, leaving recent and finished ones alone" do
     stale = create(:check_run, status: "running", updated_at: 2.hours.ago)
     fresh = create(:check_run, status: "running")
     done = create(:check_run, status: "done", updated_at: 2.hours.ago)
 
+    expect([ stale, fresh, done ].map(&:cut_off?)).to eq([ true, false, false ])
+    expect(described_class.active).to contain_exactly(fresh)
+    expect(described_class.cut_off).to contain_exactly(stale)
+    expect(stale).to have_attributes(active?: false, failed?: true, failure: /server stopped/)
+
     described_class.abandon_stale!
 
-    expect(stale.reload).to have_attributes(status: "failed", error: /server stopped/)
+    expect(stale.reload).to have_attributes(status: "failed", error: /server stopped/, cut_off?: false, failed?: true)
     expect(stale.finished_at).to be_present
     expect(fresh.reload.status).to eq("running")
     expect(done.reload.status).to eq("done")
   end
 
   # Found 2026-10-07: a restart mid-check left the run active, blocking that role's next check for an hour.
-  it "marks a run left active by an earlier server process as cut off at once, on the in-process queue" do
+  it "reads a run left active by an earlier server process as cut off at once, on the in-process queue" do
     allow(described_class).to receive(:in_process_queue?).and_return(true)
     lost = create(:check_run, status: "running", updated_at: 5.minutes.ago)
     current = create(:check_run, status: "running", updated_at: 1.minute.ago)
+
+    expect([ lost, current ].map { |run| run.cut_off?(booted_at: 2.minutes.ago) }).to eq([ true, false ])
+    expect(described_class.cut_off(booted_at: 2.minutes.ago)).to contain_exactly(lost)
 
     described_class.abandon_stale!(booted_at: 2.minutes.ago)
 
@@ -63,6 +71,8 @@ RSpec.describe CheckRun do
       long = create(:check_run, kind: "all", company: nil, status: "running", updated_at: 2.hours.ago)
       lost = create(:check_run, kind: "all", company: nil, status: "running", updated_at: 5.hours.ago)
 
+      expect([ long.active?, lost.active? ]).to eq([ true, false ])
+      expect(described_class.active).to contain_exactly(long)
       described_class.abandon_stale!
 
       expect([ long.reload.status, lost.reload.status ]).to eq(%w[running failed])

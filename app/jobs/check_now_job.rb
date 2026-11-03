@@ -7,6 +7,8 @@ class CheckNowJob < ApplicationJob
 
   def perform(check_run)
     return unless check_run.status == "queued"
+    # Its time ran out while it waited: the pages already call it cut off, so it stays so.
+    return check_run.update!(status: "failed", error: CheckRun::CUT_OFF, finished_at: Time.current) if check_run.cut_off?
 
     check_run.update!(status: "running", started_at: Time.current)
     DatabaseBackup.daily unless check_run.kind == "all" # everything backs up in full: it writes many verdicts

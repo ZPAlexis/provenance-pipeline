@@ -112,8 +112,8 @@
             <td>
               <% if run.active? %>
                 <span class="badge"><%= run.status == "queued" ? "Waiting" : "Checking…" %></span>
-              <% elsif run.status == "failed" %>
-                <span class="badge gone">Didn't finish</span> <span class="muted small"><%= run.error.to_s.truncate(90) %></span>
+              <% elsif run.failed? %>
+                <span class="badge gone">Didn't finish</span> <span class="muted small"><%= run.failure.to_s.truncate(90) %></span>
               <% else %>
                 <%= run_answer(run) %>
                 <% if run.kind != "role" %><span class="muted small"><%= run.summary.to_s.truncate(90) %></span><% end %>

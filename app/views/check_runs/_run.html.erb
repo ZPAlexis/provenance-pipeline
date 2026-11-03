@@ -7,9 +7,13 @@
 <% item = local_assigns[:item] %>
 <%= turbo_frame_tag [ (dom_id(item) if item), dom_id(run) ].compact.join("_"),
                     src: (check_run_path(run, poll: 1, review_item_id: item&.id) if run.active? && !poll) do %>
-  <div class="run <%= run.status %>"
+  <div class="run <%= run.failed? ? 'failed' : run.status %>"
        data-controller="<%= run.active? ? 'poll' : ('refresh' if poll && !item) %>">
-    <% if run.status == "queued" %>
+    <% if run.failed? %>
+      <span class="badge gone">Didn't finish</span> <span class="summary"><%= run.failure %></span>
+      <div class="muted small"><%= run.cut_off? ? "Last heard from" : "Finished" %> <%= ago(run.finished_at || run.updated_at) %>.
+        Nothing was written unless the history says so.</div>
+    <% elsif run.status == "queued" %>
       <span class="spinner" aria-hidden="true"></span> Waiting for the check before it to finish…
     <% elsif run.status == "running" && run.kind == "all" %>
       <span class="spinner" aria-hidden="true"></span> Checking everything:
@@ -27,7 +31,7 @@
     <% elsif run.status == "running" %>
       <span class="spinner" aria-hidden="true"></span> Checking<%= " #{run.posting.role_title}" if run.kind == "role" && run.posting %>,
       started <%= ago(run.started_at) %>…
-    <% elsif run.status == "done" %>
+    <% else %>
       <%= run_answer(run) %>
       <span class="summary"><%= run.summary %></span>
       <div class="muted small">
@@ -35,9 +39,6 @@
         Finished <%= ago(run.finished_at) %> · cost <%= cost(run.cost_usd) %>
         <%= " · #{run.tally.map { |what, count| "#{count} #{what}" }.join(', ')}" if run.kind.in?(%w[company fit]) && run.tally.present? %>
       </div>
-    <% else %>
-      <span class="badge gone">Didn't finish</span> <span class="summary"><%= run.error %></span>
-      <div class="muted small">Finished <%= ago(run.finished_at) %>. Nothing was written unless the history says so.</div>
     <% end %>
     <% if item && !run.active? %>
       <% if item.status == "open" %>
