@@ -162,4 +162,33 @@ RSpec.describe AuditEvent do
       expect(described_class.recent(3.days.ago)).to include(old_event)
     end
   end
+
+  # Review pass R4: behind the app's own check, the database refuses to change an event, whoever asks and however:
+  # a bulk update, a raw statement, or emptying the table. Each refusal in a savepoint of its own, so the test's own
+  # transaction carries on.
+  describe "append-only in the database itself" do
+    let!(:event) { create(:audit_event, reasoning: "As it was.") }
+
+    def refused(&block)
+      expect { described_class.transaction(requires_new: true, &block) }
+        .to raise_error(ActiveRecord::StatementInvalid, /the audit log is append-only: (UPDATE|DELETE|TRUNCATE) on audit_events refused/)
+    end
+
+    it "refuses an update, a delete and emptying the table, past the app's own check, and still takes a new event" do
+      refused { described_class.where(id: event.id).update_all(reasoning: "Rewritten.") }
+      refused { event.update_columns(reasoning: "Rewritten.") }
+      refused { described_class.where(id: event.id).delete_all }
+      refused { described_class.connection.execute("DELETE FROM audit_events") }
+      refused { described_class.connection.execute("TRUNCATE audit_events") }
+
+      expect(event.reload.reasoning).to eq("As it was.")
+      expect { create(:audit_event) }.to change(described_class, :count).by(1)
+    end
+
+    it "is in schema.rb, so the test database, CI and a fresh setup carry it" do
+      schema = Rails.root.join("db/schema.rb").read
+      expect(schema).to include("create_function :audit_events_append_only", "create_trigger :audit_events_append_only",
+                                "create_trigger :audit_events_no_truncate")
+    end
+  end
 end

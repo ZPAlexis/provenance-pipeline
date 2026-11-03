@@ -211,8 +211,25 @@ RSpec.describe Verifier::Suggestions do
       expect(proposed.reload.fit["by"]).to eq("agent:assistant")
 
       proposed.update_columns(verification_state: "not_found", last_checked_at: Time.current) # its check found it gone
+      # Weighed by the client before it went, from a description read: the database deletes both with the role.
+      description = Authority.unchecked do
+        proposed.role_descriptions.create!(text: "Recruit engineers.", content_hash: "d1", read_via: "render", url: "https://acme.example/jobs/2",
+                                           run_id: "r1", first_read_at: 1.day.ago, last_read_at: 1.day.ago)
+      end
+      score = Authority.unchecked do
+        proposed.fit_scores.create!(score: 64, matches: [ { "point" => "Hiring", "lines" => [ { "line" => 2, "text" => "Hired 12 engineers." } ] } ],
+                                    gaps: [], why: "Close.", resume_hash: "r1", role_description: description, description_hash: "d1",
+                                    written_by: "agent:assistant")
+      end
       expect(refresh(result(company, [])).withdrawn).to eq(1)
-      expect(AuditEvent.find_by!(target_id: proposed.id, action: "destroy").reasoning).to start_with("Withdrawn: it is no longer listed")
+      expect(AuditEvent.find_by!(target_id: proposed.id, action: "destroy").reasoning)
+        .to start_with("Withdrawn: it is no longer listed").and(end_with("Its 1 description version goes with it."))
+      # Review pass R4: its score's own destroy event, in the form its creation took: no resume line quoted.
+      removed = AuditEvent.find_by!(target_id: score.id, action: "destroy")
+      expect(removed).to have_attributes(actor: "agent:suggester", reasoning: start_with("Deleted with its role, withdrawn:"))
+      expect(removed.changes_made).to eq("score" => [ 64, nil ], "matches" => [ 1, nil ], "gaps" => [ 0, nil ], "resume_hash" => [ "r1", nil ],
+                                         "description_hash" => [ "d1", nil ], "written_by" => [ "agent:assistant", nil ])
+      expect(FitScore.where(id: score.id)).to be_empty
     end
   end
 end

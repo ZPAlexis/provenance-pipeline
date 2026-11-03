@@ -17,6 +17,10 @@ gem "mcp", require: false
 # Bundled gem as of Ruby 3.4 — must be declared explicitly. Used by the CSV importer.
 gem "csv"
 
+# Database functions and triggers in migrations and schema.rb (review pass R4): the audit log is append-only in the
+# database itself, and schema.rb rebuilds that wherever the schema is loaded (the test database, CI, a fresh setup).
+gem "fx"
+
 group :development, :test do
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
   gem "bundler-audit", require: false

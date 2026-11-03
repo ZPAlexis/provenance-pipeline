@@ -58,6 +58,10 @@ module Contacts
   def delete!(contact, actor: AuditEvent::OPERATOR)
     links, activities, notes = contact.application_contacts.count, contact.activities.count, contact.drafts.count
     ApplicationRecord.transaction do
+      # Each link goes with it, and is on the record as its own unlinking (review pass R4), as one removed by hand is.
+      contact.application_contacts.each do |link|
+        AuditEvent.record_destroy!(link, actor: actor, reasoning: "Contact unlinked from the application: the contact was deleted.")
+      end
       AuditEvent.record!(actor: actor, action: "destroy", target: contact,
                          changes_made: audited(contact.attributes.transform_values { |value| [ value, nil ] }),
                          reasoning: "Contact deleted, with #{links} #{'link'.pluralize(links)} to applications; " \

@@ -198,7 +198,12 @@ module Verifier
         next if posting.tracking != "suggested" || fits_now.include?(posting.id)
 
         why = (proposed_by_client?(posting) ? gone(posting) : withdrawal(posting, result)) or next
-        AuditEvent.record_destroy!(posting, actor: ACTOR, reasoning: "Withdrawn: #{why} Run #{run_id}.")
+        # The database deletes its fit scores and description versions with it: the scores' events first; the
+        # descriptions (evidence, never audited) counted in the role's own.
+        FitScores.record_removal!(posting, actor: ACTOR, reasoning: "Deleted with its role, withdrawn: #{why}")
+        descriptions = posting.role_descriptions.count
+        AuditEvent.record_destroy!(posting, actor: ACTOR, reasoning: "Withdrawn: #{why} Run #{run_id}." \
+                                                                     "#{" Its #{descriptions} description #{'version'.pluralize(descriptions)} #{descriptions == 1 ? 'goes' : 'go'} with it." if descriptions.positive?}")
         posting.destroy!
         tally[:withdrawn] += 1
       end

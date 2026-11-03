@@ -12,12 +12,13 @@ RSpec.describe AuditLog do
   # A verifier's run that changed a verdict, an operator who tracked the role and renamed the company, an
   # earlier human's import, and a write refused.
   def history
-    credential = as_agent("agent:verifier") do |run|
-      AuditEvent.record!(actor: "agent:verifier", action: "update", target: role,
-                         changes_made: { "verification_state" => %w[pending not_found] }, reasoning: "Not among the 12 roles listed.")
-      run
+    credential = travel_to(2.days.ago) do # the run was two days ago; an event is never rewritten afterwards
+      as_agent("agent:verifier") do |run|
+        AuditEvent.record!(actor: "agent:verifier", action: "update", target: role,
+                           changes_made: { "verification_state" => %w[pending not_found] }, reasoning: "Not among the 12 roles listed.")
+        run
+      end
     end
-    AuditEvent.where(credential: credential).update_all(occurred_at: 2.days.ago) # past the guard: the run was two days ago
     event("human:operator", role, changes: { "tracking" => %w[suggested tracked] }, at: 1.day.ago)
     event("human:operator", company, changes: { "name" => %w[ACME Acme] }, at: 3.hours.ago)
     event("human:earlier", company, action: "create", changes: { "name" => [ nil, "ACME" ] }, at: 10.days.ago)
@@ -121,8 +122,9 @@ RSpec.describe AuditLog do
   it "says an event in plain text, naming its record's id; any human is the operator, and a contact only its company" do
     contact = Authority.unchecked { company.contacts.create!(name: "Pat Example", kind: "recruiter") }
     renamed = event("human:earlier", contact, changes: { "notes" => [ nil, "Met at a meetup." ] }, reasoning: "Saved by hand.")
-    gone = event("agent:suggester", nil, action: "destroy", changes: { "role_title" => [ "Partner Manager", nil ] })
-    gone.update_columns(target_type: "Posting", target_id: SecureRandom.uuid) # a role deleted since
+    gone = build(:audit_event, actor: "agent:suggester", target: nil, action: "destroy", changes_made: { "role_title" => [ "Partner Manager", nil ] })
+    gone.assign_attributes(target_type: "Posting", target_id: SecureRandom.uuid) # a role deleted since
+    Authority.unchecked { gone.save! }
 
     expect(described_class.describe(renamed)).to eq([ "#{renamed.occurred_at.utc.strftime('%Y-%m-%d %H:%M')} UTC  operator changed "                                                       "contact at Acme [#{contact.id}]", "  Changed: notes: — → Met at a meetup.",
                                                       "  Why: Saved by hand." ])

@@ -108,7 +108,8 @@ The last row is the point: the most consequential write is withheld from every a
 - **Checked at every write.** Every create, update and destroy passes the check. While an agent acts, the write must be one of its scopes' rules: that model, that action, those attributes, in that state (the suggester may change a role only while it is still a suggestion). The credential is read again at each write, so revoking it stops its run at the next one.
 - **Refusals are on the record.** A refused write becomes a `denied` audit event with what it tried and why, kept even when the transaction it stopped rolls back.
 - **Every agent write names its credential** (`audit_events.credential_id`), and with it the run, its purpose and its scopes.
-- **The audit log is append-only,** for everyone; an event in an agent's name needs that agent's credential.
+- **The audit log is append-only,** for everyone; an event in an agent's name needs that agent's credential. The database holds it too: a trigger refuses any update, delete or truncate of `audit_events`, so a write that slips past the app (a bulk update, raw SQL, a console) is refused as well.
+- **What the database deletes with a record is on the record too.** A withdrawn suggestion takes its fit scores with it: each gets its own destroy event first, in the form its creation took (its score, counts and hashes, never the resume's text), and its description versions are counted in the role's. A deleted contact's links to applications each get theirs, as one unlinked by hand does.
 - **The review queue's bookkeeping** is worked out from the record, not an agent's judgment: it writes under a grant fixed in code, checked by the same guard, limited to review items.
 - **The operator's own writes are not checked** while the app is local, single-user and has no login; a login comes with a host (1.4).
 - **Reads through MCP are read-only by construction:** every read tool's call runs inside a read-only transaction. Writes through MCP go through save tools, each under a credential for that one call.
@@ -203,6 +204,7 @@ llm_calls     page_check_id, run_id, purpose (extract | resolve | match | relate
 audit_events  actor, action, target (polymorphic), changes_made (jsonb),
               credential_id (the run's credential, for an agent's write),
               model_version, reasoning, occurred_at
+              (append-only: a trigger refuses update, delete, truncate)
 ```
 
 Notes on a few choices:
@@ -281,6 +283,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 - **Python + Playwright** — agent workers (managed with uv). Required rather than preferred: the verification step needs headless rendering plus LLM tooling, and both are strongest there.
 - **Claude, through the Anthropic API** — Haiku 4.5 reads pages, decides near-miss matches, and weighs fit; Opus 5.5 writes drafts and resume reviews. The key stays outside the repo and reaches the worker process alone.
 - **MCP, through the Ruby SDK (gem `mcp`)** — the server the operator's own Claude client connects to
+- **fx** — database functions and triggers in migrations and `schema.rb`, so the audit log's append-only trigger is rebuilt wherever the schema loads (the test database, CI, a fresh setup)
 - **RSpec, Rubocop, Brakeman, bundler-audit**
 
 ## Setup

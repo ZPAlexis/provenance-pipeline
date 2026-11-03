@@ -152,8 +152,14 @@ RSpec.describe Authority do
   describe "a refusal inside a run's real transaction" do
     self.use_transactional_tests = false
 
+    # The test's own cleanup, past the guard and, for the audit log, past the database's append-only trigger (review
+    # pass R4): off for this one transaction only, which turns it on again before it ends.
     after do
-      [ AuditEvent, AgentCredential, Posting, Company ].each(&:delete_all) # past the guard, as a test's own cleanup
+      ApplicationRecord.transaction do
+        ApplicationRecord.connection.execute("ALTER TABLE audit_events DISABLE TRIGGER audit_events_append_only")
+        [ AuditEvent, AgentCredential, Posting, Company ].each(&:delete_all)
+        ApplicationRecord.connection.execute("ALTER TABLE audit_events ENABLE TRIGGER audit_events_append_only")
+      end
     end
 
     it "is kept when the transaction it stopped rolls back" do

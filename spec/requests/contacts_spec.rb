@@ -94,6 +94,9 @@ RSpec.describe "Contacts", type: :request do
 
       expect(application.activities.sole).to have_attributes(contact: nil, summary: "Wrote to Ana")
       expect(contact_events.last.reasoning).to eq("Contact deleted, with 1 link to applications; 1 activity no longer names it.")
+      # Its link goes with it, on the record as its own unlinking (review pass R4).
+      expect(AuditEvent.where(target_type: "ApplicationContact", action: "destroy").sole)
+        .to have_attributes(actor: AuditEvent::OPERATOR, reasoning: "Contact unlinked from the application: the contact was deleted.")
     end
   end
 

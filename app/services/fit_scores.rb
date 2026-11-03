@@ -189,6 +189,15 @@ module FitScores
       "(#{WrittenFrom.counted(score.matches.size, 'match')}, #{WrittenFrom.counted(score.gaps.size, 'gap')})#{dropped}"
   end
 
+  # A role's scores are deleted with it by the database (review pass R4): each one's destroy event is recorded first, by
+  # whoever deletes the role, in the form its creation took.
+  def record_removal!(posting, actor:, reasoning:)
+    posting.fit_scores.each do |score|
+      AuditEvent.record!(actor: actor, action: "destroy", target: score, reasoning: reasoning,
+                         changes_made: facts(score).transform_values { |value| [ value, nil ] })
+    end
+  end
+
   # What a score's audit events say of it: its score, counts and hashes, never its text.
   def facts(score)
     { "score" => score.score, "matches" => score.matches.size, "gaps" => score.gaps.size, "resume_hash" => score.resume_hash,

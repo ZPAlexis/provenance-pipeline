@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_26_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_02_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -414,4 +414,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_26_000001) do
   add_foreign_key "resumes", "search_profiles", on_delete: :cascade
   add_foreign_key "review_items", "companies", on_delete: :cascade
   add_foreign_key "role_descriptions", "postings", on_delete: :cascade
+
+  create_function :audit_events_append_only, sql_definition: <<-'SQL'
+      CREATE OR REPLACE FUNCTION public.audit_events_append_only()
+       RETURNS trigger
+       LANGUAGE plpgsql
+      AS $function$
+      BEGIN
+        RAISE EXCEPTION 'the audit log is append-only: % on audit_events refused', TG_OP
+          USING HINT = 'An event is never changed or deleted; record a new one.';
+      END;
+      $function$
+  SQL
+
+  create_trigger :audit_events_append_only, sql_definition: <<-SQL
+      CREATE TRIGGER audit_events_append_only BEFORE DELETE OR UPDATE ON public.audit_events FOR EACH ROW EXECUTE FUNCTION audit_events_append_only()
+  SQL
+
+  create_trigger :audit_events_no_truncate, sql_definition: <<-SQL
+      CREATE TRIGGER audit_events_no_truncate BEFORE TRUNCATE ON public.audit_events FOR EACH STATEMENT EXECUTE FUNCTION audit_events_append_only()
+  SQL
 end
