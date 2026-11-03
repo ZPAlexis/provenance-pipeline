@@ -15,7 +15,7 @@ class AuditEvent < ApplicationRecord
   # The target reference already carries the id, and occurred_at the time.
   UNTRACKED_ATTRIBUTES = %w[id created_at updated_at].freeze
 
-  # The one human operator. Their writes need no credential until a login exists (1.4).
+  # The one human operator. Their writes need no credential until a login exists (Stage 4).
   OPERATOR = "human:operator".freeze
 
   scope :denied, -> { where(action: "denied") }

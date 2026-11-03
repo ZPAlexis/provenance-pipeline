@@ -9,9 +9,9 @@
 # as a "denied" audit event that outlives the rollback of the write it stopped.
 #
 # Nobody acting means the operator: their writes are unchecked until a login
-# exists (1.4). What no scope grants is theirs alone (HUMAN_ONLY). The audit log
-# is append-only for everyone, and an event in an agent's name needs that
-# agent's credential.
+# exists, which comes with a host (Stage 4). What no scope grants is theirs
+# alone (HUMAN_ONLY). The audit log is append-only for everyone, and an event
+# in an agent's name needs that agent's credential.
 module Authority
   class Denied < ActiveRecord::ActiveRecordError; end
 
@@ -39,7 +39,8 @@ module Authority
     draft.status == "draft" && draft.approved_at.nil? && draft.edited_at.nil? && !draft.edited?
   end
 
-  # What each scope lets its holder write. Reads are not scoped here: 2.3's MCP server scopes them.
+  # What each scope lets its holder write. Reads are not scoped: the pages and commands are the operator's, and every
+  # MCP read tool runs inside a read-only transaction.
   SCOPES = {
     "companies:enrich" => {
       about: "A company's careers page and how it was found, its free board, and a suggested kind; never its name, " \
@@ -184,7 +185,7 @@ module Authority
     "Start an application, or move one between stages", "Edit or approve a draft", "Track or dismiss a role",
     "Decide a review item", "Edit the search profile or the resume",
     "Ask for a check that writes a verdict or spends API credit", "Name a company or set its kind",
-    "Issue or revoke a credential"
+    "Delete a contact", "Issue or revoke a credential"
   ].freeze
 
   BATCH = 4.hours # a run over many companies
@@ -239,7 +240,7 @@ module Authority
 
     principal = Current.principal
     return check_event!(record, action, principal) if record.is_a?(AuditEvent)
-    return if principal.nil? # the operator: unchecked until a login exists (1.4)
+    return if principal.nil? # the operator: unchecked until a login exists (Stage 4)
 
     changed = action == :destroy ? [] : record.changes_to_save.keys - IGNORED
     why = principal.refusal || refusal(principal, record, action, changed)
