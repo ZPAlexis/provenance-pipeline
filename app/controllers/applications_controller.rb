@@ -34,8 +34,10 @@ class ApplicationsController < ApplicationController
 
   def move
     act do
+      redating = @application.stage == params[:stage]
       Pipeline.move!(@application, params[:stage], on: day, note: params[:note])
-      "Moved to #{Application.stage_label(@application.stage)}."
+      label = Application.stage_label(@application.stage)
+      redating ? "#{label} re-dated to #{@application.stage_changed_on}." : "Moved to #{label}."
     end
   end
 

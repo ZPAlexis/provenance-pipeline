@@ -55,6 +55,28 @@ RSpec.describe Pipeline do
     end
   end
 
+  describe ".timeline" do
+    # Review pass R9: a stage re-dated in place stayed at the date first given.
+    it "walks the history in order: a stage re-dated moves to its new date, and a same-day move after takes it" do
+      application = later { described_class.start!(role, stage: "applied", on: Date.new(2026, 10, 1)) }
+      later { described_class.move!(application, "screening", on: Date.new(2026, 10, 12), note: "Recruiter call booked.") }
+      later { described_class.move!(application, "screening", on: Date.new(2026, 10, 10), note: "The call was two days earlier.") }
+      later { described_class.move!(application, "interviewing", on: Date.new(2026, 10, 10)) } # the same day: no date recorded
+      later { described_class.log!(application, kind: "call", summary: "Recruiter screen.", on: Date.new(2026, 10, 11)) }
+
+      lines = described_class.timeline(application.reload).reverse.map { |entry| [ entry.on.iso8601, entry.stage || entry.activity.kind, entry.note ] }
+      expect(lines).to eq([
+        [ "2026-10-01", "applied", "Started at Applied." ],
+        [ "2026-10-10", "screening", "Moved to Screening by hand. Recruiter call booked. Screening re-dated by hand, from 2026-10-12. " \
+                                     "The call was two days earlier." ],
+        [ "2026-10-10", "interviewing", "Moved to Interviewing by hand." ],
+        [ "2026-10-11", "call", "Recruiter screen." ]
+      ])
+      expect(AuditEvent.where(target: application).find_by!("reasoning LIKE 'Screening re-dated%'").changes_made)
+        .to eq("stage_changed_on" => %w[2026-10-12 2026-10-10])
+    end
+  end
+
   it "logs what happened along the way, audited as the operator's" do
     application = create(:application, posting: role)
 

@@ -62,6 +62,17 @@ RSpec.describe "Pipeline", type: :request do
       expect(response.body).to include("2026-10-15", "Not for me.")
     end
 
+    # Review pass R9: re-dated in place, a stage kept its first date on the timeline.
+    it "re-dates the stage it is at, and shows it at its new date" do
+      later { patch move_application_path(application), params: { stage: "screening", on: "2026-10-12" } }
+      later { patch move_application_path(application), params: { stage: "screening", on: "2026-10-10", note: "Two days earlier." } }
+      expect(flash[:notice]).to eq("Screening re-dated to 2026-10-10.")
+
+      get application_path(application)
+      row = response.body[%r{<tr>(?:(?!</tr>).)*Moved to Screening(?:(?!</tr>).)*</tr>}m]
+      expect(row).to include("2026-10-10", "Screening re-dated by hand, from 2026-10-12. Two days earlier.").and not_include("2026-10-12</td>")
+    end
+
     it "shows where it stands as a path, each stage a step to move it to" do
       Pipeline.move!(application, "interviewing", on: Date.new(2026, 10, 12))
 
