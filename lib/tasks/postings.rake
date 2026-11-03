@@ -13,6 +13,6 @@ namespace :postings do
                                            actor: AuditEvent::OPERATOR, reasoning: reason)
     puts "#{posting.role_title}: #{from} -> #{to.name}#{" (careers page #{to.careers_page_url})" if to.careers_page_url}"
   rescue ArgumentError => e
-    abort e.message
+    abort e.message.upcase_first
   end
 end

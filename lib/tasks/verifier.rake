@@ -166,7 +166,7 @@ namespace :verifier do
     Verifier::Candidates.confirm!(company)
     puts "#{company.name}: watching #{company.careers_page_url}"
   rescue Verifier::Candidates::NotACandidate => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Reject a candidate careers page by hand. Usage: bin/rails \"verifier:reject[company_id]\""
@@ -175,7 +175,7 @@ namespace :verifier do
     Verifier::Candidates.reject!(company)
     puts "#{company.name}: candidate rejected"
   rescue Verifier::Candidates::NotACandidate => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Show one company: its resolution, watched page, recent page checks, postings, and latest writes. " \
@@ -198,7 +198,7 @@ namespace :verifier do
            "(an aggregator's page of other companies' postings is not its careers page)."
     end
   rescue ArgumentError => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Set a company's careers page by hand, whatever its state. Audited as the operator. " \
@@ -214,7 +214,7 @@ namespace :verifier do
     Verifier::Candidates.set_page!(company, url, reasoning: reason)
     puts "#{company.name}: watching #{company.careers_page_url} (#{company.ats_type})#{" instead of #{before}" if before && before != url}"
   rescue ArgumentError => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   # What a check now did, after adding by URL: the answer for a role, and what was read.
@@ -226,12 +226,13 @@ namespace :verifier do
   end
 
   desc "Add a company by its domain, careers page, or ATS board, then find its careers page and read it. " \
-       "Audited as you; backs up first. Usage: URL=\"acme.com\" bin/rails verifier:add [NAME=\"Acme\"]"
+       "Audited as you; backs up first. Usage: URL=\"acme.com\" bin/rails verifier:add [COMPANY_NAME=\"Acme\"]"
   task add: :environment do
     url = ENV["URL"].presence or abort "Give its domain, careers page, or ATS board in URL=\"...\"."
     Verifier::Capture.parse(url) # a link refused is refused before anything is backed up or written
     puts "Backed up to #{DatabaseBackup.call}"
-    added = Verifier::Capture.company!(url, name: ENV["NAME"])
+    # COMPANY_NAME, never NAME: shells set NAME already (WSL sets it to the machine's name).
+    added = Verifier::Capture.company!(url, name: ENV["COMPANY_NAME"])
     company = added.company
     puts added.note
     next if company.resolution_status == "resolved"
@@ -243,7 +244,7 @@ namespace :verifier do
     outcome = Verifier::CheckNow.company(company, worker: build_worker.call("verify"), finder: build_worker.call("resolve"))
     report_check.call(outcome, company.name)
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Add a role by its own page at the employer (or its ATS posting), tracked, then check it. Without TITLE its " \
@@ -266,13 +267,13 @@ namespace :verifier do
     outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check"), finder: build_worker.call("resolve"))
     report_check.call(outcome, "#{posting.company.name} / #{posting.reload.role_title}")
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
-  desc "Rename a company. Audited as you. Usage: NAME=\"Fabrikam Brasil\" bin/rails \"verifier:rename[company_id]\""
+  desc "Rename a company. Audited as you. Usage: COMPANY_NAME=\"Acme Brasil\" bin/rails \"verifier:rename[company_id]\""
   task :rename, [ :id ] => :environment do |_task, args|
     company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}."
-    name = ENV["NAME"].to_s.strip.presence or abort "Give the name in NAME=\"...\"."
+    name = ENV["COMPANY_NAME"].to_s.strip.presence or abort "Give the name in COMPANY_NAME=\"...\"."
     before = company.name
     ApplicationRecord.transaction do
       company.update!(name: name)
@@ -280,7 +281,7 @@ namespace :verifier do
     end
     puts "#{before} is now #{company.name}."
   rescue ActiveRecord::RecordInvalid => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   print_resolution_report = lambda do |report, dir|
@@ -559,7 +560,7 @@ namespace :verifier do
     Verifier::Tracking.track!(posting, note: ENV["NOTE"])
     puts "#{posting.company.name} / #{posting.role_title}: tracked"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Dismiss a role for good: never checked or suggested again (track it again to undo). Audited as you. " \
@@ -570,7 +571,7 @@ namespace :verifier do
     Verifier::Tracking.dismiss!(posting, note: ENV["NOTE"])
     puts "#{posting.company.name} / #{posting.role_title}: dismissed"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Fill in each posting's own page at the employer from the listing it already matched. No API cost; " \
@@ -697,7 +698,7 @@ namespace :verifier do
                                          work_mode: ENV["WORK_MODE"].presence)
     puts "#{posting.company.name} / #{posting.role_title}: #{posting.verification_state}, checked by hand"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Undo the verifier's latest verdict on a posting, restoring what it replaced. Audited as you. " \
@@ -710,7 +711,7 @@ namespace :verifier do
     Verifier::HandCheck.undo_verdict!(posting, reasoning: ENV["REASON"])
     puts "#{posting.company.name} / #{posting.role_title}: back to #{posting.verification_state}"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    abort e.message
+    abort e.message.upcase_first
   end
 
   desc "Remove the run folders whose files quote the resume (drafts, resume reviews, fit), left from before a run's " \

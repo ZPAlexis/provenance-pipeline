@@ -5,13 +5,6 @@ RSpec.describe Analytics do
   let!(:company) { create(:company, :resolved, name: "Acme", domain: "acme.example") }
   let(:day) { ->(n) { Date.current - 30 + n } } # day 30 is today
 
-  # Each write a minute after the one before, as a person makes them: written milliseconds apart, the events' order
-  # would rest on a clock WSL's host steps back now and then.
-  def later(&block)
-    @clock = (@clock || Time.current.beginning_of_day) + 1.minute
-    travel_to(@clock, &block)
-  end
-
   # Eight made-up applications, through the service that writes them, so their audit events are as the app writes
   # them: a same-day move carries no date, and a stage re-dated in place carries a date and no stage.
   def applications

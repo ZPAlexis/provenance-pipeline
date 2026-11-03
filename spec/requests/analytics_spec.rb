@@ -3,12 +3,6 @@ require "rails_helper"
 RSpec.describe "Analytics", type: :request do
   let!(:company) { create(:company, :resolved, name: "Acme", domain: "acme.example") }
 
-  # Each write a minute after the one before, as a person makes them (WSL's host steps the clock back now and then).
-  def later(&block)
-    @clock = (@clock || Time.current.beginning_of_day) + 1.minute
-    travel_to(@clock, &block)
-  end
-
   # Made-up applications: five started at Interested ten days ago, three of them applied to two days later, one of
   # those rejected.
   def applications

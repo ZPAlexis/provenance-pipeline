@@ -11,12 +11,6 @@ RSpec.describe "Analytics through MCP" do
 
   def said(response) = response.content.sole[:text]
 
-  # Each write a minute after the one before, as a person makes them (WSL's host steps the clock back now and then).
-  def later(&block)
-    @clock = (@clock || Time.current.beginning_of_day) + 1.minute
-    travel_to(@clock, &block)
-  end
-
   # Five applications started at Interested ten days ago, three applied to, one of those rejected; a role read and
   # confirmed listed, at a cost; a recommendation pending.
   def record

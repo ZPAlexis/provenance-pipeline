@@ -329,7 +329,7 @@ Everything runs through rake. Each run writes its targets and results under `tmp
 bin/rails verifier:resolve                       # find careers pages (backs up the database first)
 bin/rails verifier:candidates                    # low-confidence finds waiting for a person
 bin/rails "verifier:confirm[company_id]"         # or verifier:reject, verifier:set_page, verifier:kind
-NAME="..." bin/rails "verifier:rename[company_id]"  # rename a company, audited as you
+COMPANY_NAME="..." bin/rails "verifier:rename[company_id]"  # rename a company, audited as you
 bin/rails "verifier:status[company name or id]"  # one company: its page, checks, postings, history
 bin/rails "verifier:extract[https://...]"        # read one careers page and list what it shows; records nothing (MODEL=)
 bin/rails verifier:verify                        # check everything: shows the plan and its cost; GO=1 runs it
@@ -339,7 +339,7 @@ bin/rails verifier:find_boards                   # free boards listing the same 
 bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's
 bin/rails "verifier:track[posting_id]"           # or verifier:dismiss: your watch list, with NOTE="why"
 bin/rails verifier:suggest                       # suggestions from the search profile (no API cost); PREVIEW=1 writes nothing
-URL="acme.com" bin/rails verifier:add            # add a company by its domain, careers page, or ATS board, and read it
+URL="acme.com" bin/rails verifier:add            # add a company by its domain, careers page, or ATS board, and read it (COMPANY_NAME optional)
 URL="https://..." bin/rails verifier:add_role    # add a role by its own page, tracked, and check it (TITLE, SOURCE optional)
 bin/rails "verifier:hand_check[posting_id]"      # record a check you made yourself
 REASON="why" bin/rails "verifier:undo_verdict[posting_id]"  # undo the verifier's latest verdict on a role, restoring what it replaced
@@ -376,6 +376,8 @@ bin/rails "fit:show[posting_id]"                 # its score, why, the level, ma
 bin/rails reviews:list                           # reviews, newest first, who wrote each and its cost (APPLICATION=)
 bin/rails "reviews:show[id]"                     # its strengths, gaps and suggestions with their lines, and its note
 ```
+
+The commands run most have specs of their own (`spec/tasks/`), run as the operator runs them: what each prints, that its writes are audited as theirs and backed up first, and that a command given something wrong is refused before any backup. A name is given in `COMPANY_NAME` or `CONTACT_NAME`, never `NAME`, which shells set already (WSL sets it to the machine's name).
 
 ### Suggestions
 

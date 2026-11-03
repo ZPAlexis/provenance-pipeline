@@ -223,9 +223,9 @@ RSpec.describe Drafts do
   end
 
   it "drafts from the newest versions, and costs what drafts have cost on the record" do
-    keep_resume("Old resume.")
+    later { keep_resume("Old resume.") }
     describe_role("Old description.", at: Time.utc(2026, 10, 1))
-    newest = keep_resume
+    newest = later { keep_resume }
     describe_role
     expect(described_class.estimate).to eq(Drafts::FIRST_ESTIMATE)
 

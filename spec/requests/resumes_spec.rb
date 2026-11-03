@@ -6,13 +6,13 @@ RSpec.describe "The resume", type: :request do
   def resume_events = AuditEvent.where(target_type: "Resume").order(:occurred_at)
 
   it "is kept with the profile, version by version, its record naming its size and hash, never its text" do
-    patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, eight years." }
+    later { patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, eight years." } }
     expect(flash[:notice]).to eq("Resume saved: 6 words.")
 
-    patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, eight years." }
+    later { patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, eight years." } }
     expect(flash[:notice]).to eq("Nothing to save: it is the same text as now.")
 
-    patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, nine years, Portuguese." }
+    later { patch resume_profile_path, params: { resume_text: "Alex Example\nSales engineer, nine years, Portuguese." } }
 
     expect(profile.resumes.newest_first.map(&:words)).to eq([ 7, 6 ])
     expect(resume_events.map(&:reasoning)).to eq([ "Resume saved on the Profile page: 6 words.",

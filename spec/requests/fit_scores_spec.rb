@@ -61,10 +61,10 @@ RSpec.describe "Fit scores", type: :request do
     end
 
     it "shows its newest score, why, the level, the matches by resume line and the gaps, marked stale once the resume changes" do
-      keep_resume
+      later { keep_resume }
       describe_role
-      weighed(score: 60)
-      weighed
+      later { weighed(score: 60) }
+      later { weighed }
 
       get role_path(role)
       expect(response.body).to include(">72<", "Strong on discovery; Spanish is missing.", "Mid-level; the resume shows eight years",
@@ -72,10 +72,7 @@ RSpec.describe "Fit scores", type: :request do
                                        "by the fit scorer with claude-haiku-4-5-20251001 for $0.007", "Before: 60 on", "Weigh it again")
       expect(response.body).not_to include("changed since it was weighed")
 
-      # The newest version is the latest made; under WSL the host steps the clock back now and then ("Time jumped
-      # backwards" in the journal), so the version before is dated an hour back and the order never rests on it.
-      profile.resumes.update_all(created_at: 1.hour.ago)
-      keep_resume("Jordan Sample\nA newer resume.")
+      later { keep_resume("Jordan Sample\nA newer resume.") }
       get role_path(role)
       expect(response.body).to include("The resume changed since it was weighed")
     end

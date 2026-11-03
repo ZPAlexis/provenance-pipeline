@@ -115,12 +115,12 @@ RSpec.describe FitScores do
     expect { weigh(role) }.to raise_error(ArgumentError, "weighing needs a resume, saved on the Profile page, first")
     expect { described_class.weigh!([]) }.to raise_error(ArgumentError, "name a role to weigh")
 
-    keep_resume
+    later { keep_resume }
     weigh(role, weighed)
     expect(described_class.unscored([ role, other ])).to eq([ other ])
     expect(described_class.undescribed([ role, other ])).to eq([ other ])
 
-    keep_resume("Jordan Sample\nA newer resume.")
+    later { keep_resume("Jordan Sample\nA newer resume.") }
     expect(described_class.unscored([ role, other ])).to eq([ role, other ])
     expect(role.fit_scores.sole.stale_for(profile.resumes.newest_first.first, role.role_descriptions.sole)).to eq([ "the resume" ])
   end
@@ -131,8 +131,8 @@ RSpec.describe FitScores do
     dismissed = create(:posting, company: company, role_title: "Recruiter", tracking: "dismissed")
     keep_resume
     describe_role
-    weigh(role, weighed("score" => 60))
-    weigh(role, weighed("score" => 75))
+    later { weigh(role, weighed("score" => 60)) }
+    later { weigh(role, weighed("score" => 75)) }
 
     expect(described_class.offered).to contain_exactly(role, other)
     expect([ gone, dismissed ]).to all(satisfy { |posting| !described_class.offered.include?(posting) })

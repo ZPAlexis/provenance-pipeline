@@ -109,7 +109,7 @@ RSpec.describe "Drafts", type: :request do
   end
 
   it "shows each draft with its gaps, what it drew on, and what it was written from and by" do
-    draft = drafted(kind: "outreach", subject: "Sales Engineer at Acme", asked_language: "English", guidance: "Discovery.")
+    draft = later { drafted(kind: "outreach", subject: "Sales Engineer at Acme", asked_language: "English", guidance: "Discovery.") }
 
     get application_path(application)
 
@@ -120,7 +120,7 @@ RSpec.describe "Drafts", type: :request do
                                      "You asked for English and to stress “Discovery.”", "draft_#{draft.id}")
     expect(response.body).not_to include("changed since it was written", "“Discovery.”.")
 
-    Resumes.keep!(profile, text: "Alex Example\nA newer resume.")
+    later { Resumes.keep!(profile, text: "Alex Example\nA newer resume.") }
     get application_path(application)
     expect(response.body).to include("Your resume has changed since it was written")
   end
