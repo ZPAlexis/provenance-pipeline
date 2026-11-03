@@ -8,7 +8,8 @@ CI.run do
 
   step "Style: Ruby", "bin/rubocop"
 
-  step "Security: Gem audit", "bin/bundler-audit"
+  # A fresh advisory database first, as GitHub's runner has: the cached one let five flagged gems through.
+  step "Security: Gem audit", "bin/bundler-audit check --update"
   step "Security: Importmap vulnerability audit", "bin/importmap audit"
   step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
 
