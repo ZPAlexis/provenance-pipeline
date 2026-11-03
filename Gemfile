@@ -35,5 +35,3 @@ end
 group :development do
   gem "web-console"
 end
-
-gem "letter_opener_web", "~> 3.0", group: :development

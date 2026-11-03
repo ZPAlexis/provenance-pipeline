@@ -286,7 +286,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 
 ## Stack
 
-- **Rails 8.1 / Ruby 3.4.8 / PostgreSQL** — core application and system of record
+- **Rails 8.1 / Ruby 3.4.8 / PostgreSQL 16** — core application and system of record
 - **solid_queue** — for a schedule, once there is a host; until then the verifier runs on demand
 - **Hotwire (Turbo, Stimulus) and importmap** — the operator's pages, plain Rails views with no build step
 - **Python + Playwright** — agent workers (managed with uv). Required rather than preferred: the verification step needs headless rendering plus LLM tooling, and both are strongest there.

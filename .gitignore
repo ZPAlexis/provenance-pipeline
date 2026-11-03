@@ -85,4 +85,6 @@ __pycache__/
 
 # Claude Code settings for one machine (permission allowlists with local paths)
 /.claude/settings.local.json
+# The desktop app's dev-server launcher, with this machine's drive path
+/.claude/launch.json
 .mcp.json
