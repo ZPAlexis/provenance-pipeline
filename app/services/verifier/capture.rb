@@ -41,7 +41,10 @@ module Verifier
 
     # What a pasted link or domain says: where the company's roles may be listed, and who it is.
     Link = Data.define(:url, :page, :domain, :board, :name)
-    Added = Data.define(:company, :created, :note)
+    # A company added or found, and whether finding it tracked it again (it was archived).
+    Added = Data.define(:company, :created, :note, :tracked_again) do
+      def initialize(company:, created:, note:, tracked_again: false) = super
+    end
     Placed = Data.define(:posting, :created, :note)
 
     module_function
@@ -64,9 +67,11 @@ module Verifier
       known = by_source(source)
       added = company_from(own, company_name, actor) unless known
       company = known&.company || added.company
+      again = chosen_again(company, own.url, actor) if known # a role found by where it was found, at an archived company
       known ||= by_link(company, own.url) || (by_title(company, title) if title.present?)
       placed = known ? choose!(known, own, source, actor) : create_role!(company, own, title.presence, location, source, actor)
-      added&.created ? placed.with(note: "#{added.note} #{placed.note}") : placed
+      before = again || (added.note if added&.created || added&.tracked_again)
+      before ? placed.with(note: "#{before} #{placed.note}") : placed
     end
 
     def parse(input, role: false)
@@ -120,14 +125,25 @@ module Verifier
       company = existing(link, name)
       return create!(link, name, actor) unless company
 
-      if company.resolution_status == "resolved"
-        Added.new(company: company, created: false, note: "#{company.name} is already watched.")
+      again = chosen_again(company, link.url, actor)
+      note = if company.resolution_status == "resolved"
+        "#{company.name} is #{'already ' unless again}watched."
       elsif company.resolution_status == "candidate"
-        Added.new(company: company, created: false, note: "#{company.name} has a careers page waiting for you to confirm.")
+        "#{company.name} has a careers page waiting for you to confirm."
       else
         try_first!(company, link, actor)
-        Added.new(company: company, created: false, note: "#{company.name} was on record without a careers page.")
+        "#{company.name} was on record without a careers page."
       end
+      Added.new(company: company, created: false, note: [ again, note ].compact.join(" "), tracked_again: again.present?)
+    end
+
+    # A company the operator archived, chosen again by pasting a link to it, or to a role there (4a): tracked again,
+    # its roles archived with it left as they are. Returns what was done, in a sentence, or nil.
+    def chosen_again(company, url, actor)
+      return unless company.dismissed?
+
+      Tracking.track_company!(company, note: "Added by URL: #{url}.", with_roles: false, actor: actor)
+      "#{company.name} was archived: tracked again (its archived roles stay archived)."
     end
 
     def existing(link, name)

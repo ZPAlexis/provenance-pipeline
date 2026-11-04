@@ -156,5 +156,26 @@ RSpec.describe Verifier::Capture do
       expect(bare.reload.careers_page_url).to eq("https://gamma.com/jobs")
       expect(AuditEvent.find_by!(target: bare).reasoning).to eq("Added by URL: https://gamma.com/jobs, the careers page to try first.")
     end
+
+    # 4a: pasting a link is choosing it, so an archived company pasted, or a role there, is tracked again; the roles
+    # archived with it stay archived.
+    it "tracks an archived company again when it is pasted, or a role at it, its archived roles left archived" do
+      acme = create(:company, :resolved, name: "Acme", domain: "acme.com")
+      old_role = create(:posting, company: acme, role_title: "Recruiter")
+      Verifier::Tracking.dismiss_company!(acme, note: "Pausing.")
+
+      added = described_class.company!("acme.com")
+
+      expect(added).to have_attributes(company: acme, created: false, tracked_again: true,
+                                       note: "Acme was archived: tracked again (its archived roles stay archived). Acme is watched.")
+      expect(acme.reload.tracking).to eq("tracked")
+      expect(AuditEvent.where(target: acme).order(:occurred_at).last.reasoning).to eq("Tracked by hand. Added by URL: https://acme.com.")
+      expect(old_role.reload.tracking).to eq("dismissed")
+
+      Verifier::Tracking.dismiss_company!(acme, note: "Pausing again.")
+      placed = described_class.role!(link: "https://acme.com/careers/jobs/7", title: "Solutions Engineer")
+      expect(placed.note).to start_with("Acme was archived: tracked again").and end_with("Solutions Engineer tracked.")
+      expect(acme.reload.tracking).to eq("tracked")
+    end
   end
 end

@@ -30,7 +30,7 @@ module Overview
 
   def companies
     {
-      watched: Company.where(resolution_status: "resolved").count,
+      watched: Company.watched.count,
       boards: Company.where.not(board_vendor: nil).count,
       candidates: Company.resolution_candidates.count,
       unresolved: Company.where(resolution_status: [ nil, "failed" ]).count

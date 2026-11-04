@@ -25,7 +25,7 @@ RSpec.describe "Agents", type: :request do
 
     expect(response).to have_http_status(:success)
     expect(response.body).to include("Verifier", "postings:verify", "A role&#39;s verdict", "Suggester", "postings:suggest",
-                                     "Review queue", "review:keep", "Yours alone", "Track or dismiss a role")
+                                     "Review queue", "review:keep", "Yours alone", "Track or archive a role or a company")
     expect(response.body).to include(agent_credential_path(credential), "revoked", "Agents (1 refused)")
     expect(response.body).to include("may not update a posting (tracking) with postings:verify, evidence:write")
 

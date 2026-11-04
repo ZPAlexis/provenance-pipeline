@@ -21,6 +21,8 @@ module Verifier
       company = record.is_a?(Posting) ? record.company : record
       if record.is_a?(Posting) && record.tracking == "dismissed"
         "#{record.role_title} is dismissed: track it again to check it."
+      elsif company.dismissed?
+        "#{company.name} is archived: track it again to check it."
       elsif company.kind == "aggregator"
         "#{company.name} is an aggregator: its postings belong to other employers."
       elsif company.resolution_status == "candidate"

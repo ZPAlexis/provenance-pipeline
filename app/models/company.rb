@@ -46,6 +46,10 @@ class Company < ApplicationRecord
   BOARD_VENDORS = %w[greenhouse lever ashby workday oracle].freeze
   BOARD_MAX_AGE = 30.days
 
+  # Whether the operator follows the company (4a), as with a role: tracked, or archived ("dismissed", the stored word
+  # for it, as for roles). Only a tracked company is watched; archiving one archives its roles in play with it.
+  TRACKING = %w[tracked dismissed].freeze
+
   validates :name, presence: true
   validates :domain, uniqueness: true, allow_nil: true
   validates :ats_type, inclusion: { in: ATS_TYPES }, allow_nil: true
@@ -55,6 +59,7 @@ class Company < ApplicationRecord
   validates :resolution_failure, inclusion: { in: RESOLUTION_FAILURES }, allow_nil: true
   validates :kind, inclusion: { in: KINDS }, allow_nil: true
   validates :kind_suggestion, inclusion: { in: KIND_SUGGESTIONS }, allow_nil: true
+  validates :tracking, inclusion: { in: TRACKING }
   with_options if: -> { resolution_status == "resolved" } do
     validates :careers_page_url, :resolution_method, :resolution_confidence, presence: true
   end
@@ -71,15 +76,17 @@ class Company < ApplicationRecord
   scope :needing_careers_page, -> { where(careers_page_url: nil) }
   scope :unresolved, -> { where(resolution_status: nil) }
   scope :resolution_candidates, -> { where(resolution_status: "candidate") }
+  scope :tracked, -> { where(tracking: "tracked") }
+  scope :dismissed, -> { where(tracking: "dismissed") }
   # Companies whose name or domain, or the place of one of their roles, hold every word typed (the Companies page's Find):
   # a company has no place of its own on record, so "Brazil" finds those with a role there.
   scope :matching, lambda { |text|
     places = "(SELECT string_agg(postings.location, ' ') FROM postings WHERE postings.company_id = companies.id)"
     Searchable.narrow(all, text, [ "companies.name", "companies.domain", places ])
   }
-  # Companies whose page is watched for roles. An aggregator's listings belong to
-  # other employers: its own page says nothing about them.
-  scope :watched, -> { where(resolution_status: "resolved", kind: [ nil, *KINDS - [ "aggregator" ] ]) }
+  # Companies whose page is watched for roles: its careers page found and confirmed, and the operator tracking it
+  # (4a). An aggregator's listings belong to other employers: its own page says nothing about them.
+  scope :watched, -> { where(resolution_status: "resolved", tracking: "tracked", kind: [ nil, *KINDS - [ "aggregator" ] ]) }
 
   # Domain is the dedup key; fall back to a normalized name only when absent.
   #
@@ -96,6 +103,9 @@ class Company < ApplicationRecord
       find_or_initialize_by(name: name)
     end
   end
+
+  # Archived by the operator: never watched, suggested from or reviewed until tracked again.
+  def dismissed? = tracking == "dismissed"
 
   # The board verification reads in place of the page, while its finding is fresh; nil to read the page.
   def board_in_use

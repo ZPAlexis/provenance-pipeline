@@ -76,7 +76,7 @@ RSpec.describe ClayImporter do
       result
       event = AuditEvent.find_by!(target: company_at("acme.example"))
 
-      expect(event.changes_made).to eq("name" => [ nil, "Acme Robotics" ], "domain" => [ nil, "acme.example" ])
+      expect(event.changes_made).to eq("name" => [ nil, "Acme Robotics" ], "domain" => [ nil, "acme.example" ], "tracking" => [ nil, "tracked" ])
     end
 
     it "explains unverified postings in the audit reasoning" do

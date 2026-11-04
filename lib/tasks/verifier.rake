@@ -574,6 +574,35 @@ namespace :verifier do
     abort e.message.upcase_first
   end
 
+  desc "Archive a company: never checked, suggested from or reviewed again, its tracked and suggested roles archived " \
+       "with it (track it again to undo). Refused while it has an open application. Audited as you; backs up first. " \
+       "Usage: NOTE=\"why\" bin/rails \"verifier:dismiss_company[company_id]\""
+  task :dismiss_company, [ :id ] => :environment do |_task, args|
+    company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}: its id is in its page's address."
+    abort "Say why: NOTE=\"...\" becomes the audit reasoning." if ENV["NOTE"].blank?
+    abort "#{company.name} is already archived." if company.dismissed?
+
+    puts "Backed up to #{DatabaseBackup.call}"
+    roles = Verifier::Tracking.dismiss_company!(company, note: ENV["NOTE"])
+    puts "#{company.name}: archived, with #{roles.size} #{roles.one? ? 'role' : 'roles'} in play archived with it"
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message.upcase_first
+  end
+
+  desc "Track an archived company again, and the roles archived with it, each as it was (ROLES=0 leaves them " \
+       "archived). Audited as you; backs up first. Usage: NOTE=\"why\" bin/rails \"verifier:track_company[company_id]\""
+  task :track_company, [ :id ] => :environment do |_task, args|
+    company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}: its id is in its page's address."
+    abort "Say why: NOTE=\"...\" becomes the audit reasoning." if ENV["NOTE"].blank?
+    abort "#{company.name} is already tracked." unless company.dismissed?
+
+    puts "Backed up to #{DatabaseBackup.call}"
+    back = Verifier::Tracking.track_company!(company, note: ENV["NOTE"], with_roles: ENV["ROLES"] != "0")
+    puts "#{company.name}: tracked, with #{back.size} #{back.one? ? 'role' : 'roles'} back"
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message.upcase_first
+  end
+
   desc "Fill in each posting's own page at the employer from the listing it already matched. No API cost; " \
        "backs up first."
   task backfill_job_urls: :environment do

@@ -1,6 +1,6 @@
 class CompaniesController < ApplicationController
   VIEWS = {
-    "watched" => ->(scope) { scope.where(resolution_status: "resolved") },
+    "watched" => ->(scope) { scope.watched },
     "candidates" => ->(scope) { scope.resolution_candidates },
     "unresolved" => ->(scope) { scope.where(resolution_status: [ nil, "failed" ]) },
     "all" => ->(scope) { scope }

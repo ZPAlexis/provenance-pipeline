@@ -44,11 +44,17 @@ module ReviewQueue
         finding = wanted[[ item.kind, item.subject_type, item.subject_id ]]
         next restate!(item, finding) if finding && finding.key == item.evidence_key
 
-        close!(item, "done", "resolved", actor: actor, audit_as: ACTOR,
-                                         reasoning: finding ? "Resolved: what was seen changed." : "Resolved: no longer asked by the record.")
+        close!(item, "done", "resolved", actor: actor, audit_as: ACTOR, reasoning: closing(company, finding))
       end
       wanted.each_value { |finding| raise!(company, finding) }
     end
+  end
+
+  def closing(company, finding)
+    return "Resolved: what was seen changed." if finding
+    return "Resolved: its company is archived." if company.dismissed?
+
+    "Resolved: no longer asked by the record."
   end
 
   DECISIONS = %w[confirm reject set_page set_kind find_again check_again still_listed no_longer_listed undo leave].freeze
@@ -141,7 +147,10 @@ module ReviewQueue
 
   # --- What a company's record asks of the operator now ----------------------
 
+  # Nothing is asked about a company the operator archived (4a): its open items close, and none is raised.
   def findings(company)
+    return [] if company.dismissed?
+
     [ candidate(company), kind(company), no_page(company), partial_list(company), page_changed(company),
       *company.postings.where.not(tracking: "dismissed").flat_map { |posting| [ suspect(posting), unconfirmed(posting) ] } ].compact
   end

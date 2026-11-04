@@ -67,19 +67,20 @@ module Authority
       ]
     },
     "postings:suggest" => {
-      about: "Propose a role, bring its reasons up to date, or withdraw it, only while it is a suggestion the operator " \
-             "hasn't acted on.",
+      about: "Propose a role at a company the operator tracks, bring its reasons up to date, or withdraw it, only while " \
+             "it is a suggestion the operator hasn't acted on.",
       rules: [
-        Rule.new(model: "Posting", actions: %i[create], only_if: SUGGESTED),
+        Rule.new(model: "Posting", actions: %i[create], only_if: ->(posting) { SUGGESTED.call(posting) && !posting.company&.dismissed? }),
         Rule.new(model: "Posting", actions: %i[update], attributes: %w[fit], only_if: SUGGESTED),
         Rule.new(model: "Posting", actions: %i[destroy], only_if: ->(posting) { posting.tracking_in_database == "suggested" })
       ]
     },
     "companies:import" => {
-      about: "Companies from a Clay export: created, and their research added; never their name, domain, or kind once on record.",
+      about: "Companies from a Clay export: created, and their research added; never their name, domain, or kind once on " \
+             "record, nor whether the operator tracks them.",
       rules: [
-        Rule.new(model: "Company", actions: %i[create]),
-        Rule.new(model: "Company", actions: %i[update], except: %w[name domain kind])
+        Rule.new(model: "Company", actions: %i[create], except: %w[tracking]),
+        Rule.new(model: "Company", actions: %i[update], except: %w[name domain kind tracking])
       ]
     },
     "postings:import" => {
@@ -182,7 +183,7 @@ module Authority
 
   # What no scope grants: the operator's alone, whatever an agent holds.
   HUMAN_ONLY = [
-    "Start an application, or move one between stages", "Edit or approve a draft", "Track or dismiss a role",
+    "Start an application, or move one between stages", "Edit or approve a draft", "Track or archive a role or a company",
     "Decide a review item", "Edit the search profile or the resume",
     "Ask for a check that writes a verdict or spends API credit", "Name a company or set its kind",
     "Delete a contact", "Issue or revoke a credential"

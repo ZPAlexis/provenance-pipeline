@@ -26,6 +26,21 @@ RSpec.describe "verifier: and postings: commands" do
     expect(company.reload.name).to eq("Acme Labs")
   end
 
+  # 4a: a company archived with its roles in play, and tracked again with them, each refusal before the backup.
+  it "archives a company with its roles, and tracks it again with them, refusing before the backup" do
+    expect(run_task("verifier:dismiss_company", company.id).aborted).to eq('Say why: NOTE="..." becomes the audit reasoning.')
+    expect(run_task("verifier:track_company", company.id, NOTE: "Again.").aborted).to eq("Acme is already tracked.")
+    expect(run_task("verifier:dismiss_company", "nope", NOTE: "x").aborted).to eq('No company "nope": its id is in its page\'s address.')
+
+    expect(run_task("verifier:dismiss_company", company.id, NOTE: "Not hiring in my field.").out)
+      .to eq("Backed up to #{Rails.root.join('tmp/backups/stand-in.dump')}\nAcme: archived, with 1 role in play archived with it\n")
+    expect(role.reload.tracking).to eq("dismissed")
+    expect(run_task("verifier:dismiss_company", company.id, NOTE: "Again.").aborted).to eq("Acme is already archived.")
+
+    expect(later { run_task("verifier:track_company", company.id, NOTE: "Hiring again.") }.out).to include("Acme: tracked, with 1 role back")
+    expect(role.reload.tracking).to eq("tracked")
+  end
+
   it "records a check by hand, and undoes a verdict of the verifier's that rested on bad evidence" do
     as_agent("agent:verifier", scopes: %w[postings:verify]) do
       role.update!(verification_state: "not_found", last_checked_at: Time.current, roles_listed_count: 0)
