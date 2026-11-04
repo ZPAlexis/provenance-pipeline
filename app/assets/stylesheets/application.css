@@ -123,6 +123,9 @@ th, td { padding: 7px 10px; text-align: left; vertical-align: top; border-bottom
 th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg); }
 tr:last-child td { border-bottom: none; }
 td.reason { max-width: 520px; color: var(--muted); overflow-wrap: anywhere; }
+/* Since a reason may break anywhere, a narrow table would squeeze it to a word a line, each row a column tall (an
+   application's timeline on a phone): it keeps a reading width, and the table scrolls in its frame. */
+@media (max-width: 600px) { td.reason { min-width: 220px; } }
 /* The audit log: each event's changes as a list, folded past a few. */
 td.change-list { min-width: 200px; max-width: 420px; overflow-wrap: anywhere; font-size: 13px; }
 ul.changes { margin: 0; padding: 0; list-style: none; }
@@ -137,6 +140,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0; }
 dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; overflow-wrap: anywhere; }
+/* A company's careers-page details, folded under the facts that matter to the operator (4a). */
+details.facts-more { margin: 0 0 12px; }
+details.facts-more > summary { cursor: pointer; }
 
 /* Badges */
 

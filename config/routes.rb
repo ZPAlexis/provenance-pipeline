@@ -28,7 +28,10 @@ Rails.application.routes.draw do
       patch :reject_page
       patch :set_page
       patch :rename
+      patch :track
+      patch :dismiss
     end
+    patch :dismiss_many, on: :collection
     resources :contacts, only: %i[create update destroy]
   end
   resources :check_runs, only: %i[create show]

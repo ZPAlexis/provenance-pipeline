@@ -52,20 +52,20 @@ class RolesController < ApplicationController
   # tasks. Undone by the opposite button, so no backup is taken first.
   def track = decide(:track!, "tracked")
 
-  def dismiss = decide(:dismiss!, "dismissed")
+  def dismiss = decide(:dismiss!, "archived")
 
-  # Several roles dismissed at once, under one note, each audited on its own: all or none.
+  # Several roles archived ("dismissed", stored) at once, under one note, each audited on its own: all or none.
   # Backed up first (at most daily), since undoing many is many clicks.
   def dismiss_many
     roles = Posting.includes(:company).where(id: Array(params[:ids])).to_a
-    return redirect_back_or_to(roles_path, alert: "Select the roles to dismiss first.", status: :see_other) if roles.empty?
+    return redirect_back_or_to(roles_path, alert: "Select the roles to archive first.", status: :see_other) if roles.empty?
 
     DatabaseBackup.daily
     ApplicationRecord.transaction { roles.each { |role| Verifier::Tracking.dismiss!(role, note: params[:note]) } }
-    redirect_back_or_to roles_path, notice: "#{roles.size} #{'role'.pluralize(roles.size)} dismissed: never checked or suggested again.",
+    redirect_back_or_to roles_path, notice: "#{roles.size} #{'role'.pluralize(roles.size)} archived: never checked or suggested again.",
                                     status: :see_other
   rescue ArgumentError => e
-    redirect_back_or_to roles_path, alert: "None dismissed: #{e.message}.", status: :see_other
+    redirect_back_or_to roles_path, alert: "None archived: #{e.message}.", status: :see_other
   end
 
   private

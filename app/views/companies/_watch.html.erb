@@ -1,0 +1,40 @@
+<%# Track or archive a company (4a), with a note: it becomes the reason on the audit record. Archiving takes its roles
+    in play with it, and waits while an application there is open; tracking it again can bring back the roles archived
+    with it. %>
+<div class="watch">
+  <% if company.dismissed? %>
+    <details data-controller="fold">
+      <summary class="btn small primary">Track it again</summary>
+      <%= form_with url: track_company_path(company), method: :patch, class: "watch-form" do |form| %>
+        <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why", placeholder: "Why track it again?" %>
+        <% if archived_with.positive? %>
+          <label class="small"><%= check_box_tag :with_roles, "1", true, id: nil %>
+            Bring back the <%= pluralize(archived_with, "role") %> archived with it, as they were</label>
+        <% end %>
+        <div class="button-row">
+          <%= form.submit "Track it", class: "btn small primary" %>
+          <button type="button" class="btn small quiet" data-action="fold#close">Cancel</button>
+        </div>
+      <% end %>
+    </details>
+  <% elsif open_application %>
+    <p class="muted small">
+      Its application for <%= link_to open_application.posting.role_title, application_path(open_application) %> is open:
+      close or withdraw it before archiving the company.
+    </p>
+  <% else %>
+    <details data-controller="fold">
+      <summary class="btn small">Archive</summary>
+      <%= form_with url: dismiss_company_path(company), method: :patch, class: "watch-form" do |form| %>
+        <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why", placeholder: "Why archive it?" %>
+        <p class="muted small">
+          Never checked, suggested from or reviewed again, until you track it<%= ". Its #{pluralize(in_play, 'role')} in play #{in_play == 1 ? 'is' : 'are'} archived with it" if in_play.positive? %>.
+        </p>
+        <div class="button-row">
+          <%= form.submit "Archive", class: "btn small" %>
+          <button type="button" class="btn small quiet" data-action="fold#close">Cancel</button>
+        </div>
+      <% end %>
+    </details>
+  <% end %>
+</div>

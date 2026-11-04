@@ -10,7 +10,7 @@ RSpec.describe Verifier::Tracking do
     event = posting.audit_events.sole
     expect(event).to have_attributes(actor: "human:operator")
     expect(event.changes_made["tracking"]).to eq([ "tracked", "dismissed" ])
-    expect(event.reasoning).to eq("Dismissed by hand: never checked or suggested again. Not a fit: relocation required.")
+    expect(event.reasoning).to eq("Archived by hand: never checked or suggested again. Not a fit: relocation required.")
   end
 
   it "tracks a suggested or dismissed role again, audited as the operator" do

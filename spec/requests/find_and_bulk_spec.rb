@@ -51,29 +51,29 @@ RSpec.describe "Finding roles and companies, and dismissing roles at once", type
 
     it "offers it on the tracked and suggested tabs, never the dismissed one" do
       get roles_path
-      expect(response.body).to include("Dismiss selected", 'form="bulk-dismiss"')
+      expect(response.body).to include("Archive selected", 'form="bulk-dismiss"')
 
       sao_paulo.update!(tracking: "dismissed")
       get roles_path(tab: "dismissed")
-      expect(response.body).not_to include("Dismiss selected")
+      expect(response.body).not_to include("Archive selected")
     end
 
     it "dismisses every role picked under one note, each audited on its own, backed up first" do
       patch dismiss_many_roles_path, params: { ids: [ sao_paulo.id, berlin.id ], note: "Not my area." }
 
-      expect(flash[:notice]).to eq("2 roles dismissed: never checked or suggested again.")
+      expect(flash[:notice]).to eq("2 roles archived: never checked or suggested again.")
       expect([ sao_paulo, berlin, remote ].map { |role| role.reload.tracking }).to eq(%w[dismissed dismissed tracked])
       expect(AuditEvent.where(action: "update", target_type: "Posting").pluck(:reasoning).uniq)
-        .to eq([ "Dismissed by hand: never checked or suggested again. Not my area." ])
+        .to eq([ "Archived by hand: never checked or suggested again. Not my area." ])
       expect(DatabaseBackup).to have_received(:daily)
     end
 
     it "dismisses none without a note, or with nothing picked" do
       patch dismiss_many_roles_path, params: { ids: [ sao_paulo.id ], note: " " }
-      expect(flash[:alert]).to eq("None dismissed: say why: the note becomes the audit reasoning.")
+      expect(flash[:alert]).to eq("None archived: say why: the note becomes the audit reasoning.")
 
       patch dismiss_many_roles_path, params: { note: "Why." }
-      expect(flash[:alert]).to eq("Select the roles to dismiss first.")
+      expect(flash[:alert]).to eq("Select the roles to archive first.")
       expect(Posting.where(tracking: "dismissed")).to be_empty
     end
   end
@@ -84,6 +84,6 @@ RSpec.describe "Finding roles and companies, and dismissing roles at once", type
     get role_path(suggested)
 
     expect(response.body).to include('data-controller="fold"', 'data-action="fold#close"')
-    expect(response.body.scan(/<summary class="btn small">(Track|Dismiss)<\/summary>/).flatten).to eq(%w[Track Dismiss])
+    expect(response.body.scan(/<summary class="btn small">(Track|Archive)<\/summary>/).flatten).to eq(%w[Track Archive])
   end
 end

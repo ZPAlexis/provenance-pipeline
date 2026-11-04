@@ -1,20 +1,75 @@
 class CompaniesController < ApplicationController
-  VIEWS = {
-    "watched" => ->(scope) { scope.watched },
-    "candidates" => ->(scope) { scope.resolution_candidates },
-    "unresolved" => ->(scope) { scope.where(resolution_status: [ nil, "failed" ]) },
-    "all" => ->(scope) { scope }
+  # The Companies page's tabs (4a): the companies the operator tracks, those archived ("dismissed", the stored word),
+  # and all of them.
+  TABS = { "tracked" => "Tracked", "dismissed" => "Archived", "all" => "All" }.freeze
+  # What needs a look within a tab, each with what it holds said on hover: no careers page found yet, one found at
+  # low confidence to confirm, no role tracked, or roles tracked of which none was still listed at its last check. The
+  # last two never overlap: "listed" is a tracked role's answer, as in the Roles column.
+  FILTERS = {
+    "no_page" => [ "No careers page yet", "Never looked for, or none found", lambda { |scope|
+      scope.where(resolution_status: [ nil, "failed" ])
+    } ],
+    "to_confirm" => [ "Page to confirm", "A careers page found at low confidence, held for you to confirm", lambda { |scope|
+      scope.resolution_candidates
+    } ],
+    "none_tracked" => [ "No role tracked", "No role tracked there (a suggestion may be)", lambda { |scope|
+      scope.where.not(id: Posting.tracked.select(:company_id))
+    } ],
+    "none_listed" => [ "None still listed", "Roles tracked there, but none still listed at its last check: gone, or no answer yet", lambda { |scope|
+      scope.where(id: Posting.tracked.select(:company_id)).where.not(id: Posting.tracked.live.select(:company_id))
+    } ]
   }.freeze
 
   def index
-    @view = VIEWS.key?(params[:view]) ? params[:view] : "watched"
+    @tab = TABS.key?(params[:tab]) ? params[:tab] : "tracked"
+    @filter = params[:filter] if FILTERS.key?(params[:filter])
     @q = params[:q].to_s.strip.presence
     found = Company.matching(@q) # every company when nothing is typed
-    @counts = VIEWS.transform_values { |filter| filter.call(found).count }
-    @companies = VIEWS.fetch(@view).call(found.order(:name))
-    # Per company: its roles still in play by answer, and when it was last verified.
-    @roles = Posting.not_dismissed.group(:company_id, :verification_state).count
-    @last_checked = PageCheck.where(purpose: "verification").group(:company_id).maximum(:checked_at)
+    @counts = TABS.keys.to_h { |tab| [ tab, in_tab(found, tab).count ] }
+    tabbed = in_tab(found, @tab)
+    @filter_counts = FILTERS.transform_values { |(*, narrow)| narrow.call(tabbed).count }
+    @companies = (@filter ? FILTERS.fetch(@filter).last.call(tabbed) : tabbed).order(:name).to_a
+    ids = @companies.map(&:id)
+    # Per company: its roles by tracking and answer, its newest application, and when it was last verified.
+    @roles = Posting.where(company_id: ids).group(:company_id, :tracking, :verification_state).count
+    @applications = Application.where(company_id: ids).order(:stage_changed_on).group_by(&:company_id)
+                               .transform_values { |list| list.select(&:open?).last || list.last }
+    @last_checked = PageCheck.where(purpose: "verification", company_id: ids).group(:company_id).maximum(:checked_at)
+  end
+
+  # The operator's companies (4a), through the same audited service as the commands: archived with its roles in
+  # play, or tracked again with the roles archived with it (unless asked not to).
+  def track
+    company = Company.find(params[:id])
+    back = Verifier::Tracking.track_company!(company, note: params[:note], with_roles: params[:with_roles] == "1")
+    redirect_to company_path(company), notice: "#{company.name}: tracked#{", #{helpers.pluralize(back.size, 'role')} back with it" if back.any?}.",
+                                       status: :see_other
+  rescue ArgumentError => e
+    redirect_to company_path(company), alert: "#{e.message.upcase_first}.", status: :see_other
+  end
+
+  def dismiss
+    company = Company.find(params[:id])
+    roles = Verifier::Tracking.dismiss_company!(company, note: params[:note])
+    redirect_to company_path(company), notice: "#{company.name}: archived#{", #{helpers.pluralize(roles.size, 'role')} in play with it" if roles.any?}. " \
+                                               "Never checked, suggested from or reviewed, until you track it again.", status: :see_other
+  rescue ArgumentError => e
+    redirect_to company_path(company), alert: "#{e.message.upcase_first}.", status: :see_other
+  end
+
+  # Several companies archived at once, under one note, each with its roles and on the record: all or none. Backed
+  # up first (at most daily), since undoing many is many clicks.
+  def dismiss_many
+    companies = Company.where(id: Array(params[:ids])).order(:name).to_a
+    return redirect_back_or_to(companies_path, alert: "Select the companies to archive first.", status: :see_other) if companies.empty?
+
+    DatabaseBackup.daily
+    roles = ApplicationRecord.transaction { companies.sum { |company| Verifier::Tracking.dismiss_company!(company, note: params[:note]).size } }
+    redirect_back_or_to companies_path, notice: "#{helpers.pluralize(companies.size, 'company')} archived, with #{helpers.pluralize(roles, 'role')} " \
+                                                "in play: never checked, suggested from or reviewed, until you track one again.",
+                                        status: :see_other
+  rescue ArgumentError => e
+    redirect_back_or_to companies_path, alert: "None archived: #{e.message}.", status: :see_other
   end
 
   # "Add a company": its domain, careers page, or ATS board, added as the operator
@@ -28,7 +83,7 @@ class CompaniesController < ApplicationController
     end
     redirect_to company_path(company), notice: "#{added.note}#{started}", status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    redirect_to companies_path(view: "all"), alert: e.message.upcase_first, status: :see_other
+    redirect_to companies_path(tab: "all"), alert: e.message.upcase_first, status: :see_other
   end
 
   # A careers page found at low confidence, decided by the operator; or the right one set by hand.
@@ -62,9 +117,16 @@ class CompaniesController < ApplicationController
     @checks = @company.page_checks.order(checked_at: :desc).limit(10)
     @events = @company.audit_events.order(occurred_at: :desc).limit(10).includes(:credential)
     @contacts = @company.contacts.includes(applications: :posting)
+    # What tracking or archiving it would do: its roles in play, an open application that stops archiving, and the
+    # roles that would come back with it.
+    @in_play = @company.postings.not_dismissed.count
+    @open_application = @company.applications.open.includes(:posting).first
+    @archived_with = @company.dismissed? ? Verifier::Tracking.archived_with(@company).size : 0
   end
 
   private
+
+  def in_tab(scope, tab) = tab == "all" ? scope : scope.where(tracking: tab)
 
   def decide(done = "Its careers page is watched: check it now to read its roles.")
     company = Company.find(params[:id])

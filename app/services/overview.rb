@@ -31,9 +31,9 @@ module Overview
   def companies
     {
       watched: Company.watched.count,
-      boards: Company.where.not(board_vendor: nil).count,
-      candidates: Company.resolution_candidates.count,
-      unresolved: Company.where(resolution_status: [ nil, "failed" ]).count
+      boards: Company.watched.where.not(board_vendor: nil).count,
+      candidates: Company.tracked.resolution_candidates.count,
+      unresolved: Company.tracked.where(resolution_status: [ nil, "failed" ]).count
     }
   end
 

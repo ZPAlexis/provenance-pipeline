@@ -16,7 +16,7 @@ module Verifier
     end
 
     def dismiss!(posting, note:, actor: AuditEvent::OPERATOR)
-      decide!(posting, "dismissed", "Dismissed by hand: never checked or suggested again.", note, actor)
+      decide!(posting, "dismissed", "Archived by hand: never checked or suggested again.", note, actor)
     end
 
     # Archives a company and its roles in play (tracked or suggested), each audited with the operator's note. A

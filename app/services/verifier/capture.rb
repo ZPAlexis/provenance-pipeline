@@ -226,7 +226,7 @@ module Verifier
         end
       end
       chosen = { "tracked" => "is already tracked", "suggested" => "was suggested: now tracked",
-                 "dismissed" => "was dismissed: tracked again" }.fetch(was)
+                 "dismissed" => "was archived: tracked again" }.fetch(was)
       Placed.new(posting: posting, created: false, note: "#{posting.role_title} at #{posting.company.name} #{chosen}.")
     end
 

@@ -39,7 +39,7 @@
   <% end %>
   <%= link_to roles_path(tab: "dismissed"), class: "tile" do %>
     <div class="value"><%= @tracking.fetch("dismissed", 0) %></div>
-    <div class="label">Dismissed</div>
+    <div class="label">Archived</div>
   <% end %>
   <%= link_to review_path, class: [ "tile", ("unsure" if @review.positive?) ] do %>
     <div class="value"><%= @review %></div>
@@ -65,7 +65,7 @@
     <div class="value"><%= @companies[:boards] %></div>
     <div class="label">Read through a free board</div>
   <% end %>
-  <%= link_to companies_path(view: "candidates"), class: "tile" do %>
+  <%= link_to companies_path(filter: "to_confirm"), class: "tile" do %>
     <div class="value"><%= @companies[:candidates] %></div>
     <div class="label">Careers pages to confirm</div>
   <% end %>

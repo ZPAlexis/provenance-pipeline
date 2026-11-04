@@ -81,9 +81,9 @@ RSpec.describe "Roles", type: :request do
       expect(response).to have_http_status(:see_other)
       expect(role.reload.tracking).to eq("dismissed")
       expect(role.audit_events.sole).to have_attributes(actor: "human:operator",
-                                                        reasoning: "Dismissed by hand: never checked or suggested again. Needs relocation.")
+                                                        reasoning: "Archived by hand: never checked or suggested again. Needs relocation.")
       follow_redirect!
-      expect(response.body).to include("RevOps Engineer at Acme: dismissed.")
+      expect(response.body).to include("RevOps Engineer at Acme: archived.")
     end
 
     it "tracks a dismissed role again" do

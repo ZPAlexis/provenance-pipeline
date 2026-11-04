@@ -2,33 +2,46 @@
 <div class="page-head">
   <div>
     <h1><%= @company.name %></h1>
-    <p class="sub"><%= @company.domain || "no domain" %></p>
+    <p class="sub"><%= domain_link(@company) %></p>
   </div>
+  <div><%= tracking_badge(@company.tracking) %></div>
 </div>
+<%= render "companies/watch", company: @company, in_play: @in_play, open_application: @open_application, archived_with: @archived_with %>
+<% if @company.dismissed? %>
+  <p class="muted small">Archived: never checked, suggested from or reviewed, until you track it again.</p>
+<% end %>
 
 <dl class="facts">
   <dt>Careers page</dt>
-  <dd><%= @company.careers_page_url ? outside_link(@company.careers_page_url, label: @company.careers_page_url) : tag.span("none yet", class: "muted") %></dd>
-  <dt>How it was found</dt>
-  <dd>
-    <%= @company.resolution_status || "not attempted" %><%= [ @company.resolution_method, @company.resolution_confidence ].compact.map { |v| ", #{v}" }.join %><%= ", #{@company.resolution_failure}" if @company.resolution_failure %>
-  </dd>
-  <% if @company.resolution_candidate_url %>
-    <dt>Candidate to confirm</dt>
-    <dd><%= outside_link(@company.resolution_candidate_url, label: @company.resolution_candidate_url) %></dd>
-  <% end %>
-  <dt>Kind</dt>
-  <dd><%= @company.kind || tag.span("not set", class: "muted") %><%= " (suggested: #{@company.kind_suggestion})" if @company.kind_suggestion %></dd>
-  <% if @company.board_vendor %>
-    <dt>Free board</dt>
-    <dd>
-      <%= outside_link(Verifier::Resolution.board_url(@company.board_vendor, @company.board_token), label: "#{@company.board_vendor}/#{@company.board_token}") %>,
-      confirmed <%= ago(@company.board_confirmed_at) %>:
-      <%= @company.board_in_use ? "read in place of the page" : "the page is read again" %>
-      <div class="muted small"><%= @company.board_evidence %></div>
-    </dd>
-  <% end %>
+  <dd><%= careers_page_cell(@company) %></dd>
+  <dt>Read through</dt>
+  <dd><%= read_through(@company) %></dd>
 </dl>
+
+<details class="facts-more">
+  <summary class="muted small">How its careers page was found, and what kind of company it is</summary>
+  <dl class="facts">
+    <dt>How it was found</dt>
+    <dd>
+      <%= @company.resolution_status || "not attempted" %><%= [ @company.resolution_method, @company.resolution_confidence ].compact.map { |v| ", #{v}" }.join %><%= ", #{@company.resolution_failure}" if @company.resolution_failure %>
+    </dd>
+    <% if @company.resolution_candidate_url %>
+      <dt>Candidate to confirm</dt>
+      <dd><%= outside_link(@company.resolution_candidate_url, label: @company.resolution_candidate_url) %></dd>
+    <% end %>
+    <dt>Kind</dt>
+    <dd><%= @company.kind || tag.span("not set", class: "muted") %><%= " (suggested: #{@company.kind_suggestion})" if @company.kind_suggestion %></dd>
+    <% if @company.board_vendor %>
+      <dt>Free board</dt>
+      <dd>
+        <%= outside_link(Verifier::Resolution.board_url(@company.board_vendor, @company.board_token), label: "#{@company.board_vendor}/#{@company.board_token}") %>,
+        confirmed <%= ago(@company.board_confirmed_at) %>:
+        <%= @company.board_in_use ? "read in place of the page" : "the page is read again" %>
+        <div class="muted small"><%= @company.board_evidence %></div>
+      </dd>
+    <% end %>
+  </dl>
+</details>
 
 <% if @company.resolution_status == "candidate" %>
   <h2>Is this its careers page?</h2>

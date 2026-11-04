@@ -44,9 +44,11 @@ module ReviewHelper
     PROPOSALS.fetch(item.proposal.to_s, item.proposal.to_s.humanize)
   end
 
-  # Who an item is about, each linked to its page: the company, and the role when the question is about one.
+  # Who an item is about, each linked to its page: the company (with its domain, to open its site in a new tab, 4a),
+  # and the role when the question is about one.
   def review_subject_links(item)
-    company = link_to(item.company.name, company_path(item.company), class: "review-company")
+    company = safe_join([ link_to(item.company.name, company_path(item.company), class: "review-company"),
+                          (tag.span(domain_link(item.company), class: "small muted") if item.company.domain.present?) ].compact, " ")
     return company unless item.subject.is_a?(Posting)
 
     safe_join([ company, tag.span("/", class: "muted"), link_to(item.subject.role_title, role_path(item.subject)) ], " ")

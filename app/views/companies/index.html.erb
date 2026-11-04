@@ -2,7 +2,10 @@
 <div class="page-head">
   <div>
     <h1>Companies</h1>
-    <p class="sub">The companies watched, and how each one's careers page is read.</p>
+    <p class="sub">
+      The companies you track: each one's careers page is watched for roles. Archive one you no longer want, with its
+      roles: it is never checked, suggested from or reviewed again, until you track it.
+    </p>
   </div>
 </div>
 
@@ -28,39 +31,78 @@
 </details>
 
 <nav class="tabs">
-  <% { "watched" => "Watched", "candidates" => "To confirm", "unresolved" => "No page yet", "all" => "All" }.each do |view, label| %>
-    <%= link_to companies_path(view: view, q: @q), class: ("current" if view == @view) do %>
-      <%= label %> <span class="count"><%= @counts.fetch(view) %></span>
+  <% CompaniesController::TABS.each do |tab, label| %>
+    <%= link_to companies_path(tab: tab, q: @q), class: ("current" if tab == @tab) do %>
+      <%= label %> <span class="count"><%= @counts.fetch(tab) %></span>
     <% end %>
   <% end %>
 </nav>
 
-<%= render "shared/find", url: companies_path, keep: { view: @view }, value: @q, clear: companies_path(view: @view),
-                          placeholder: "Name, domain, or a place it hires in" %>
+<%= render "shared/find", url: companies_path, keep: { tab: @tab, filter: @filter }, value: @q,
+                          clear: companies_path(tab: @tab, filter: @filter), placeholder: "Name, domain, or a place it hires in" %>
+
+<nav class="filters" aria-label="What needs a look">
+  <%= link_to companies_path(tab: @tab, q: @q), class: [ "filter", ("current" if @filter.nil?) ] do %>
+    All <span class="count"><%= @counts.fetch(@tab) %></span>
+  <% end %>
+  <% CompaniesController::FILTERS.each do |filter, (label, holds, _)| %>
+    <%= link_to companies_path(tab: @tab, filter: filter, q: @q), class: [ "filter", ("current" if filter == @filter) ], title: holds do %>
+      <%= label %> <span class="count"><%= @filter_counts.fetch(filter) %></span>
+    <% end %>
+  <% end %>
+</nav>
 
 <% if @companies.empty? %>
   <p class="empty"><%= @q ? "No company here matches “#{@q}”." : "None." %></p>
 <% else %>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Company</th><th>Careers page</th><th>Read through</th><th>Kind</th><th class="num">Still listed</th><th class="num">Roles</th><th>Last checked</th></tr>
-      </thead>
-      <tbody>
-        <% @companies.each do |company| %>
-          <% live = @roles.fetch([ company.id, "verified_live" ], 0) %>
-          <% total = @roles.sum { |(id, _), count| id == company.id ? count : 0 } %>
+  <% bulk = @tab == "tracked" %>
+  <%= tag.div(data: { controller: ("bulk" if bulk) }) do %>
+    <% if bulk %>
+      <%= form_with url: dismiss_many_companies_path, method: :patch, id: "bulk-archive", class: "bulk-form",
+                    data: { turbo_confirm: "Archive the selected companies, with their tracked and suggested roles? They are never " \
+                                           "checked, suggested from or reviewed again, until you track one by hand." } do |form| %>
+        <span class="muted small" data-bulk-target="count">None selected</span>
+        <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why archive them",
+                                   placeholder: "Why archive them?" %>
+        <%= form.submit "Archive selected", class: "btn small", disabled: true, data: { bulk_target: "submit" } %>
+      <% end %>
+    <% end %>
+    <div class="table-wrap">
+      <table>
+        <thead>
           <tr>
-            <td><%= link_to company.name, company_path(company) %></td>
-            <td><%= outside_link(company.careers_page_url || company.resolution_candidate_url) %></td>
-            <td class="muted"><%= read_through(company) %></td>
-            <td class="muted"><%= company.kind || "—" %></td>
-            <td class="num"><%= live %></td>
-            <td class="num"><%= total %></td>
-            <td><%= ago(@last_checked[company.id]) %></td>
+            <% if bulk %>
+              <th><input type="checkbox" aria-label="Select every company listed" data-bulk-target="all" data-action="bulk#all"></th>
+            <% end %>
+            <th>Company</th><th>Careers page</th><th>Roles</th><th>Application</th><th>Last checked</th>
           </tr>
-        <% end %>
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          <% @companies.each do |company| %>
+            <tr>
+              <% if bulk %>
+                <td><input type="checkbox" name="ids[]" value="<%= company.id %>" form="bulk-archive" aria-label="Select <%= company.name %>"
+                           data-bulk-target="box" data-action="bulk#count"></td>
+              <% end %>
+              <td>
+                <%= link_to company.name, company_path(company) %>
+                <%= tracking_badge(company.tracking) if company.dismissed? && @tab == "all" %>
+                <div class="small"><%= domain_link(company) %></div>
+              </td>
+              <td><%= careers_page_cell(company) %></td>
+              <td><%= roles_summary(company, @roles) %></td>
+              <td>
+                <% if (application = @applications[company.id]) %>
+                  <%= link_to stage_badge(application.stage), application_path(application) %>
+                <% else %>
+                  <span class="muted">—</span>
+                <% end %>
+              </td>
+              <td><%= ago(@last_checked[company.id]) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
 <% end %>

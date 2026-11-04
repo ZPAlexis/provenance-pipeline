@@ -126,7 +126,8 @@ RSpec.describe AuditLog do
     gone.assign_attributes(target_type: "Posting", target_id: SecureRandom.uuid) # a role deleted since
     Authority.unchecked { gone.save! }
 
-    expect(described_class.describe(renamed)).to eq([ "#{renamed.occurred_at.utc.strftime('%Y-%m-%d %H:%M')} UTC  operator changed "                                                       "contact at Acme [#{contact.id}]", "  Changed: notes: — → Met at a meetup.",
+    expect(described_class.describe(renamed)).to eq([ "#{renamed.occurred_at.utc.strftime('%Y-%m-%d %H:%M')} UTC  operator changed " \
+                                                      "contact at Acme [#{contact.id}]", "  Changed: notes: — → Met at a meetup.",
                                                       "  Why: Saved by hand." ])
     expect(described_class.describe(gone.reload).first).to end_with(%(agent:suggester deleted role "Partner Manager", since deleted [#{gone.target_id}]))
     expect(described_class.subject(build(:audit_event, :without_target))).to eq("a new record")

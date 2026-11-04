@@ -1,6 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Roles picked for one action at once (dismissing them): says how many are
+// Roles or companies picked for one action at once (archiving them): says how many are
 // picked, and keeps the button off until there is one. The boxes sit in the
 // table and belong to the form by its id.
 export default class extends Controller {

@@ -73,7 +73,7 @@ RSpec.describe Verifier::Capture do
       placed = add(source: "https://www.linkedin.com/jobs/search/?currentJobId=4099887766&keywords=sales")
 
       expect(placed).to have_attributes(posting: clay, created: false)
-      expect(placed.note).to end_with("was dismissed: tracked again.")
+      expect(placed.note).to end_with("was archived: tracked again.")
       expect(clay.reload).to have_attributes(tracking: "tracked", job_url: "https://job-boards.greenhouse.io/acme/jobs/4012345")
       expect(AuditEvent.where(target: clay).sole.reasoning).to start_with("Tracked by hand. Added by URL:")
       expect(Company.count).to eq(1) # its own company: none added

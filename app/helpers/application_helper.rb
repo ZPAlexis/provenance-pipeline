@@ -38,8 +38,11 @@ module ApplicationHelper
     run.answer ? answer_badge(run.answer) : tag.span("Couldn't confirm", class: "badge unsure")
   end
 
+  # A role's or a company's tracking, in the operator's words (4a): "dismissed" is stored, "archived" is said.
+  def tracking_label(tracking) = tracking == "dismissed" ? "archived" : tracking.to_s
+
   def tracking_badge(tracking)
-    tag.span(tracking, class: [ "badge", ("live" if tracking == "tracked") ])
+    tag.span(tracking_label(tracking), class: [ "badge", ("live" if tracking == "tracked") ])
   end
 
   # Who wrote something: the operator (any human, including rows from before

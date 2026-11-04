@@ -16,7 +16,7 @@ RSpec.describe "Dashboard", type: :request do
 
     expect(response).to have_http_status(:success)
     body = response.body
-    expect(body).to include("No longer listed", "Dismissed", "Companies watched", "$0.25")
+    expect(body).to include("No longer listed", "Archived", "Companies watched", "$0.25")
     expect(body).to include("RevOps Engineer", "Still listed → No longer listed", "Verifier", "None of the 12 roles on the page is it.")
   end
 

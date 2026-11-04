@@ -34,7 +34,7 @@ RSpec.describe "Check now", type: :request do
 
     expect { post check_runs_path, params: { posting_id: role.id } }.not_to have_enqueued_job(CheckNowJob)
     follow_redirect!
-    expect(response.body).to include("is dismissed: track it again to check it.")
+    expect(response.body).to include("is archived: track it again to check it.")
   end
 
   # A check that can spend asks first, saying what it could cost.

@@ -121,7 +121,7 @@ RSpec.describe Verifier::CheckNow do
       expect(described_class.refusal(create(:company))).to be_nil # its careers page is found first
 
       role.update!(tracking: "dismissed")
-      expect(described_class.refusal(role)).to match(/dismissed/)
+      expect(described_class.refusal(role)).to match(/archived/)
       expect(described_class.refusal(create(:company, :resolved, kind: "aggregator"))).to match(/aggregator/)
       expect(described_class.refusal(create(:company, :resolution_candidate))).to match(/waiting for you/)
       expect(described_class.refusal(create(:company, name: "Confidencial"))).to match(/employer is withheld/)
