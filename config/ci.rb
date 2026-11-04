@@ -12,6 +12,9 @@ CI.run do
   step "Security: Gem audit", "bin/bundler-audit check --update"
   step "Security: Importmap vulnerability audit", "bin/importmap audit"
   step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
+  # Local only, the one step GitHub's workflow can't mirror: the target list it checks against is this machine's
+  # record, which is private. No company on it is named in the repo or in a commit not yet pushed.
+  step "Privacy: no company on the record named", "bin/rails privacy:names"
 
   # RSpec, not `bin/rails test` — this project has no minitest suite and the
   # test/ directory was removed. Running the wrong runner is worse than running
