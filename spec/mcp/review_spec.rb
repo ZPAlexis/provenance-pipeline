@@ -99,7 +99,7 @@ RSpec.describe "Recommending decisions on the review queue through MCP" do
     expect(one).to include("list_review_items with kind partial_list", "get_review_item", "save_recommendation", "You decide nothing",
                            "recommend set_page with it, even when its robots.txt keeps the app off",
                            "Recommend leave only when the company has no public list of roles at all",
-                           "suggest I dismiss it", "- Part of a list: #{ReviewGuidance.guidance('partial_list')}")
+                           "suggest I archive it", "nothing is archived unless I ask", "- Part of a list: #{ReviewGuidance.guidance('partial_list')}")
     expect(one).not_to include("- No careers page:")
     expect(every).to include("Work through 10", "list_review_items with all_kinds", "- No careers page:", "- Couldn't confirm:")
     expect(ProvenanceMcp.complete({ argument: { name: "kind", value: "page" } }))

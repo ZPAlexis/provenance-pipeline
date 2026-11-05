@@ -34,6 +34,12 @@ module Authority
   VERDICT = %w[verification_state roles_listed_count work_mode last_checked_at job_url].freeze
   # A suggestion, and one still: a new record's stored value is its column default, so it is not asked.
   SUGGESTED = ->(posting) { posting.tracking == "suggested" && (posting.new_record? || posting.tracking_in_database == "suggested") }
+  # A role the operator's own client adds on their word (4a step 4): tracked, its title given, at a company they
+  # track, and never checked.
+  ADDED = lambda do |posting|
+    posting.tracking == "tracked" && posting.company&.tracking == "tracked" && !posting.title_pending? &&
+      posting.verification_state == "pending" && posting.last_checked_at.nil?
+  end
   # A draft as the drafter wrote it: not approved, and not edited (Stage 2c).
   AS_WRITTEN = lambda do |draft|
     draft.status == "draft" && draft.approved_at.nil? && draft.edited_at.nil? && !draft.edited?
@@ -131,6 +137,19 @@ module Authority
         Rule.new(model: "ApplicationContact", actions: %i[create]) # the contact an activity names, linked to its application
       ]
     },
+    "watchlist:curate" => {
+      about: "On the operator's word, with their reason: track or archive a role or a company, add a role to a company " \
+             "they track (tracked, its title given, never checked), or change a role's own page at the employer. Never a " \
+             "verdict, a company's name, careers page or kind, nor anything of an application.",
+      rules: [
+        Rule.new(model: "Company", actions: %i[update], attributes: %w[tracking]),
+        # Where a role was found is only ever filled in, never changed.
+        Rule.new(model: "Posting", actions: %i[update], attributes: %w[tracking job_url posting_url],
+                 only_if: ->(posting) { !posting.posting_url_changed? || posting.posting_url_in_database.nil? }),
+        Rule.new(model: "Posting", actions: %i[create], attributes: %w[company_id role_title location job_url posting_url tracking],
+                 only_if: ADDED)
+      ]
+    },
     "review:recommend" => {
       about: "Recommend a decision on an open review item: one of its own actions, with what was checked and why, kept " \
              "on the item for the operator to accept or not. Never decide one, nor make the write it recommends.",
@@ -165,10 +184,11 @@ module Authority
                             scopes: %w[fit:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
                                   "contacts, activities, the roles it proposes, the fit it weighs, and what it recommends on the " \
-                                  "review queue), one credential per save holding only that tool's scopes. Tracks, decides, " \
-                                  "approves, deletes, moves a stage, and sends nothing.",
+                                  "review queue), and curates the watch list on the operator's word (tracks or archives roles " \
+                                  "and companies, adds a role, changes a role's own page), one credential per call holding only " \
+                                  "that tool's scopes. Decides, approves, deletes, moves a stage, and sends nothing.",
                            scopes: %w[drafts:write resume_reviews:write contacts:write activities:write postings:suggest fit:write
-                                      review:recommend] }
+                                      review:recommend watchlist:curate] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.
@@ -183,8 +203,8 @@ module Authority
 
   # What no scope grants: the operator's alone, whatever an agent holds.
   HUMAN_ONLY = [
-    "Start an application, or move one between stages", "Edit or approve a draft", "Track or archive a role or a company",
-    "Decide a review item", "Edit the search profile or the resume",
+    "Start an application, or move one between stages", "Edit or approve a draft", "Decide a review item",
+    "Edit the search profile or the resume",
     "Ask for a check that writes a verdict or spends API credit", "Name a company or set its kind",
     "Delete a contact", "Issue or revoke a credential"
   ].freeze

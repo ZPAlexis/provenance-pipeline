@@ -1,40 +1,20 @@
 class CompaniesController < ApplicationController
-  # The Companies page's tabs (4a): the companies the operator tracks, those archived ("dismissed", the stored word),
-  # and all of them.
-  TABS = { "tracked" => "Tracked", "dismissed" => "Archived", "all" => "All" }.freeze
-  # What needs a look within a tab, each with what it holds said on hover: no careers page found yet, one found at
-  # low confidence to confirm, no role tracked, or roles tracked of which none was still listed at its last check. The
-  # last two never overlap: "listed" is a tracked role's answer, as in the Roles column.
-  FILTERS = {
-    "no_page" => [ "No careers page yet", "Never looked for, or none found", lambda { |scope|
-      scope.where(resolution_status: [ nil, "failed" ])
-    } ],
-    "to_confirm" => [ "Page to confirm", "A careers page found at low confidence, held for you to confirm", lambda { |scope|
-      scope.resolution_candidates
-    } ],
-    "none_tracked" => [ "No role tracked", "No role tracked there (a suggestion may be)", lambda { |scope|
-      scope.where.not(id: Posting.tracked.select(:company_id))
-    } ],
-    "none_listed" => [ "None still listed", "Roles tracked there, but none still listed at its last check: gone, or no answer yet", lambda { |scope|
-      scope.where(id: Posting.tracked.select(:company_id)).where.not(id: Posting.tracked.live.select(:company_id))
-    } ]
-  }.freeze
+  # The Companies page's tabs and filters (4a), shared with the MCP client's list_companies (WatchList).
+  TABS = WatchList::TABS
+  FILTERS = WatchList::FILTERS
 
   def index
     @tab = TABS.key?(params[:tab]) ? params[:tab] : "tracked"
     @filter = params[:filter] if FILTERS.key?(params[:filter])
     @q = params[:q].to_s.strip.presence
     found = Company.matching(@q) # every company when nothing is typed
-    @counts = TABS.keys.to_h { |tab| [ tab, in_tab(found, tab).count ] }
-    tabbed = in_tab(found, @tab)
-    @filter_counts = FILTERS.transform_values { |(*, narrow)| narrow.call(tabbed).count }
-    @companies = (@filter ? FILTERS.fetch(@filter).last.call(tabbed) : tabbed).order(:name).to_a
+    @counts, @filter_counts = WatchList.counts(found, @tab)
+    @companies = WatchList.narrow(WatchList.in_tab(found, @tab), @filter).order(:name).to_a
     ids = @companies.map(&:id)
     # Per company: its roles by tracking and answer, its newest application, and when it was last verified.
-    @roles = Posting.where(company_id: ids).group(:company_id, :tracking, :verification_state).count
-    @applications = Application.where(company_id: ids).order(:stage_changed_on).group_by(&:company_id)
-                               .transform_values { |list| list.select(&:open?).last || list.last }
-    @last_checked = PageCheck.where(purpose: "verification", company_id: ids).group(:company_id).maximum(:checked_at)
+    @roles = WatchList.role_counts(ids)
+    @applications = WatchList.applications(ids)
+    @last_checked = WatchList.last_checked(ids)
   end
 
   # The operator's companies (4a), through the same audited service as the commands: archived with its roles in
@@ -131,8 +111,6 @@ class CompaniesController < ApplicationController
   end
 
   private
-
-  def in_tab(scope, tab) = tab == "all" ? scope : scope.where(tracking: tab)
 
   def decide(done = "Its careers page is watched: check it now to read its roles.")
     company = Company.find(params[:id])

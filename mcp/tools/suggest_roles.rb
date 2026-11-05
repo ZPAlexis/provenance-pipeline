@@ -4,7 +4,8 @@ module ProvenanceMcp
     # is read first (free, never the LLM, keeping nothing), since find_roles lists the pages as last read: a role whose
     # page is gone, or can't be read, isn't suggested. The rest become suggestions as agent:assistant, under a
     # credential for this call holding postings:suggest, and the descriptions just read are kept by the verifier under
-    # its own, so they are ready to weigh. Only the operator tracks or dismisses one.
+    # its own, so they are ready to weigh. A suggestion is never tracked here: the operator tracks or archives one, in
+    # the app or by asking (track_or_archive_roles).
     class SuggestRoles < SaveTool
       tool_name "suggest_roles"
       title "Suggest roles"
@@ -12,8 +13,8 @@ module ProvenanceMcp
       description "Proposes roles find_roles listed, by their keys, as suggestions for the operator, each with why it may " \
                   "fit, in a sentence or two. Each role's own page is read first (free): one whose page is gone or can't " \
                   "be read isn't suggested, and the rest are suggested with their descriptions read, ready for " \
-                  "get_roles_to_weigh. They show among the suggested roles in the app, as yours; only the operator tracks " \
-                  "or dismisses one. Up to #{MAX_ROLES} a call: a few seconds a role."
+                  "get_roles_to_weigh. They show among the suggested roles in the app, as yours; none is tracked here: " \
+                  "the operator tracks or archives one, or asks you to. Up to #{MAX_ROLES} a call: a few seconds a role."
       scopes "postings:suggest"
       input_schema(
         properties: {

@@ -7,10 +7,14 @@ module ProvenanceMcp
 
     module_function
 
-    # A company by its name, its domain, or a link anywhere on its site (careers.acme.com finds acme.com).
+    # A company by its id (list_companies gives them), its name, its domain, or a link anywhere on its site
+    # (careers.acme.com finds acme.com).
     def company(text)
       text = text.to_s.strip
       raise Refusal, "Name a company: its name, its domain, or a link on its site." if text.empty?
+
+      found = Company.find_by(id: text) if text.match?(UUID)
+      return found if found
 
       matches = Company.where("lower(name) = :name OR lower(domain) IN (:domains)", name: text.downcase, domains: domains(text))
                        .to_a.sort_by { |found| [ found.name.downcase, found.name ] }
@@ -44,6 +48,24 @@ module ProvenanceMcp
                .first(20).map { |found_one| "- #{Writing.label(found_one)}: #{found_one.id}" }
       raise Refusal, "#{matches.any? ? "Several applications match #{text.inspect}" : "No application matches #{text.inspect}"}. " \
                      "#{matches.any? ? 'They are' : 'The open ones'}:\n#{listed.join("\n").presence || '(none)'}"
+    end
+
+    # A role by its id (get_company_status lists them), or by words from its title and its company's name ("acme
+    # sales engineer"). Several matching are named, with their ids, inside the record's markers.
+    def role(text)
+      text = text.to_s.strip
+      raise Refusal, "Name a role: its id (get_company_status lists them), or its company and title." if text.empty?
+
+      found = Posting.includes(:company).find_by(id: text) if text.match?(UUID)
+      return found if found
+
+      matches = Searchable.narrow(Posting.joins(:company), text, %w[postings.role_title companies.name]).includes(:company).to_a
+                          .sort_by { |posting| [ posting.company.name.downcase, posting.role_title.downcase, posting.id ] }
+      return matches.sole if matches.one?
+      raise Refusal, "No role matches #{text.inspect}: give its id, from get_company_status." if matches.empty?
+
+      listed = matches.first(20).map { |posting| "- #{posting.company.name} / #{posting.role_title} (#{Verifier::Tracking.label(posting.tracking)}): #{posting.id}" }
+      raise Refusal, "#{matches.size} roles match #{text.inspect}: name one by its id.\n#{Writing.fence('record', listed.join("\n"))}"
     end
 
     # One of `company`'s contacts, by its id or its name (case aside).

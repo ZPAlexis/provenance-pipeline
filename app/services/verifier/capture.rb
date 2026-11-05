@@ -69,7 +69,8 @@ module Verifier
     # waits, named "(title pending)". From a company's page (`company:`, 4a), the role is added there: refused at an
     # archived company, or for a link on another company's site or board on record. Nothing is written when
     # anything is refused.
-    def role!(link:, title: nil, location: nil, source: nil, company_name: nil, company: nil, check: false, actor: ACTOR)
+    # `note`, the reason given (the client's, on the operator's word), goes on the record after what was added.
+    def role!(link:, title: nil, location: nil, source: nil, company_name: nil, company: nil, check: false, note: nil, actor: ACTOR)
       title = title.to_s.squish
       own = parse(link, role: true)
       source = source_link(source)
@@ -81,7 +82,8 @@ module Verifier
         company ||= known&.company || added.company
         again = chosen_again(company, own.url, actor) if known # a role found by where it was found, at an archived company
         known ||= by_link(company, own.url) || (by_title(company, title) if title.present?)
-        placed = known ? choose!(known, own, source, actor) : create_role!(company, own, title.presence, location, source, check, actor)
+        note = note.to_s.squish.presence
+        placed = known ? choose!(known, own, source, note, actor) : create_role!(company, own, title.presence, location, source, check, note, actor)
         before = again || (added.note if added&.created || added&.tracked_again)
         before ? placed.with(note: "#{before} #{placed.note}") : placed
       end
@@ -100,7 +102,7 @@ module Verifier
 
       ApplicationRecord.transaction do
         posting.update!(job_url: own.url)
-        AuditEvent.record_write!(posting, actor: actor, reasoning: [ "Its own page set by hand.", note.to_s.squish.presence ].compact.join(" "))
+        AuditEvent.record_write!(posting, actor: actor, reasoning: [ "Its own page set #{Tracking.by(actor)}.", note.to_s.squish.presence ].compact.join(" "))
       end
       posting
     end
@@ -276,7 +278,7 @@ module Verifier
       company.postings.where(job_url: nil).find { |posting| title_words(posting.role_title) == words }
     end
 
-    def create_role!(company, own, title, location, source, check, actor)
+    def create_role!(company, own, title, location, source, check, note, actor)
       raise ArgumentError, "give its title: added without a check, nothing reads one from its page" if title.nil? && !check
 
       posting = company.postings.new(role_title: title || Posting::TITLE_PENDING, location: location.to_s.squish.presence,
@@ -284,13 +286,13 @@ module Verifier
       ApplicationRecord.transaction do
         posting.save!
         AuditEvent.record_write!(posting, actor: actor,
-                                          reasoning: "Added by URL: #{own.url}#{" (found at #{source})" if source}.")
+                                          reasoning: [ "Added by URL: #{own.url}#{" (found at #{source})" if source}.", note ].compact.join(" "))
       end
       Placed.new(posting: posting, created: true, note: title ? "#{title} tracked." : "Role tracked: its title is read from its own page.")
     end
 
     # A role already on record, chosen: tracked, with the links it lacked.
-    def choose!(posting, own, source, actor)
+    def choose!(posting, own, source, note, actor)
       was = posting.tracking
       posting.job_url ||= own.url
       posting.posting_url ||= source unless source.nil? || Posting.where.not(id: posting.id).exists?(posting_url: source)
@@ -298,8 +300,8 @@ module Verifier
       if posting.changed?
         ApplicationRecord.transaction do
           posting.save!
-          mark = was == "tracked" ? "Its links filled in." : "Tracked by hand."
-          AuditEvent.record_write!(posting, actor: actor, reasoning: "#{mark} Added by URL: #{own.url}.")
+          mark = was == "tracked" ? "Its links filled in." : "Tracked #{Tracking.by(actor)}."
+          AuditEvent.record_write!(posting, actor: actor, reasoning: [ "#{mark} Added by URL: #{own.url}.", note ].compact.join(" "))
         end
       end
       chosen = { "tracked" => "is already tracked", "suggested" => "was suggested: now tracked",

@@ -11,12 +11,19 @@ module Verifier
 
     module_function
 
+    # How a change came, in its audit reasoning: by the operator's own hand, or by their own Claude client on their
+    # word (4a step 4, through MCP), the actor naming which.
+    def by(actor) = actor == AuditEvent::OPERATOR ? "by hand" : "on the operator's word"
+
+    # A tracking state as it is said, on the pages and through MCP: "dismissed", the stored word, is "archived".
+    def label(tracking) = tracking == "dismissed" ? "archived" : tracking.to_s
+
     def track!(posting, note:, actor: AuditEvent::OPERATOR)
-      decide!(posting, "tracked", "Tracked by hand.", note, actor)
+      decide!(posting, "tracked", "Tracked #{by(actor)}.", note, actor)
     end
 
     def dismiss!(posting, note:, actor: AuditEvent::OPERATOR)
-      decide!(posting, "dismissed", "Archived by hand: never checked or suggested again.", note, actor)
+      decide!(posting, "dismissed", "Archived #{by(actor)}: never checked or suggested again.", note, actor)
     end
 
     # Archives a company and its roles in play (tracked or suggested), each audited with the operator's note. A
@@ -30,7 +37,7 @@ module Verifier
       ApplicationRecord.transaction do
         company.update!(tracking: "dismissed")
         AuditEvent.record_write!(company, actor: actor,
-                                          reasoning: "Archived by hand: never checked, suggested from or reviewed again. #{note}")
+                                          reasoning: "Archived #{by(actor)}: never checked, suggested from or reviewed again. #{note}")
         roles = company.postings.not_dismissed.to_a
         roles.each do |posting|
           posting.update!(tracking: "dismissed")
@@ -48,7 +55,7 @@ module Verifier
       ApplicationRecord.transaction do
         back = with_roles ? archived_with(company) : {}
         company.update!(tracking: "tracked")
-        AuditEvent.record_write!(company, actor: actor, reasoning: "Tracked by hand. #{note}")
+        AuditEvent.record_write!(company, actor: actor, reasoning: "Tracked #{by(actor)}. #{note}")
         back.each do |posting, was|
           posting.update!(tracking: was)
           AuditEvent.record_write!(posting, actor: actor, reasoning: "Back with its company: #{note}")

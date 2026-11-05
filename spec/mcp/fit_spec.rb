@@ -182,10 +182,13 @@ RSpec.describe "Finding and weighing roles through MCP" do
     end
   end
 
-  it "gives the assistant the scopes to suggest and to weigh, never to track a role" do
+  # Since 4a step 4 the assistant tracks a role on the operator's word (watchlist:curate, its own tool's credential):
+  # a credential to suggest or to weigh never does.
+  it "gives the assistant the scopes to suggest and to weigh, neither of which tracks a role" do
     role = create(:posting, company: company, role_title: "Customer Engineer", tracking: "suggested")
 
-    expect { as_agent("agent:assistant") { role.update!(tracking: "tracked") } }.to raise_error(Authority::Denied, /may not update a posting/)
+    expect { as_agent("agent:assistant", scopes: %w[postings:suggest fit:write]) { role.update!(tracking: "tracked") } }
+      .to raise_error(Authority::Denied, /may not update a posting/)
     expect(Authority::AGENTS.dig("agent:assistant", :scopes)).to include("postings:suggest", "fit:write")
   end
 end

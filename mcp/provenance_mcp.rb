@@ -44,11 +44,17 @@ module ProvenanceMcp
     use query_audit_log: every write on record, refused ones included, each naming its record's id to narrow to next.
     To say how the search is going (the pipeline, the watch, the agents' cost and agreement), use get_analytics; where
     it says there are too few to say, say so rather than reading a trend into a handful.
+    To curate the watch list on the person's word: list_companies (tracked, archived, or what needs a look),
+    get_company_status (a company's roles, with their ids), track_or_archive_companies, track_or_archive_roles,
+    add_role (tracked, never checked) and set_role_page (a role's own page). Change the watch list only when the person
+    tells you to, with their reason, never on your own judgment: a fit score, a recommendation or a stale answer is a
+    reason to ask them, not to act. Archiving a company archives its roles in play; it is refused while an
+    application there is open.
     Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score,
-    save_recommendation) save what you wrote, were told, weighed or recommend back to the record: use them only when
-    the person asks you to. Each save is recorded as yours, for them to edit, approve, accept, dismiss or delete;
-    nothing is ever sent, no tool tracks a role or decides a review item, and no tool moves an application between
-    stages.
+    save_recommendation, and the watch-list tools above) save what you wrote, were told, weighed or recommend back to
+    the record: use them only when the person asks you to. Each save is recorded as yours, for them to edit, approve,
+    accept, archive, undo or delete; nothing is ever sent, no tool decides a review item, and no tool moves an
+    application between stages.
   TEXT
 
   # A tool's answer that is a refusal the client should read (no such company, a missing input), not a failure.

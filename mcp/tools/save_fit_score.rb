@@ -40,7 +40,7 @@ module ProvenanceMcp
                                                     gaps: gaps, reported_model: model, actor: ASSISTANT)
           ProvenanceMcp.text("Saved: #{summary}",
                              "It shows on the role's page in the app (/roles/#{posting.id}#fit) and in the Roles page's Fit column " \
-                             "(score id #{saved.id}). Only the operator tracks or dismisses the role.")
+                             "(score id #{saved.id}). It tracks nothing: the operator tracks or archives the role, or asks you to.")
         end
       end
     end

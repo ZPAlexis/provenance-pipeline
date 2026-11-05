@@ -39,7 +39,7 @@ module ApplicationHelper
   end
 
   # A role's or a company's tracking, in the operator's words (4a): "dismissed" is stored, "archived" is said.
-  def tracking_label(tracking) = tracking == "dismissed" ? "archived" : tracking.to_s
+  def tracking_label(tracking) = Verifier::Tracking.label(tracking)
 
   def tracking_badge(tracking)
     tag.span(tracking_label(tracking), class: [ "badge", ("live" if tracking == "tracked") ])
