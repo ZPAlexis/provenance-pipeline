@@ -48,7 +48,7 @@ One job's own posting is never a careers page. A company's own page of many empl
 
 ## How postings are verified
 
-Each company's watched page is read in full, then every tracked posting (every one the operator has not dismissed) is matched against everything read. Matching knows nothing about what anyone is looking for:
+Each company's watched page is read in full, then every tracked posting (every one the operator has not archived, at a company they track) is matched against everything read. Matching knows nothing about what anyone is looking for:
 
 1. **The posting's own link**: a listing at the role's own address at the employer is its role, whatever its title says now (a renamed title is noted). The link is learned from the listing a posting last matched.
 2. **The same title**, ignoring case, punctuation, accents, and "Sr."/"Jr."

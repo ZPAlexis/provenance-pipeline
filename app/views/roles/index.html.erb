@@ -2,7 +2,7 @@
 <div class="page-head">
   <div>
     <h1>Roles</h1>
-    <p class="sub">Every role is checked at the employer's own careers page. Only you track or archive one.</p>
+    <p class="sub">Every role is checked at the employer's own careers page. Only you decide which to track or archive.</p>
   </div>
   <div class="head-actions">
     <% if @tab == "suggested" %>
@@ -69,7 +69,7 @@
   <%= tag.div(data: { controller: ("bulk" if bulk) }) do %>
     <% if bulk %>
       <%= form_with url: dismiss_many_roles_path, method: :patch, id: "bulk-dismiss", class: "bulk-form",
-                    data: { turbo_confirm: "Archive the selected roles? They are never checked or suggested again, until you track one by hand." } do |form| %>
+                    data: { turbo_confirm: "Archive the selected roles? They are never checked or suggested again, until you track one again." } do |form| %>
         <span class="muted small" data-bulk-target="count">None selected</span>
         <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why archive them",
                                    placeholder: "Why archive them?" %>

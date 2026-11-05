@@ -68,7 +68,7 @@
     <% if bulk %>
       <%= form_with url: dismiss_many_companies_path, method: :patch, id: "bulk-archive", class: "bulk-form",
                     data: { turbo_confirm: "Archive the selected companies, with their tracked and suggested roles? They are never " \
-                                           "checked, suggested from or reviewed again, until you track one by hand." } do |form| %>
+                                           "checked, suggested from or reviewed again, until you track one again." } do |form| %>
         <span class="muted small" data-bulk-target="count">None selected</span>
         <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why archive them",
                                    placeholder: "Why archive them?" %>
