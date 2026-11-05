@@ -72,18 +72,24 @@ class CompaniesController < ApplicationController
     redirect_back_or_to companies_path, alert: "None archived: #{e.message}.", status: :see_other
   end
 
-  # "Add a company": its domain, careers page, or ATS board, added as the operator
-  # and read right away (its careers page found first), what it could cost shown before.
+  # "Add a company" (1.5d; 4a): its domain, careers page, or ATS board, added as the operator, with its careers page
+  # watched as given when they give one; read only when they ask ("Add and read"), what it could cost asked first.
   def create
-    added = Verifier::Capture.company!(params[:link], name: params[:name])
+    added = Verifier::Capture.company!(params[:link], name: params[:name], page: params[:careers_page])
     company = added.company
-    if company.resolution_status != "resolved" && Verifier::CheckNow.refusal(company).nil?
-      CheckRun.start_for!(company)
-      started = " Finding its careers page and reading its roles now."
+    if params[:read] == "1"
+      why = Verifier::CheckNow.refusal(company)
+      CheckRun.start_for!(company) unless why
+      read = if why then " Not read: #{why}"
+      elsif company.resolution_status == "resolved" then " Reading its careers page now."
+      else " Finding its careers page and reading its roles now."
+      end
+    elsif company.resolution_status.in?([ nil, "failed" ]) # a page to confirm says so already
+      read = " Not watched until its careers page is found: check it now, or set it by hand, below."
     end
-    redirect_to company_path(company), notice: "#{added.note}#{started}", status: :see_other
+    redirect_to company_path(company), notice: "#{added.note}#{read}", status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    redirect_to companies_path(tab: "all"), alert: e.message.upcase_first, status: :see_other
+    redirect_to companies_path(tab: "all"), alert: "#{e.message.upcase_first.delete_suffix('.')}.", status: :see_other
   end
 
   # A careers page found at low confidence, decided by the operator; or the right one set by hand.

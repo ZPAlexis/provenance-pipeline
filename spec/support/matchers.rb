@@ -2,3 +2,5 @@
 RSpec::Matchers.define_negated_matcher :not_change, :change
 # And `include`: expect(page).to include("Approved").and not_include("Save and approve")
 RSpec::Matchers.define_negated_matcher :not_include, :include
+# And `have_enqueued_job`: expect { }.to change(A, :count).by(1).and not_have_enqueued_job(CheckNowJob)
+RSpec::Matchers.define_negated_matcher :not_have_enqueued_job, :have_enqueued_job

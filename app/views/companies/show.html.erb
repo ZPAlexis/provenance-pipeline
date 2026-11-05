@@ -76,6 +76,14 @@
 </details>
 
 <h2>Roles</h2>
+<% if @company.dismissed? %>
+  <p class="muted small">Track it again to add a role here.</p>
+<% else %>
+  <details class="add" <%= "open" if params[:add_role] %>>
+    <summary class="btn small">Add a role here</summary>
+    <%= render "roles/add_form", company: @company %>
+  </details>
+<% end %>
 <% if @roles.any? %>
   <div class="table-wrap">
     <table>
@@ -95,7 +103,7 @@
     </table>
   </div>
 <% else %>
-  <p class="empty">No role tracked here.</p>
+  <p class="empty">No role on record here yet.</p>
 <% end %>
 
 <%= render "contacts", company: @company, contacts: @contacts %>

@@ -12,20 +12,28 @@
 <details class="add" <%= "open" if flash[:alert] %>>
   <summary class="btn">Add a company</summary>
   <% ceiling = Verifier::CheckNow.ceiling(Company.new) %>
-  <%= form_with url: companies_path, class: "add-form",
-                data: { turbo_confirm: "Adding it reads its careers page right away: at most #{cost(ceiling)}, free on an ATS board. Add it?" } do |form| %>
+  <%= form_with url: companies_path, class: "add-form" do |form| %>
     <label>
-      Its domain, careers page, or ATS board
+      Its domain, or a link on its site
       <%= form.text_field :link, required: true, placeholder: "acme.com, acme.com/careers, or jobs.lever.co/acme" %>
     </label>
     <label>
       <span>Name <span class="muted">(optional)</span></span>
       <%= form.text_field :name, placeholder: "Acme" %>
     </label>
-    <%= form.submit "Add and read", class: "btn primary" %>
+    <label>
+      <span>Careers page <span class="muted">(optional: watched as given)</span></span>
+      <%= form.text_field :careers_page, placeholder: "acme.com/careers, or its ATS board" %>
+    </label>
+    <%= form.submit "Add", class: "btn primary" %>
+    <%= form.button "Add and read", name: "read", value: "1", class: "btn",
+                    data: { turbo_confirm: "Reading it finds its careers page if it has none, and reads its roles: at most #{cost(ceiling)}, " \
+                                           "free on an ATS board. Add and read it?" } %>
     <p class="muted small">
-      Its careers page is found first: the link you give is tried first, and a page found only at low confidence
-      waits for you to confirm. A job board's link (LinkedIn, Indeed) is never read: give the employer's own.
+      "Add" reads nothing and costs nothing. Given a careers page, it is watched at that page from now on, as if you set
+      it by hand; without one, it isn't watched until its careers page is found. "Add and read" finds it now, trying any
+      page in the link first (a page found only at low confidence waits for you to confirm), and reads its roles. A job
+      board's link (LinkedIn, Indeed) is never read: give the employer's own.
     </p>
   <% end %>
 </details>

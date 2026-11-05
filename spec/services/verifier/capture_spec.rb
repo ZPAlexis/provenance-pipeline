@@ -42,7 +42,7 @@ RSpec.describe Verifier::Capture do
     end
 
     it "refuses a job board, and what is not an address" do
-      expect { described_class.parse("https://www.linkedin.com/jobs/view/123") }.to raise_error(ArgumentError, /linkedin\.com is a job board/)
+      expect { described_class.parse("https://www.linkedin.com/jobs/view/123") }.to raise_error(ArgumentError, /on linkedin\.com, a job board/)
       expect { described_class.parse("not a domain") }.to raise_error(ArgumentError, /not a web address/)
       expect { described_class.parse(" ") }.to raise_error(ArgumentError, /paste a company's domain/)
     end
@@ -109,10 +109,10 @@ RSpec.describe Verifier::Capture do
       expect { add(link: "https://www.linkedin.com/jobs/view/4099887766") }.to raise_error(ArgumentError, /can go in where you found it/)
     end
 
-    it "takes a role without a title, to be named by its own page at its first check, never matched by title" do
+    it "takes a role without a title when a check follows, to be named by its own page then, never matched by title" do
       untitled = create(:posting, company: create(:company, domain: "acme.com"), role_title: Posting::TITLE_PENDING, posting_url: nil)
 
-      placed = add(link: "https://acme.com/careers/jobs/12", title: " ")
+      placed = add(link: "https://acme.com/careers/jobs/12", title: " ", check: true)
 
       expect(placed).to have_attributes(created: true, note: "Role tracked: its title is read from its own page.")
       expect(placed.posting).to have_attributes(role_title: Posting::TITLE_PENDING, title_pending?: true)
@@ -123,6 +123,72 @@ RSpec.describe Verifier::Capture do
       placed = add(link: "https://careers.acme.com.br/vagas/123-engenheiro", title: "Engenheiro de Vendas")
 
       expect(placed.posting.company).to have_attributes(domain: "acme.com.br", careers_page_url: nil)
+    end
+
+    # 4a: adding reads nothing unless asked, so a role added without a check needs its title; nothing is written when
+    # it is refused, not even the company its link would have added.
+    it "needs a title without a check, and writes nothing without one, not even its company" do
+      expect { add(link: "https://careers.newco.example/jobs/1", title: " ") }
+        .to raise_error(ArgumentError, "give its title: added without a check, nothing reads one from its page")
+      expect([ Company.count, Posting.count, AuditEvent.count ]).to eq([ 0, 0, 0 ])
+
+      known = create(:posting, company: create(:company, domain: "acme.com"), job_url: "https://acme.com/careers/jobs/7", tracking: "suggested")
+      expect(add(link: "https://acme.com/careers/jobs/7", title: "").posting).to eq(known) # one on record needs none
+    end
+
+    describe "from a company's page" do
+      let(:acme) { create(:company, :resolved, name: "Acme", domain: "acme.com") }
+
+      it "adds it at that company, whatever name its link would guess" do
+        placed = add(link: "https://apply.workable.com/acme-labs/j/1A2B3C/", title: "Sales Engineer", company: acme)
+
+        expect(placed).to have_attributes(created: true, note: "Sales Engineer tracked.")
+        expect(placed.posting.company).to eq(acme)
+        expect(Company.count).to eq(1)
+      end
+
+      it "refuses at an archived company, a link on another company's site or board, or a role on record elsewhere" do
+        contoso = create(:company, :resolved, name: "Contoso", domain: "contoso.com")
+        create(:company, :resolved, name: "Fabrikam", board_vendor: "lever", board_token: "fabrikam", board_overlap: 1.0,
+                                    board_evidence: "Lists the roles.", board_confirmed_at: 1.day.ago)
+        elsewhere = create(:posting, company: contoso, posting_url: "https://www.linkedin.com/jobs/view/4099887766")
+
+        expect { add(link: "https://contoso.com/jobs/1", company: acme) }
+          .to raise_error(ArgumentError, "that link is Contoso's (contoso.com), on record: it isn't a role at Acme")
+        expect { add(link: "https://jobs.lever.co/fabrikam/0f1e", company: acme) }.to raise_error(ArgumentError, /is Fabrikam's \(jobs\.lever\.co\), on record/)
+        expect { add(link: "https://acme.com/jobs/2", source: "https://www.linkedin.com/jobs/view/4099887766", company: acme) }
+          .to raise_error(ArgumentError, "that role is on record at Contoso: add it there, or check where you found it")
+        Verifier::Tracking.dismiss_company!(acme, note: "Pausing.")
+        expect { add(link: "https://acme.com/jobs/3", company: acme) }
+          .to raise_error(ArgumentError, "Acme is archived: track it again before adding a role there")
+        expect(Posting.all).to eq([ elsewhere ])
+      end
+    end
+  end
+
+  # 4a: the role's own page at the employer, set by the operator from the role's page.
+  describe ".own_page!" do
+    let(:acme) { create(:company, :resolved, name: "Acme", domain: "acme.com") }
+    let(:role) { create(:posting, company: acme, role_title: "Sales Engineer", job_url: "https://acme.com/jobs/1") }
+
+    it "sets it as the operator, with their note, the link each check tries first" do
+      described_class.own_page!(role, "acme.com/careers/jobs/9", note: "The old link moved.")
+
+      expect(role.reload.job_url).to eq("https://acme.com/careers/jobs/9")
+      expect(role.audit_events.sole).to have_attributes(actor: AuditEvent::OPERATOR, changes_made: { "job_url" => [ "https://acme.com/jobs/1", "https://acme.com/careers/jobs/9" ] },
+                                                        reasoning: "Its own page set by hand. The old link moved.")
+    end
+
+    it "refuses a job board, another company's site, the page it has, and another role's" do
+      create(:company, :resolved, name: "Contoso", domain: "contoso.com")
+      create(:posting, company: acme, role_title: "Recruiter", job_url: "https://acme.com/jobs/2")
+
+      expect { described_class.own_page!(role, "https://www.linkedin.com/jobs/view/4099887766") }.to raise_error(ArgumentError, /on linkedin\.com, a job board/)
+      expect { described_class.own_page!(role, "https://contoso.com/jobs/1") }.to raise_error(ArgumentError, /is Contoso's \(contoso\.com\), on record/)
+      expect { described_class.own_page!(role, "https://www.acme.com/jobs/1/") }.to raise_error(ArgumentError, "that is already its own page")
+      expect { described_class.own_page!(role, "https://acme.com/jobs/2") }
+        .to raise_error(ArgumentError, "that link is Recruiter's own page, on record at Acme")
+      expect(role.audit_events).to be_empty
     end
   end
 
@@ -155,6 +221,23 @@ RSpec.describe Verifier::Capture do
 
       expect(bare.reload.careers_page_url).to eq("https://gamma.com/jobs")
       expect(AuditEvent.find_by!(target: bare).reasoning).to eq("Added by URL: https://gamma.com/jobs, the careers page to try first.")
+    end
+
+    # 4a: a careers page given when the company is added is watched as given, set by hand, so it is watched with no
+    # read; a company already watched keeps its page.
+    it "watches a company at the careers page given with it, as set by hand; one already watched keeps its own" do
+      added = described_class.company!("acme.com", page: "https://jobs.lever.co/acme/0f1e2d")
+
+      expect(added.note).to eq("Acme added. Watched at https://jobs.lever.co/acme, as given.")
+      expect(added.company.reload).to have_attributes(careers_page_url: "https://jobs.lever.co/acme", resolution_status: "resolved",
+                                                      resolution_method: "manual")
+      expect(Company.watched).to include(added.company)
+      expect(AuditEvent.where(target: added.company).pluck(:reasoning)).to contain_exactly("Added by URL: https://acme.com.", "Set by hand. Given when added.")
+
+      expect(described_class.company!("acme.com", page: "https://acme.com/careers").note)
+        .to eq("Acme is already watched. Acme keeps its watched page, https://jobs.lever.co/acme: change it on its page if that is wrong.")
+      expect { described_class.company!("contoso.com", page: "https://www.linkedin.com/company/contoso") }.to raise_error(ArgumentError, /job board/)
+      expect(Company.count).to eq(1)
     end
 
     # 4a: pasting a link is choosing it, so an archived company pasted, or a role there, is tracked again; the roles

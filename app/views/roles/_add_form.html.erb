@@ -1,0 +1,38 @@
+<%# "Add a role" (1.5d; 4a), on the Roles page and on a company's page (`company`, filled in). Tracked, and read
+    nothing unless asked: "Add and check" checks it right away, what that could cost asked first; without it, its
+    title is needed. %>
+<% ceiling = Verifier::CheckNow.ceiling(company || Company.new) + Verifier::CheckNow.average_read %>
+<%= form_with url: roles_path, class: "add-form" do |form| %>
+  <%= hidden_field_tag :company_id, company.id if company %>
+  <label>Its own page <%= form.text_field :link, required: true, placeholder: company ? "Its page at #{company.name}, or its ATS posting" : "acme.com/careers/jobs/123, or its ATS posting" %></label>
+  <label>
+    <span>Title <span class="muted">(read from its page only when you check it)</span></span>
+    <%= form.text_field :title, required: true, placeholder: "Solutions Engineer" %>
+  </label>
+  <label>
+    <span>Location <span class="muted">(optional)</span></span>
+    <%= form.text_field :location, placeholder: "São Paulo, Brazil" %>
+  </label>
+  <label>
+    <span>Where you found it <span class="muted">(optional)</span></span>
+    <%= form.text_field :source, placeholder: "linkedin.com/jobs/view/…" %>
+  </label>
+  <% unless company %>
+    <label>
+      <span>Company <span class="muted">(optional, if new)</span></span>
+      <%= form.text_field :company_name, placeholder: "Acme" %>
+    </label>
+  <% end %>
+  <%= form.submit "Add", class: "btn primary" %>
+  <%= form.button "Add and check", name: "check", value: "1", class: "btn", formnovalidate: true,
+                  data: { turbo_confirm: "Checking it reads its own page first, free on an ATS; at most #{cost(ceiling)} when its " \
+                                         "title must be read by the AI#{' or its company is new' unless company}. Add and check it?" } %>
+  <p class="muted small">
+    Tracked: pasting a role is choosing it, even one you archived<%= ", at a company you archived too" unless company %>.
+    "Add" reads nothing and costs nothing: give its title, and every check from then on looks for it. "Add and check"
+    checks it now, its own page first<%= ", its company's careers page found first if it has none" unless company %>; a
+    title left blank is then read from its page, free on an ATS, elsewhere its heading, and one AI read only when that is
+    unclear. A job board's link (LinkedIn, Indeed) is never read: keep it in "Where you found it", where it also finds a
+    role already on record.
+  </p>
+<% end %>

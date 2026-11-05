@@ -21,12 +21,31 @@
   <dt>Found at</dt>
   <dd><%= @role.posting_url ? outside_link(@role.posting_url, label: @role.posting_url) : tag.span("—", class: "muted") %></dd>
   <dt>Watched page</dt>
-  <dd><%= outside_link(@role.company.careers_page_url, label: @role.company.careers_page_url) %></dd>
+  <dd>
+    <%= outside_link(@role.company.careers_page_url, label: @role.company.careers_page_url) %>
+    <span class="muted small">· its company's careers page, set on <%= link_to "#{@role.company.name}'s page", company_path(@role.company) %></span>
+  </dd>
   <% if @role.fit %>
     <dt>Why suggested</dt>
     <dd><%= fit_reasons(@role) %></dd>
   <% end %>
 </dl>
+
+<details class="add" <%= "open" if params[:own_page] %>>
+  <summary class="muted small"><%= @role.job_url ? "Change its own page" : "Give its own page" %></summary>
+  <%= form_with url: own_page_role_path(@role), method: :patch, class: "add-form" do |form| %>
+    <label>Its own page <%= form.text_field :link, required: true, value: @role.job_url, placeholder: "acme.com/careers/jobs/123, or its ATS posting" %></label>
+    <label>
+      <span>Why <span class="muted">(optional)</span></span>
+      <%= form.text_field :note, placeholder: "The old link moved", autocomplete: "off" %>
+    </label>
+    <%= form.submit "Save", class: "btn" %>
+    <p class="muted small">
+      The role's page at the employer, or its ATS posting: each check looks for the role there first. Never a job
+      board's link: that is where you found it.
+    </p>
+  <% end %>
+</details>
 
 <h2>Application</h2>
 <% if (application = @role.application) %>

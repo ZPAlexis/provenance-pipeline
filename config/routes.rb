@@ -7,6 +7,7 @@ Rails.application.routes.draw do
     member do
       patch :track
       patch :dismiss
+      patch :own_page
     end
     patch :dismiss_many, on: :collection
   end

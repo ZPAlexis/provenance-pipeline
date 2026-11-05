@@ -21,17 +21,34 @@ class RolesController < ApplicationController
 
   # "Add a role": its own page at the employer and its title, tracked as the operator's
   # choice, then checked right away (its company's careers page found first when it has none).
+  # "Add a role" (1.5d; 4a): tracked as the operator, and checked only when they ask ("Add and check"), what that
+  # could cost asked first; without a check its title is needed. From a company's page it is added there, and the
+  # page stays open to add another; otherwise, or to follow its check, the role's page opens.
   def create
-    placed = Verifier::Capture.role!(link: params[:link], title: params[:title], location: params[:location],
-                                     source: params[:source], company_name: params[:company_name])
+    company = Company.find(params[:company_id]) if params[:company_id].present?
+    check = params[:check] == "1"
+    placed = Verifier::Capture.role!(link: params[:link], title: params[:title], location: params[:location], source: params[:source],
+                                     company_name: params[:company_name], company: company, check: check)
     role = placed.posting
-    if Verifier::CheckNow.refusal(role).nil?
-      CheckRun.start_for!(role)
-      started = " Checking it now: its own page first."
+    if check
+      why = Verifier::CheckNow.refusal(role)
+      CheckRun.start_for!(role) unless why
+      checked = why ? " Not checked: #{why}" : " Checking it now: its own page first."
     end
-    redirect_to role_path(role), notice: "#{placed.note}#{started}", status: :see_other
+    back = company && !check ? company_path(company) : role_path(role)
+    redirect_to back, notice: "#{placed.note}#{checked}", status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    redirect_to roles_path(add: 1), alert: e.message.upcase_first, status: :see_other
+    redirect_to company ? company_path(company, add_role: 1) : roles_path(add: 1), alert: "#{e.message.upcase_first.delete_suffix('.')}.",
+                                                                                 status: :see_other
+  end
+
+  # The role's own page, as the operator gives it (4a): the link each check tries first.
+  def own_page
+    role = Posting.find(params[:id])
+    Verifier::Capture.own_page!(role, params[:link], note: params[:note])
+    redirect_to role_path(role), notice: "Its own page is now #{role.job_url}.", status: :see_other
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    redirect_to role_path(role, own_page: 1), alert: "#{e.message.upcase_first.delete_suffix('.')}.", status: :see_other
   end
 
   def show

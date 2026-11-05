@@ -41,6 +41,31 @@ RSpec.describe "verifier: and postings: commands" do
     expect(role.reload.tracking).to eq("tracked")
   end
 
+  # 4a: adding reads nothing unless CHECK=1, so a role added without one needs its TITLE; a careers page given is
+  # watched as given; a role's own page is set by hand. Each refusal comes before the backup.
+  it "adds a company or a role reading nothing unless asked, and sets a role's own page, refusing before the backup" do
+    stand_in = "Backed up to #{Rails.root.join('tmp/backups/stand-in.dump')}\n"
+    expect(run_task("verifier:add", URL: "contoso.example", PAGE: "contoso.example/careers").out)
+      .to eq("#{stand_in}Contoso added. Watched at https://contoso.example/careers, as given.\nNot read: CHECK=1 reads its roles now.\n")
+    expect(Company.watched.find_by!(domain: "contoso.example").careers_page_url).to eq("https://contoso.example/careers")
+    expect(run_task("verifier:add", URL: "fabrikam.example").out).to include("Fabrikam added.\nNot watched until its careers page is found")
+    expect(run_task("verifier:add", URL: "x.example", PAGE: "https://www.linkedin.com/company/x").aborted)
+      .to start_with("That link is on linkedin.com, a job board")
+
+    expect(run_task("verifier:add_role", URL: "https://acme.example/jobs/2").aborted)
+      .to eq('Give its TITLE="...": added without a check (CHECK=1), nothing reads one from its page.')
+    expect(run_task("verifier:add_role", URL: "https://contoso.example/jobs/9", TITLE: "Recruiter", COMPANY_ID: company.id).aborted)
+      .to eq("That link is Contoso's (contoso.example), on record: it isn't a role at Acme")
+    expect(run_task("verifier:add_role", URL: "https://acme.example/jobs/2", TITLE: "Solutions Engineer", COMPANY_ID: company.id).out)
+      .to eq("#{stand_in}Solutions Engineer tracked.\nNot checked: CHECK=1 checks it now, its own page first.\n")
+
+    expect(run_task("verifier:own_page", role.id, URL: "https://www.linkedin.com/jobs/view/4099887766").aborted).to start_with("That link is on linkedin.com")
+    expect(run_task("verifier:own_page", role.id, URL: "https://acme.example/careers/jobs/1", NOTE: "Moved.").out)
+      .to eq("#{stand_in}Acme / Sales Engineer: its own page is https://acme.example/careers/jobs/1\n")
+    expect(operator_events(role).sole.reasoning).to eq("Its own page set by hand. Moved.")
+    expect(DatabaseBackup).to have_received(:call).exactly(4).times
+  end
+
   it "records a check by hand, and undoes a verdict of the verifier's that rested on bad evidence" do
     as_agent("agent:verifier", scopes: %w[postings:verify]) do
       role.update!(verification_state: "not_found", last_checked_at: Time.current, roles_listed_count: 0)

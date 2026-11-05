@@ -225,39 +225,62 @@ namespace :verifier do
     puts format("  Cost: est. $%.4f   (details: %s)", outcome.cost_usd, outcome.run_dir)
   end
 
-  desc "Add a company by its domain, careers page, or ATS board, then find its careers page and read it. " \
-       "Audited as you; backs up first. Usage: URL=\"acme.com\" bin/rails verifier:add [COMPANY_NAME=\"Acme\"]"
+  desc "Add a company by its domain, careers page, or ATS board. Audited as you; backs up first. Reads nothing unless " \
+       "CHECK=1, which finds its careers page (when it has none) and reads its roles. PAGE= gives its careers page, " \
+       "watched as given. Usage: URL=\"acme.com\" bin/rails verifier:add [COMPANY_NAME=\"Acme\"] [PAGE=\"...\"] [CHECK=1]"
   task add: :environment do
     url = ENV["URL"].presence or abort "Give its domain, careers page, or ATS board in URL=\"...\"."
-    Verifier::Capture.parse(url) # a link refused is refused before anything is backed up or written
+    # A link refused is refused before anything is backed up or written.
+    Verifier::Capture.parse(url)
+    Verifier::Capture.careers_page(ENV["PAGE"]) if ENV["PAGE"].present?
     puts "Backed up to #{DatabaseBackup.call}"
     # COMPANY_NAME, never NAME: shells set NAME already (WSL sets it to the machine's name).
-    added = Verifier::Capture.company!(url, name: ENV["COMPANY_NAME"])
+    added = Verifier::Capture.company!(url, name: ENV["COMPANY_NAME"], page: ENV["PAGE"])
     company = added.company
     puts added.note
-    next if company.resolution_status == "resolved"
+    unless ENV["CHECK"] == "1"
+      case company.resolution_status
+      when "resolved" then puts "Not read: CHECK=1 reads its roles now."
+      when "candidate" then nil # its note says the page waits for you to confirm
+      else puts "Not watched until its careers page is found: CHECK=1 finds it and reads its roles, or set it with PAGE=."
+      end
+      next
+    end
     if (why = Verifier::CheckNow.refusal(company))
       abort why
     end
 
-    puts format("Finding its careers page and reading it: at most about $%.2f.", Verifier::CheckNow.ceiling(company))
+    found = company.resolution_status == "resolved" ? "Reading its careers page" : "Finding its careers page and reading it"
+    puts format("#{found}: at most about $%.2f.", Verifier::CheckNow.ceiling(company))
     outcome = Verifier::CheckNow.company(company, worker: build_worker.call("verify"), finder: build_worker.call("resolve"))
     report_check.call(outcome, company.name)
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
   end
 
-  desc "Add a role by its own page at the employer (or its ATS posting), tracked, then check it. Without TITLE its " \
-       "page names it. Audited as you; backs up first. Usage: URL=\"https://...\" bin/rails verifier:add_role " \
-       "[TITLE=\"...\"] [LOCATION=\"...\"] [SOURCE=\"where you found it\"] [COMPANY=\"name, if new\"]"
+  desc "Add a role by its own page at the employer (or its ATS posting), tracked. Audited as you; backs up first. " \
+       "Checked only with CHECK=1, when a TITLE left out is read from its page; without it, TITLE is needed. " \
+       "COMPANY_ID adds it at a company on record. Usage: URL=\"https://...\" bin/rails verifier:add_role [TITLE=\"...\"] " \
+       "[LOCATION=\"...\"] [SOURCE=\"where you found it\"] [COMPANY=\"name, if new\" | COMPANY_ID=\"...\"] [CHECK=1]"
   task add_role: :environment do
     url = ENV["URL"].presence or abort "Give the role's own page in URL=\"...\"."
-    Verifier::Capture.parse(url, role: true)
+    check = ENV["CHECK"] == "1"
+    abort "Give its TITLE=\"...\": added without a check (CHECK=1), nothing reads one from its page." if !check && ENV["TITLE"].blank?
+    if ENV["COMPANY_ID"].present?
+      company = Company.find_by(id: ENV["COMPANY_ID"]) or abort "No company #{ENV['COMPANY_ID'].inspect}: its id is in its page's address."
+    end
+    own = Verifier::Capture.parse(url, role: true)
+    Verifier::Capture.at_company!(company, own) if company
     puts "Backed up to #{DatabaseBackup.call}"
     placed = Verifier::Capture.role!(link: url, title: ENV["TITLE"], location: ENV["LOCATION"], source: ENV["SOURCE"],
-                                     company_name: ENV["COMPANY"])
+                                     company_name: ENV["COMPANY"], company: company, check: check)
     posting = placed.posting
     puts placed.note
+    unless check
+      puts "Not checked: CHECK=1 checks it now, its own page first."
+      next
+    end
+
     if (why = Verifier::CheckNow.refusal(posting))
       abort why
     end
@@ -266,6 +289,19 @@ namespace :verifier do
     puts format("Checking it: its own page first; at most about $%.2f.", ceiling) if ceiling.positive?
     outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check"), finder: build_worker.call("resolve"))
     report_check.call(outcome, "#{posting.company.name} / #{posting.reload.role_title}")
+  rescue ArgumentError, ActiveRecord::RecordInvalid => e
+    abort e.message.upcase_first
+  end
+
+  desc "Set a role's own page at the employer (or its ATS posting): the link each check tries first. Never a job " \
+       "board's. Audited as you; backs up first. Usage: URL=\"https://...\" [NOTE=\"why\"] bin/rails \"verifier:own_page[posting_id]\""
+  task :own_page, [ :id ] => :environment do |_task, args|
+    posting = Posting.find_by(id: args[:id]) or abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
+    url = ENV["URL"].presence or abort "Give its own page in URL=\"https://...\"."
+    Verifier::Capture.at_company!(posting.company, Verifier::Capture.parse(url, role: true), archived: true)
+    puts "Backed up to #{DatabaseBackup.call}"
+    Verifier::Capture.own_page!(posting, url, note: ENV["NOTE"])
+    puts "#{posting.company.name} / #{posting.role_title}: its own page is #{posting.job_url}"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
   end

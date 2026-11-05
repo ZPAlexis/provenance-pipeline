@@ -49,29 +49,60 @@ module Verifier
 
     module_function
 
-    # The company the operator pasted, found or added. A page given (a careers page, an ATS
-    # board) is kept as the one to try first while the company has no watched page.
-    def company!(input, name: nil, actor: ACTOR)
-      company_from(parse(input), name, actor)
+    # The company the operator pasted, found or added. A page given in the link (a careers page, an ATS board) is
+    # kept as the one to try first while the company has no watched page. A careers page given apart (4a) is
+    # watched as given, set by hand, so the company is watched with no read; one already watched is never changed
+    # here. Nothing is written when anything is refused.
+    def company!(input, name: nil, page: nil, actor: ACTOR)
+      link = parse(input)
+      given = careers_page(page) if page.to_s.strip.present? # refused, if it is, before anything is written
+      ApplicationRecord.transaction do
+        added = company_from(link, name, actor)
+        given ? watched_at!(added, given, actor) : added
+      end
     end
 
     # The role the operator pasted, tracked: pasting it is choosing it. Found on record by
     # where it was found (its LinkedIn job), its own link, or its title at the company when
     # that has no link yet; a suggested or dismissed role is tracked, its missing links filled in.
-    # Without a title, a new role waits for its first check to read one from its own page.
-    def role!(link:, title: nil, location: nil, source: nil, company_name: nil, actor: ACTOR)
+    # A new role needs its title, unless a check follows (`check:`), which reads one from its own page; till then it
+    # waits, named "(title pending)". From a company's page (`company:`, 4a), the role is added there: refused at an
+    # archived company, or for a link on another company's site or board on record. Nothing is written when
+    # anything is refused.
+    def role!(link:, title: nil, location: nil, source: nil, company_name: nil, company: nil, check: false, actor: ACTOR)
       title = title.to_s.squish
-
       own = parse(link, role: true)
       source = source_link(source)
-      known = by_source(source)
-      added = company_from(own, company_name, actor) unless known
-      company = known&.company || added.company
-      again = chosen_again(company, own.url, actor) if known # a role found by where it was found, at an archived company
-      known ||= by_link(company, own.url) || (by_title(company, title) if title.present?)
-      placed = known ? choose!(known, own, source, actor) : create_role!(company, own, title.presence, location, source, actor)
-      before = again || (added.note if added&.created || added&.tracked_again)
-      before ? placed.with(note: "#{before} #{placed.note}") : placed
+      at_company!(company, own) if company
+      ApplicationRecord.transaction do
+        known = by_source(source)
+        elsewhere!(known, company) if known && company
+        added = company_from(own, company_name, actor) unless known || company
+        company ||= known&.company || added.company
+        again = chosen_again(company, own.url, actor) if known # a role found by where it was found, at an archived company
+        known ||= by_link(company, own.url) || (by_title(company, title) if title.present?)
+        placed = known ? choose!(known, own, source, actor) : create_role!(company, own, title.presence, location, source, check, actor)
+        before = again || (added.note if added&.created || added&.tracked_again)
+        before ? placed.with(note: "#{before} #{placed.note}") : placed
+      end
+    end
+
+    # A role's own page at the employer, as the operator gives it (4a): the link each check tries first to find it.
+    # An employer's page or its ATS posting, never a job board's, never on another company's site or board on
+    # record, and never another role's there. Audited as theirs, with their note if they give one.
+    def own_page!(posting, link, note: nil, actor: ACTOR)
+      own = parse(link, role: true)
+      at_company!(posting.company, own, archived: true)
+      raise ArgumentError, "that is already its own page" if posting.job_url && link_key(posting.job_url) == link_key(own.url)
+      if (other = by_link(posting.company, own.url))
+        raise ArgumentError, "that link is #{other.role_title}'s own page, on record at #{posting.company.name}"
+      end
+
+      ApplicationRecord.transaction do
+        posting.update!(job_url: own.url)
+        AuditEvent.record_write!(posting, actor: actor, reasoning: [ "Its own page set by hand.", note.to_s.squish.presence ].compact.join(" "))
+      end
+      posting
     end
 
     def parse(input, role: false)
@@ -82,7 +113,7 @@ module Verifier
       if host(url).match?(JOB_BOARDS)
         instead = role ? "the role's own page at the employer, or on its ATS; the job board's link can go in where you found it" :
                          "the employer's domain or careers page"
-        raise ArgumentError, "#{host(url)} is a job board: its links are never read. Paste #{instead} instead."
+        raise ArgumentError, "that link is on #{host(url).delete_prefix('www.')}, a job board: its links are never read. Paste #{instead} instead."
       end
 
       board = board(url)
@@ -163,6 +194,50 @@ module Verifier
       Added.new(company: company, created: true, note: "#{company.name} added.")
     end
 
+    # A careers page given apart, as it will be watched: an ATS board's own page whichever page of it was pasted,
+    # a hosted site's page, or the page itself; never a job board.
+    def careers_page(input)
+      link = parse(input)
+      link.page || link.url
+    end
+
+    # The company watched at the careers page given when it was added, set by hand as on its page (4a); one already
+    # watched keeps its page, and the note says where.
+    def watched_at!(added, url, actor)
+      company = added.company
+      note = if company.resolution_status == "resolved"
+        "#{company.name} keeps its watched page, #{company.careers_page_url}: change it on its page if that is wrong." unless company.careers_page_url == url
+      else
+        Candidates.set_page!(company, url, reasoning: "Given when added.", actor: actor)
+        "Watched at #{url}, as given."
+      end
+      note ? added.with(note: "#{added.note} #{note}") : added
+    end
+
+    # The company on record a link belongs to by its domain or its board, the strong signs (a name alone never is).
+    def owner(link)
+      return Company.find_by(domain: link.domain) if link.domain
+
+      Company.find_by(board_vendor: link.board[0], board_token: link.board[1]) if link.board
+    end
+
+    # A role added or changed at a company the operator chose: tracked (unless `archived:` is fine, as for a role's
+    # own page), and the link not another company's on record.
+    def at_company!(company, own, archived: false)
+      raise ArgumentError, "#{company.name} is archived: track it again before adding a role there" if company.dismissed? && !archived
+
+      other = owner(own)
+      return if other.nil? || other == company
+
+      raise ArgumentError, "that link is #{other.name}'s (#{host(own.url).delete_prefix('www.')}), on record: it isn't a role at #{company.name}"
+    end
+
+    def elsewhere!(known, company)
+      return if known.company == company
+
+      raise ArgumentError, "that role is on record at #{known.company.name}: add it there, or check where you found it"
+    end
+
     def try_first!(company, link, actor)
       return if link.page.blank? || company.careers_page_url == link.page
 
@@ -201,7 +276,9 @@ module Verifier
       company.postings.where(job_url: nil).find { |posting| title_words(posting.role_title) == words }
     end
 
-    def create_role!(company, own, title, location, source, actor)
+    def create_role!(company, own, title, location, source, check, actor)
+      raise ArgumentError, "give its title: added without a check, nothing reads one from its page" if title.nil? && !check
+
       posting = company.postings.new(role_title: title || Posting::TITLE_PENDING, location: location.to_s.squish.presence,
                                      job_url: own.url, posting_url: source, tracking: "tracked")
       ApplicationRecord.transaction do
