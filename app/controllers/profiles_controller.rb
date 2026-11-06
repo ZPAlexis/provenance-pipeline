@@ -32,7 +32,9 @@ class ProfilesController < ApplicationController
 
     SearchProfile.transaction do
       @profile.save!
-      AuditEvent.record_write!(@profile, actor: AuditEvent::OPERATOR, reasoning: "Saved on the Profile page.")
+      # The company preferences (4b) in the operator's own words, by a hash alone.
+      AuditEvent.record_write!(@profile, actor: AuditEvent::OPERATOR, reasoning: "Saved on the Profile page.",
+                                         digest: CompanyPreferences::PRIVATE)
     end
     # What the saved profile suggests now: the suggestions follow it.
     redirect_to profile_path, notice: "Profile saved. #{Verifier::Suggestions.refresh!(profile: @profile).summary}",

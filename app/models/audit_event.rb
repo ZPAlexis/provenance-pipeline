@@ -96,7 +96,7 @@ class AuditEvent < ApplicationRecord
       pair = key ? changes.dig(attribute, key) : changes[attribute]
       next unless pair
 
-      hashed = pair.map { |value| Resume.digest(value) if value.present? }
+      hashed = pair.map { |value| Resume.digest(value.is_a?(Array) ? value.join("\n") : value) if value.present? }
       key ? changes[attribute][key] = hashed : changes[attribute] = hashed
     end
     changes

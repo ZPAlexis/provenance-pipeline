@@ -5,6 +5,8 @@ class Company < ApplicationRecord
   has_many :review_items, dependent: :destroy
   has_many :applications, dependent: :restrict_with_exception
   has_many :contacts, -> { by_name }, dependent: :destroy, inverse_of: :company
+  # How well it fits the operator's company preferences (4b), every review kept. The key cascades.
+  has_many :company_reviews, dependent: nil
   # No `dependent:` on purpose — see Posting#audit_events.
   has_many :audit_events, as: :target
 

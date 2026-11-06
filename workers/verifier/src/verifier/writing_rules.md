@@ -52,3 +52,19 @@ A fit score weighs one role against the resume, so the person can see which role
 - Matches: the two to four strongest things the role asks that the resume shows, each with the resume lines that show it, by their numbers in brackets.
 - Gaps: what the role asks for that the resume doesn't show, its must-haves first.
 - Why: one plain sentence that explains the score.
+
+## company_fit
+
+A company review weighs one company against the person's company preferences (what they want and what they avoid, in their own words, and the stages, sizes, business models, industries and words to avoid they listed), and where it hires against the places they can work, so they can see which companies to watch first. It is advice for them, and claims nothing for them. Weigh only what you can source: a page you read, never a guess.
+- Facts: what it sells and to whom, its stage and last funding, its size, where it is based, the regions it operates and hires in, its technology, signals (growth, layoffs, news), and values or positions it has stated, each with the links behind it. Give its stage, size, business model and industries in the person's own terms where they apply.
+- Points: one per preference, each a match (it meets it), a miss (it doesn't) or unknown (nothing found), with the evidence and its links. Unknown is never a match: say what you could not find.
+- Score: a whole number from 0 to 100, by how much of what the person wants it meets, what they want most weighing most:
+  - 85 to 100: it meets what they want most, nothing they avoid, and hires where they can work.
+  - 70 to 84: most of what they want, nothing they avoid, with a gap or two in what matters less.
+  - 50 to 69: some of what they want, nothing they avoid, or too much unknown to say more.
+  - 25 to 49: little of what they want, or something they avoid.
+  - 0 to 24: little or nothing they want, and what they avoid.
+- Something they avoid that it does is a miss on that preference, and caps the score at 49, however much else it meets.
+- A review that knows less than it doesn't (more unknown than met and missed together) says so in its why.
+- Concerns and open questions: what would change the score, and what to ask or look for next.
+- Why: one plain sentence that explains the score.

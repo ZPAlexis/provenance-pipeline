@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_06_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_06_000003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -140,6 +140,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000001) do
     t.index ["name"], name: "index_companies_on_name"
     t.index ["resolution_status"], name: "index_companies_on_resolution_status"
     t.index ["tracking"], name: "index_companies_on_tracking"
+  end
+
+  create_table "company_reviews", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.integer "score", null: false
+    t.text "why", null: false
+    t.string "stage"
+    t.string "size"
+    t.string "business_model"
+    t.string "industries", default: [], null: false, array: true
+    t.string "regions", default: [], null: false, array: true
+    t.jsonb "facts", default: [], null: false
+    t.jsonb "points", default: [], null: false
+    t.jsonb "concerns", default: [], null: false
+    t.jsonb "questions", default: [], null: false
+    t.jsonb "sources", default: [], null: false
+    t.string "preferences_digest", null: false
+    t.string "written_by", null: false
+    t.string "reported_model"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id", "created_at"], name: "index_company_reviews_on_company_id_and_created_at"
+    t.index ["company_id"], name: "index_company_reviews_on_company_id"
+    t.check_constraint "score >= 0 AND score <= 100", name: "company_reviews_score_range"
   end
 
   create_table "contacts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -384,6 +408,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000001) do
     t.string "levels", default: [], null: false, array: true
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "company_wants"
+    t.text "company_avoids"
+    t.string "company_stages", default: [], null: false, array: true
+    t.string "company_sizes", default: [], null: false, array: true
+    t.string "company_models", default: [], null: false, array: true
+    t.string "company_industries", default: [], null: false, array: true
+    t.string "company_excluded", default: [], null: false, array: true
   end
 
   add_foreign_key "activities", "applications"
@@ -395,6 +426,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000001) do
   add_foreign_key "audit_events", "agent_credentials", column: "credential_id"
   add_foreign_key "check_runs", "companies"
   add_foreign_key "check_runs", "postings", on_delete: :nullify
+  add_foreign_key "company_reviews", "companies", on_delete: :cascade
   add_foreign_key "contacts", "companies", on_delete: :cascade
   add_foreign_key "drafts", "applications", on_delete: :cascade
   add_foreign_key "drafts", "contacts", on_delete: :nullify

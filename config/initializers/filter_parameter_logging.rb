@@ -17,3 +17,6 @@ Rails.application.config.filter_parameters += [
   :resume_text, /\Atext\z/, :body, /subject\z/, :guidance, /\Anotes?\z/, :comp_expectation, :summary,
   /\Aname\z/, /\Arole\z/, :linkedin, /\Achanges_made\z/
 ]
+
+# What the operator wants of a company and avoids (4b), in their own words: their values and stances, too.
+Rails.application.config.filter_parameters += [ /\Acompany_(wants|avoids|excluded)/ ]

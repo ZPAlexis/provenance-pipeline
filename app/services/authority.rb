@@ -156,6 +156,21 @@ module Authority
         Rule.new(model: "ApplicationContact", actions: %i[create]) # the contact an activity names, linked to its application
       ]
     },
+    # 4b: what the operator wants of a company, saved on their word; never the rest of the profile, nor the resume.
+    "company_preferences:write" => {
+      about: "On the operator's word: save what they want of a company (what they want and avoid, in their words, and " \
+             "the stages, sizes, business models, industries and words to avoid), recorded as the client's with a fixed " \
+             "reason. Never the titles, places, levels, work modes or excluded words of the roles they look for, nor " \
+             "the resume.",
+      rules: [ Rule.new(model: "SearchProfile", actions: %i[update], attributes: SearchProfile::COMPANY_PREFERENCES) ]
+    },
+    # 4b: how well a company fits those preferences, as the operator's own client researched it.
+    "company_reviews:write" => {
+      about: "Save a review of how well a company fits the operator's company preferences, as their own Claude client " \
+             "researched it: a score and why, the facts found with their sources, one line per preference. Never edit " \
+             "or delete one.",
+      rules: [ Rule.new(model: "CompanyReview", actions: %i[create], only_if: ->(review) { review.written_by == "agent:assistant" }) ]
+    },
     "watchlist:curate" => {
       about: "On the operator's word, with their reason: track or archive a role or a company, add a role to a company " \
              "they track (tracked, its title given, never checked), or change a role's own page at the employer; and, on " \
@@ -204,13 +219,15 @@ module Authority
                                    "100 and why, for the operator to rank roles by. Tracks, dismisses and sends nothing.",
                             scopes: %w[fit:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
-                                  "contacts, activities, the roles and companies it proposes, the fit it weighs, and what it " \
-                                  "recommends on the review queue), and curates the watch list on the operator's word (tracks " \
+                                  "contacts, activities, the roles and companies it proposes, the fit it weighs, its reviews " \
+                                  "of companies, the company preferences it is told, and what it recommends on the review " \
+                                  "queue), and curates the watch list on the operator's word (tracks " \
                                   "or archives roles and companies, adds a role, changes a role's own page), one credential per " \
                                   "call holding only that tool's scopes. Decides, approves, deletes, moves a stage, and sends " \
                                   "nothing.",
                            scopes: %w[drafts:write resume_reviews:write contacts:write activities:write postings:suggest fit:write
-                                      review:recommend watchlist:curate companies:suggest] }
+                                      review:recommend watchlist:curate companies:suggest company_reviews:write
+                                      company_preferences:write] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.
@@ -226,7 +243,7 @@ module Authority
   # What no scope grants: the operator's alone, whatever an agent holds.
   HUMAN_ONLY = [
     "Start an application, or move one between stages", "Edit or approve a draft", "Decide a review item",
-    "Edit the search profile or the resume",
+    "Edit the search profile (its company preferences aside, which the operator's own client may save on their word) or the resume",
     "Ask for a check that writes a verdict or spends API credit", "Name a company or set its kind",
     "Delete a contact", "Issue or revoke a credential"
   ].freeze
