@@ -39,7 +39,10 @@ module ProvenanceMcp
           found = names.map { |name| Lookup.company(name) }.uniq
           want = action == "archive" ? "dismissed" : "tracked"
           already, change = found.partition { |company| company.tracking == want }
-          done = ApplicationRecord.transaction { change.map { |company| [ company, decide!(company, action, reason.strip, with_roles) ] } }
+          # Whether each was a proposal (4b) is read before it changes: tracking one has its board read once this commits.
+          done = ApplicationRecord.transaction do
+            change.map { |company| [ company, company.suggested?, decide!(company, action, reason.strip, with_roles) ] }
+          end
           said(action, done, already)
         rescue ArgumentError => e # an open application, said by the service: nothing changed
           raise Refusal, "Nothing changed: #{e.message}."
@@ -57,11 +60,19 @@ module ProvenanceMcp
 
         def said(action, done, already)
           went = action == "archive" ? "archived with it" : "back with it"
-          lines = done.map { |company, roles| "- #{company.name}: #{roles.size} #{roles.one? ? 'role' : 'roles'} #{went}" } +
+          lines = done.map { |company, proposal, roles| proposal ? proposal_said(action, company) : "- #{company.name}: #{roles.size} #{roles.one? ? 'role' : 'roles'} #{went}" } +
                   already.map { |company| "- #{company.name}: already #{action == 'archive' ? 'archived' : 'tracked'}, left as it is" }
           what = action == "archive" ? "never checked, suggested from or reviewed again until tracked" : "checked, suggested from and reviewed again"
           ProvenanceMcp.text("#{done.size} #{done.one? ? 'company' : 'companies'} #{action == 'archive' ? 'archived' : 'tracked'} on the " \
                              "operator's word, the reason on the record: #{what}.", Writing.fence("record", lines.join("\n")))
+        end
+
+        # A company proposed to the operator (4b): declined, or tracked with its board read now, free.
+        def proposal_said(action, company)
+          return "- #{company.name}: a proposal, declined: never proposed again" if action == "archive"
+          return "- #{company.name}: a proposal, tracked; it names no known board, so Check now finds its careers page" unless Verifier::BoardRead.link(company)
+
+          "- #{company.name}: a proposal, tracked; the board it was proposed with is being read now, free (see get_company_status in a minute)"
         end
       end
     end

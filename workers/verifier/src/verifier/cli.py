@@ -3,6 +3,9 @@
 extract  checks each careers page and extracts its listings: one PageResult per target.
 resolve  finds each company's careers page: one ResolutionResult per target,
          carrying every page it checked on the way.
+own_board reads the board each company was proposed with (4b), through its API,
+         and says whether it is the company's: one ResolutionResult per target.
+         Never calls the LLM, never walks the resolver's ladder.
 match    matches a company's tracked postings against listings already read (a
          stored page check): one MatchResult per target, nothing rendered.
 verify   reads each company's watched page in full and matches its postings
@@ -64,6 +67,7 @@ from verifier.contract import (
     FitTarget,
     MatchResult,
     MatchTarget,
+    OwnBoardTarget,
     PageResult,
     RelatedResult,
     RelateTarget,
@@ -169,6 +173,13 @@ def run_resolve(targets: list[ResolveTarget], out_path: Path, resolver: Resolver
         return ResolutionResult(target_id=target.id, outcome="error", reason=reason)
 
     return _run(targets, out_path, resolver.resolve, failed, log)
+
+
+def run_own_board(targets: list[OwnBoardTarget], out_path: Path, resolver: Resolver, log=sys.stderr) -> RunSummary:
+    def failed(target: OwnBoardTarget, reason: str) -> ResolutionResult:
+        return ResolutionResult(target_id=target.id, outcome="error", reason=reason)
+
+    return _run(targets, out_path, resolver.own_board, failed, log)
 
 
 def run_verify(targets: list[VerifyTarget], out_path: Path, services: Services, matcher: Matcher, log=sys.stderr):
@@ -312,7 +323,7 @@ def _reasons(result: Result) -> list[str | None]:
     return [page.reason for page in _pages(result)] + own
 
 
-def _describe(target: Target | ResolveTarget | BoardTarget | SuggestTarget, result: Result) -> str:
+def _describe(target: Target | ResolveTarget | OwnBoardTarget | BoardTarget | SuggestTarget, result: Result) -> str:
     cost = sum(usage.cost_usd for usage in _usages(result))
     timing = f"({result.duration_ms / 1000:.1f}s{f', ${cost:.4f}' if cost else ''})"
     if isinstance(result, RelatedResult):
@@ -380,6 +391,9 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("extract", parents=[common], help="check careers pages and extract their listings")
     commands.add_parser("resolve", parents=[common], help="find companies' careers pages")
+    commands.add_parser(
+        "own_board", parents=[common], help="read the board each company was proposed with; never calls the LLM"
+    )
     match = commands.add_parser("match", parents=[common], help="match postings against listings already read")
     verify = commands.add_parser("verify", parents=[common], help="read watched pages in full and verify postings")
     check = commands.add_parser("check", parents=[common], help="check one tracked role per target, its own page first")
@@ -399,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
 
     model = {
         "resolve": ResolveTarget,
+        "own_board": OwnBoardTarget,
         "match": MatchTarget,
         "verify": VerifyTarget,
         "check": VerifyTarget,
@@ -490,6 +505,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "resolve":
                 resolver = Resolver(ServicesReader(services), link_picker=LlmLinkPicker(model=llm_model))
                 summary = run_resolve(targets, args.out, resolver)
+            elif args.command == "own_board":
+                # No link picker: nothing here may call the LLM.
+                summary = run_own_board(targets, args.out, Resolver(ServicesReader(services)))
             elif args.command == "boards":
                 summary = run_boards(targets, args.out, ServicesReader(services))
             elif args.command == "describe":

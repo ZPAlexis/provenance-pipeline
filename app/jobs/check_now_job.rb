@@ -33,7 +33,7 @@ class CheckNowJob < ApplicationJob
         Verifier::Descriptions.read!(missing, purpose: "fit: descriptions to weigh", issued_by: check_run.requested_by) if missing.any?
         FitScores.weigh!(roles, issued_by: check_run.requested_by)
       when "role" then Verifier::CheckNow.role(check_run.posting)
-      else Verifier::CheckNow.company(check_run.company)
+      else check_run.board_read? ? Verifier::BoardRead.run!(check_run.company) : Verifier::CheckNow.company(check_run.company)
       end
     check_run.update!(
       status: outcome.finished? ? "done" : "failed", finished_at: Time.current,

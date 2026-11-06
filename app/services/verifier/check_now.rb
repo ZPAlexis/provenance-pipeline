@@ -23,6 +23,8 @@ module Verifier
         "#{record.role_title} is archived: track it again to check it."
       elsif company.dismissed?
         "#{company.name} is archived: track it again to check it."
+      elsif company.suggested?
+        "#{company.name} was proposed to you, not tracked: track it to check it."
       elsif company.kind == "aggregator"
         "#{company.name} is an aggregator: its postings belong to other employers."
       elsif company.resolution_status == "candidate"

@@ -65,7 +65,7 @@ module ProvenanceMcp
           head, detail = WatchList.roles_line(company.id, roles)
           said = [ head.presence, (detail.presence && "(#{detail})") ].compact.join(" ").presence || "none"
           at = application && "#{Application.stage_label(application.stage)} (#{application.posting.role_title})"
-          "- #{company.name} (#{company.domain || 'no domain'})#{', archived' if tab == 'all' && company.dismissed?}, id #{company.id}\n" \
+          "- #{company.name} (#{company.domain || 'no domain'})#{", #{Verifier::Tracking.label(company.tracking)}" if tab == 'all' && !company.tracked?}, id #{company.id}\n" \
             "  careers page: #{page(company)}; roles: #{said}; application: #{at || 'none'}; " \
             "last checked: #{checked ? checked.utc.to_date.iso8601 : 'never'}"
         end

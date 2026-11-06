@@ -3,7 +3,9 @@ module Verifier
   # role; only the operator tracks or dismisses one, audited as theirs with why.
   # A dismissed role is never checked or suggested again, until the operator
   # tracks it again by hand. An archived company ("dismissed", stored as a role's is) is never watched: not
-  # checked, not suggested from, nothing raised to review; its roles in play are archived with it.
+  # checked, not suggested from, nothing raised to review; its roles in play are archived with it. A company the
+  # operator's own client proposed (4b, "suggested") is tracked or archived the same way: tracking it reads the board
+  # it was proposed with at once, free (BoardRead); archiving it declines it, for good.
   module Tracking
     # How a role archived with its company is told apart from one archived on its own: tracking the company again
     # brings back only these, each to the state it had.
@@ -34,10 +36,12 @@ module Verifier
         raise ArgumentError, "#{company.name} has an open application (#{open.posting.role_title}): close or withdraw it first"
       end
 
+      declined = company.suggested?
       ApplicationRecord.transaction do
         company.update!(tracking: "dismissed")
         AuditEvent.record_write!(company, actor: actor,
-                                          reasoning: "Archived #{by(actor)}: never checked, suggested from or reviewed again. #{note}")
+                                          reasoning: declined ? "Declined #{by(actor)}: proposed by the operator's own Claude client, archived, and never proposed again. #{note}" :
+                                                                "Archived #{by(actor)}: never checked, suggested from or reviewed again. #{note}")
         roles = company.postings.not_dismissed.to_a
         roles.each do |posting|
           posting.update!(tracking: "dismissed")
@@ -48,14 +52,19 @@ module Verifier
       end
     end
 
-    # Tracks an archived company again, and (unless asked not to) the roles archived with it, each as it was before.
+    # Tracks an archived company again, and (unless asked not to) the roles archived with it, each as it was before. A
+    # proposal tracked has the board it was proposed with read once this commits, free, as `actor`'s request.
     def track_company!(company, note:, with_roles: true, actor: AuditEvent::OPERATOR)
       refuse_company!(company, "tracked", note)
 
+      proposal = company.suggested?
       ApplicationRecord.transaction do
         back = with_roles ? archived_with(company) : {}
         company.update!(tracking: "tracked")
-        AuditEvent.record_write!(company, actor: actor, reasoning: "Tracked #{by(actor)}. #{note}")
+        AuditEvent.record_write!(company, actor: actor,
+                                          reasoning: proposal ? "Tracked #{by(actor)}: proposed by the operator's own Claude client. #{note}" :
+                                                                "Tracked #{by(actor)}. #{note}")
+        BoardRead.after_tracking(company, requested_by: actor) if proposal
         back.each do |posting, was|
           posting.update!(tracking: was)
           AuditEvent.record_write!(posting, actor: actor, reasoning: "Back with its company: #{note}")

@@ -80,6 +80,20 @@ RSpec.describe Verifier::Worker do
       expect(ENV["ANTHROPIC_API_KEY"]).not_to eq("sk-test-123")
     end
 
+    # 4b: the read on tracking a proposal is free by construction. The key is unset in the worker's environment even
+    # when the file holds one, or the shell had one, so nothing the worker runs can reach the LLM.
+    it "is never given, and is taken out of the worker's environment, when the run is free" do
+      credential_file.write("export ANTHROPIC_API_KEY=\"sk-test-123\"\n")
+      process = fake_process
+
+      free = worker(process, free: true)
+      free.run(targets, command: "own_board")
+
+      expect([ free.free?, free.credential? ]).to eq([ true, false ])
+      expect(process.spawned[:env]).to eq("ANTHROPIC_API_KEY" => nil, "ANTHROPIC_AUTH_TOKEN" => nil)
+      expect(process.spawned[:command]).to include("own_board")
+    end
+
     it "is simply absent when there is no credential file" do
       process = fake_process
 

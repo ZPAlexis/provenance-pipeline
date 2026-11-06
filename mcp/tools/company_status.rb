@@ -36,6 +36,7 @@ module ProvenanceMcp
         def heading(company)
           kind = { "recruiter" => "a recruiter (its roles are its clients')", "aggregator" => "an aggregator (other employers' roles: never watched)" }
           archived = ", archived: never checked, suggested from or reviewed, until the operator tracks it again" if company.dismissed?
+          archived = ", proposed by the operator's own Claude client: not watched until the operator tracks it" if company.suggested?
           "#{company.name}#{" (#{company.domain})" if company.domain}#{", #{kind[company.kind]}" if kind[company.kind]}#{archived}, id #{company.id}"
         end
 
@@ -44,7 +45,7 @@ module ProvenanceMcp
           when "resolved"
             how = [ company.resolution_method&.tr('_', ' '), ("#{company.resolution_confidence} confidence" if company.resolution_confidence) ].compact
             board = ", read through its free #{company.board_vendor.capitalize} board" if company.board_in_use
-            "#{company.kind == 'aggregator' || company.dismissed? ? 'on record, not watched' : 'watched'}: #{company.careers_page_url}" \
+            "#{company.kind == 'aggregator' || !company.tracked? ? 'on record, not watched' : 'watched'}: #{company.careers_page_url}" \
               "#{" (found by #{how.join(', ')})" if how.any?}#{board}"
           when "candidate" then "a candidate found at low confidence, waiting for the operator to confirm: #{company.resolution_candidate_url}"
           when "failed" then "none found (#{company.resolution_failure&.tr('_', ' ') || 'no reason recorded'})"

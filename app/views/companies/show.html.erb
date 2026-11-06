@@ -9,6 +9,8 @@
 <%= render "companies/watch", company: @company, in_play: @in_play, open_application: @open_application, archived_with: @archived_with %>
 <% if @company.dismissed? %>
   <p class="muted small">Archived: never checked, suggested from or reviewed, until you track it again.</p>
+<% elsif @company.suggested? %>
+  <p class="muted small">Proposed by your own Claude client: not watched, checked or reviewed until you track it. Tracking it reads the board it was proposed with at once, free; archiving it declines it for good.</p>
 <% end %>
 
 <dl class="facts">

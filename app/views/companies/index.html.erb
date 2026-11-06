@@ -94,7 +94,7 @@
               <% end %>
               <td>
                 <%= link_to company.name, company_path(company) %>
-                <%= tracking_badge(company.tracking) if company.dismissed? && @tab == "all" %>
+                <%= tracking_badge(company.tracking) if !company.tracked? && @tab == "all" %>
                 <div class="small"><%= domain_link(company) %></div>
               </td>
               <td><%= careers_page_cell(company) %></td>

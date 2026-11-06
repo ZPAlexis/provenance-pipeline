@@ -36,8 +36,9 @@ module ProvenanceMcp
           found = names.map { |name| Lookup.role(name) }.uniq
           want = action == "archive" ? "dismissed" : "tracked"
           already, change = found.partition { |role| role.tracking == want }
-          if action == "track" && (held = change.find { |role| role.company.dismissed? })
-            raise Refusal, "Nothing changed: #{held.company.name} is archived: track the company first, with track_or_archive_companies."
+          if action == "track" && (held = change.find { |role| !role.company.tracked? })
+            state = held.company.dismissed? ? "is archived" : "was proposed, not tracked"
+            raise Refusal, "Nothing changed: #{held.company.name} #{state}: track the company first, with track_or_archive_companies."
           end
 
           ApplicationRecord.transaction { change.each { |role| decide!(role, action, reason.strip) } }

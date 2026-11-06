@@ -1,4 +1,4 @@
-from verifier.contract import AtsBoard, Listing, LlmUsage, PageResult, ResolveTarget
+from verifier.contract import AtsBoard, Listing, LlmUsage, OwnBoardTarget, PageResult, ResolveTarget
 from verifier.extract import ExtractionFailed, LinkChoice
 from verifier.render import RenderedPage
 from verifier.resolve import Resolver, ServicesReader, careers_links
@@ -33,6 +33,7 @@ class FakeReader:
         confirms=False,
         board_links=None,
         many=None,
+        behind=None,
     ):
         self.answering = set(answering)
         self.pages = pages or {}
@@ -45,6 +46,8 @@ class FakeReader:
         self.board = board
         self.confirms = confirms
         self.links_off_board = board_links
+        self.behind = behind  # (board, listings) a proposal's link is on or links to
+        self.behind_asked: list[str] = []
         self.many = many or {}  # url -> "recruiter" | "job_board": a page of many employers' roles
         self.checked: list[tuple[str, str]] = []
 
@@ -92,6 +95,10 @@ class FakeReader:
 
     def board_links(self, board):
         return self.links_off_board
+
+    def board_behind(self, url):
+        self.behind_asked.append(url)
+        return self.behind
 
 
 class FakePicker:
@@ -597,3 +604,70 @@ def test_a_confirmed_aggregators_page_of_other_companies_postings_is_never_its_c
     result = resolve(reader, ACME.model_copy(update={"kind": "aggregator"}))
 
     assert result.outcome == "failed"
+
+
+# --- The board a company was proposed with (4b) ---------------------------------
+
+PROPOSED = OwnBoardTarget(
+    id="c1", label="Acme", domain="acme.example", name="Acme Robotics", url="https://jobs.ashbyhq.com/acme"
+)
+ACME_BOARD = AtsBoard(vendor="ashby", board="acme")
+
+
+def own_board(reader, picker=None):
+    return Resolver(reader, link_picker=picker).own_board(PROPOSED)
+
+
+def test_a_proposed_board_whose_vendor_records_the_company_is_watched_at_medium():
+    picker = FakePicker(link=1)
+    reader = FakeReader(behind=(ACME_BOARD, [Listing(title="GTM Engineer"), Listing(title="SDR")]), confirms=True)
+
+    result = own_board(reader, picker)
+
+    assert (result.outcome, result.method, result.confidence) == ("resolved", "proposal", "medium")
+    assert result.careers_page_url == "https://jobs.ashbyhq.com/acme"
+    assert "the company was proposed with, records the same company name" in result.evidence
+    assert [(check.step, check.listing_count) for check in result.checks] == [("proposal", 2)]
+    # Nothing but the board: no ladder, no page checked, no LLM.
+    assert (reader.behind_asked, reader.checked, picker.calls) == (["https://jobs.ashbyhq.com/acme"], [], 0)
+
+
+def test_a_proposed_board_that_links_to_the_companys_site_is_watched_at_medium():
+    reader = FakeReader(behind=(ACME_BOARD, [Listing(title="GTM Engineer")]), board_links=["https://acme.example/"])
+
+    result = own_board(reader)
+
+    assert (result.outcome, result.confidence) == ("resolved", "medium")
+    assert "links to acme.example, the company's own site" in result.evidence
+
+
+def test_a_proposed_board_nothing_ties_to_the_company_waits_for_the_operator():
+    reader = FakeReader(behind=(ACME_BOARD, [Listing(title="GTM Engineer")]), board_links=["https://ashbyhq.com/"])
+
+    result = own_board(reader)
+
+    assert (result.outcome, result.method, result.confidence) == ("candidate", "proposal", "low")
+    assert "nothing confirms it is this company's" in result.evidence
+
+
+def test_a_proposed_board_of_another_company_is_not_found_and_says_whose():
+    reader = FakeReader(behind=(ACME_BOARD, [Listing(title="GTM Engineer")]), board_links=["https://acme.io/"])
+
+    result = own_board(reader)
+
+    assert (result.outcome, result.failure) == ("failed", "not_found")
+    assert result.checks[0].reason == "board_of_another_company"
+    assert "links to acme.io: another company's board" in result.evidence
+
+
+def test_a_proposal_link_on_no_known_board_reads_nothing_more():
+    picker = FakePicker(link=1)
+    reader = FakeReader(
+        home=page([("Careers", "https://acme.example/careers")]), pages={"https://acme.example/careers": 4}
+    )
+
+    result = own_board(reader, picker)
+
+    assert (result.outcome, result.failure, result.checks) == ("failed", "not_found", [])
+    assert "No known board at https://jobs.ashbyhq.com/acme" in result.evidence
+    assert (reader.checked, picker.calls) == ([], 0)

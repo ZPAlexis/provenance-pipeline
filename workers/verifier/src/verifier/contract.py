@@ -24,9 +24,13 @@ Outcome = Literal["ok", "blocked", "inaccessible", "error"]
 
 # Resolution: how a careers page was found, and the step a page was checked at.
 # page_link: a link followed one level from a careers page that was found but did
-# not list its jobs itself, or listed only some of them.
-ResolutionMethod = Literal["imported", "path_probe", "homepage_link", "page_link", "ats_guess", "llm_link"]
-ResolutionStep = Literal["imported", "path_probe", "homepage", "homepage_link", "page_link", "ats_guess", "llm_link"]
+# not list its jobs itself, or listed only some of them. proposal: the board a
+# company was proposed with (4b), read through its API, whose it is confirmed
+# as a guessed board's is.
+ResolutionMethod = Literal["imported", "path_probe", "homepage_link", "page_link", "ats_guess", "llm_link", "proposal"]
+ResolutionStep = Literal[
+    "imported", "path_probe", "homepage", "homepage_link", "page_link", "ats_guess", "llm_link", "proposal"
+]
 
 
 class Target(BaseModel):
@@ -111,6 +115,16 @@ class ResolveTarget(BaseModel):
     name: str | None = None
     known_url: str | None = None  # a page already on record, tried first
     kind: CompanyKind | None = None  # as the operator confirmed it; None while unconfirmed
+
+
+class OwnBoardTarget(BaseModel):
+    """A company proposed with a link where its roles are listed (4b): a known board's, or a page that links to one."""
+
+    id: str
+    label: str | None = None
+    domain: str | None = None
+    name: str | None = None
+    url: str
 
 
 class ResolutionResult(BaseModel):

@@ -42,10 +42,14 @@ class AuditEvent < ApplicationRecord
   # included. JSONB hashes are diffed key by key: an overwrite keeps the value
   # it replaced, and no event carries a whole blob twice.
   #
+  # `digest` names what the event holds by a hash alone, as "attribute" or "attribute.key" (a key of a JSONB
+  # attribute): text that is the operator's own business, such as why a company may fit them (4b), kept off this log,
+  # which can never be edited, as a contact's details and the resume are.
+  #
   # Returns nil when the save changed nothing — no write, no event.
-  def self.record_write!(record, actor:, reasoning: nil, model_version: nil)
+  def self.record_write!(record, actor:, reasoning: nil, model_version: nil, digest: [])
     created = record.previously_new_record?
-    changes = diff(created ? record.attributes.transform_values { |value| [ nil, value ] } : record.saved_changes)
+    changes = digested(diff(created ? record.attributes.transform_values { |value| [ nil, value ] } : record.saved_changes), digest)
     return if changes.empty?
 
     record!(
@@ -86,7 +90,19 @@ class AuditEvent < ApplicationRecord
     end
   end
 
-  private_class_method :diff, :diff_hash
+  def self.digested(changes, fields)
+    fields.each do |field|
+      attribute, key = field.split(".", 2)
+      pair = key ? changes.dig(attribute, key) : changes[attribute]
+      next unless pair
+
+      hashed = pair.map { |value| Resume.digest(value) if value.present? }
+      key ? changes[attribute][key] = hashed : changes[attribute] = hashed
+    end
+    changes
+  end
+
+  private_class_method :diff, :diff_hash, :digested
 
   private
 

@@ -5,6 +5,7 @@ The Python worker behind Stages 1.2, 1.5 and 2. It never touches the database: R
 ```bash
 uv run verifier extract --targets targets.json --out results.jsonl   # read careers pages, list their roles
 uv run verifier resolve --targets companies.json --out results.jsonl # find each company's careers page
+uv run verifier own_board --targets proposed.json --out results.jsonl # read the board a company was proposed with; whose is it? (no LLM)
 uv run verifier verify  --targets companies.json --out results.jsonl # read each watched page in full, match its postings
 uv run verifier match   --targets snapshots.json --out results.jsonl # match against listings read before (nothing fetched)
 uv run verifier check   --targets roles.json --out results.jsonl     # is one role still listed? its own page first
@@ -45,6 +46,8 @@ Cheapest, most certain step first. A page counts as found only when a check read
 Every result carries a confidence, so a person looks only where it matters. **High**: the company's own site, or a page it links to. **Medium**: a guessed board confirmed by its vendor's name record or its home link. **Low**: an unconfirmed guess, a link Claude picked, or a page that still shows only part of its list. A low-confidence find comes back as a *candidate* that Rails never watches until a person confirms it.
 
 One job's own posting is never a careers page. A company's own page of many employers' roles comes back as a candidate with a *suggested kind*: a recruiter's client roles (its careers page, once the operator says so) or an aggregator's listings (never its careers page).
+
+**A board a company was proposed with** (4b, `own_board`): when the operator tracks a company their own Claude client proposed, the board it named is read through its API and kept only as a guessed board is, if its vendor records the same company name or its own page links home (medium); a board nothing ties to the company is a candidate (low); another company's is discarded. Nothing else is tried, and the command never calls the LLM: Rails starts it with no API key at all.
 
 ## How postings are verified
 
@@ -113,7 +116,7 @@ Claude's reading of rendered pages is nearly all of a run's cost, so verificatio
 
 ## Code map
 
-`cli` runs a command over its targets; the orchestrators do one job each: `resolve` (finding the careers page), `verify` (reading it in full and matching), `check` (one role now), `describe` (a role's description), `draft` (a cover letter or outreach note), `review` (the resume against a role), `fit` (a role weighed against the resume), `related` (titles near a profile's), `boards` (the board search), `match` (posting against listings), `profiles` (which stored roles fit a search profile, and why). Under them: `pipeline` (one page read: robots, render, ATS API, extraction, reuse), `render`, `extract` (the LLM steps), `ats` (vendors, their APIs, whose board a board is), `robots`, `politeness`. `contract` is the boundary with Rails; `config` holds the model, limits, and delays; `errors` holds why a whole run stops early.
+`cli` runs a command over its targets; the orchestrators do one job each: `resolve` (finding the careers page, and `own_board`, whose a proposed board is), `verify` (reading it in full and matching), `check` (one role now), `describe` (a role's description), `draft` (a cover letter or outreach note), `review` (the resume against a role), `fit` (a role weighed against the resume), `related` (titles near a profile's), `boards` (the board search), `match` (posting against listings), `profiles` (which stored roles fit a search profile, and why). Under them: `pipeline` (one page read: robots, render, ATS API, extraction, reuse), `render`, `extract` (the LLM steps), `ats` (vendors, their APIs, whose board a board is), `robots`, `politeness`. `contract` is the boundary with Rails; `config` holds the model, limits, and delays; `errors` holds why a whole run stops early.
 
 **Helpers several modules share live in a neutral module, never inside an orchestrator:** `titles` (what a title is, word by word, and the level of experience it states: matching, board overlap, check now, and search profiles share one meaning of a title), `links` (whether two addresses name the same role or page), and `places` (what a location names, and whether a role there is open to where someone can work: a role in São Paulo, or open to Latin America, is open to Brazil). A change there changes every caller on purpose.
 

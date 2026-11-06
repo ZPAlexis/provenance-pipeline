@@ -140,6 +140,7 @@ module Verifier
 
       company = check.company
       raise ArgumentError, "#{company.name} is archived: track it again before suggesting its roles" if company.dismissed?
+      raise ArgumentError, "#{company.name} was proposed, not tracked: it is tracked first" unless company.tracked?
 
       latest, listings = Targets.latest_list(company)
       raise ArgumentError, "#{company.name}'s page was read again since: find its roles again" unless latest&.id == check.id

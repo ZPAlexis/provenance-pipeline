@@ -15,7 +15,7 @@ module Verifier
 
     RESULT_SCHEMA_VERSION = 2
 
-    COMMANDS = %w[extract resolve match verify check boards suggest related describe draft review fit].freeze
+    COMMANDS = %w[extract resolve own_board match verify check boards suggest related describe draft review fit].freeze
     # The commands whose targets and results quote the resume (2c, 2d, 2f): a run's files are removed as soon as its
     # results are read, since the record keeps what was written from them.
     PRIVATE = %w[draft review fit].freeze
@@ -58,19 +58,27 @@ module Verifier
 
     attr_reader :run_dir
 
-    def initialize(run_dir:, model: nil, credential_file: CREDENTIAL_FILE, process: Process)
+    # `free: true` starts the worker with no API key at all, whatever the file holds or the shell has: nothing it
+    # runs can reach the LLM, so the run costs nothing by construction (4b: the read on tracking a proposal). A step
+    # that would need the LLM stops the run instead, as a missing key does.
+    def initialize(run_dir:, model: nil, credential_file: CREDENTIAL_FILE, process: Process, free: false)
       @run_dir = Pathname.new(run_dir)
       @model = model
       @credential_file = Pathname.new(credential_file)
       @process = process
+      @free = free
     end
 
     def credential?
       api_key.present?
     end
 
+    def free? = @free
+
     # extract: targets are [{ id:, url:, label:, domain:, name: }], one PageResult each.
     # resolve: targets are [{ id:, label:, domain:, name:, known_url: }], one ResolutionResult each.
+    # own_board: targets are [{ id:, label:, domain:, name:, url: }], one ResolutionResult each: the board a proposal
+    # named, read through its API, and whose it is; never the LLM.
     # match: targets are [{ id:, label:, page_check_id:, complete:, listings:, postings: }], one MatchResult
     # each; nothing is fetched. `flags` are passed through, e.g. ["--no-llm"].
     # verify: targets from Verifier::Targets.verify, one VerificationResult each.
@@ -126,11 +134,15 @@ module Verifier
         *([ "--model", @model ] if @model), *flags ]
     end
 
+    # A nil value unsets the variable in the worker's environment.
     def worker_env
+      return { "ANTHROPIC_API_KEY" => nil, "ANTHROPIC_AUTH_TOKEN" => nil } if @free
+
       api_key ? { "ANTHROPIC_API_KEY" => api_key } : {}
     end
 
     def api_key
+      return if @free
       return @api_key if defined?(@api_key)
 
       @api_key = @credential_file.exist? ? parse_key(@credential_file.read) : nil

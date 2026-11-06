@@ -12,7 +12,7 @@ class PageCheck < ApplicationRecord
   # How a page's listings were read by the LLM, or carried over from such a read: what a reuse can start from.
   PAGE_READS = %w[render+llm reused].freeze
   OUTCOMES = %w[ok blocked inaccessible error].freeze
-  STEPS = %w[imported path_probe homepage homepage_link page_link ats_guess llm_link].freeze
+  STEPS = %w[imported path_probe homepage homepage_link page_link ats_guess llm_link proposal].freeze
 
   validates :run_id, :url, :checked_at, presence: true
   validates :purpose, inclusion: { in: PURPOSES }

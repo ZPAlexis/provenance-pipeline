@@ -29,7 +29,7 @@ module Verifier
 
     # Returns the result's outcome. Raises InvalidResult, writing nothing, for
     # a result that breaks the contract or names no known company.
-    def resolution(result)
+    def resolution(result, applied: %w[resolved candidate failed])
       errors = ResultContract.resolution_errors(result)
       raise InvalidResult, "#{result.try(:[], 'target_id') || '(no target)'}: #{errors.join('; ')}" if errors.any?
 
@@ -38,11 +38,16 @@ module Verifier
 
       ApplicationRecord.transaction do
         result["checks"].each { |check| record_check(company, check, purpose: "resolution") }
-        apply_resolution(company, result) unless result["outcome"] == "error"
+        apply_resolution(company, result) if applied.include?(result["outcome"])
         ReviewQueue.sync!(company)
       end
       result["outcome"]
     end
+
+    # The board a proposal named, read when it was tracked (4b): what was read is evidence, and the company's careers
+    # page is set only when the board is its own (resolved, at medium) or held for the operator to confirm. Another
+    # company's board, or none, changes nothing: the company has no page yet, for Check now to find.
+    def own_board(result) = resolution(result, applied: %w[resolved candidate])
 
     # Returns counts of what happened to the postings: written, unchanged, inconclusive.
     def verification(result)

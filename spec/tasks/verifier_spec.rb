@@ -118,4 +118,40 @@ RSpec.describe "verifier: and postings: commands" do
     expect(role.reload.company.name).to eq("Gamma")
     expect(run_task("postings:move", role.id, "Delta").aborted).to start_with("Say why in REASON=")
   end
+
+  # 4b: the companies the operator's own client proposed wait for them; tracking one reads the board it was proposed
+  # with then and there, free, and archiving one declines it.
+  it "lists the companies proposed to you, tracks one reading its board then and there, and declines another" do
+    read = Verifier::CheckNow::Outcome.new(summary: "Its board is its own: watched at https://jobs.ashbyhq.com/contoso. 12 roles read.",
+                                           tally: {}, cost_usd: 0.0)
+    allow(Verifier::BoardRead).to receive(:run!).and_return(read)
+    allow(DatabaseBackup).to receive(:daily)
+    contoso = create(:company, :proposed, name: "Contoso", domain: "contoso.example",
+                                          proposal: { "why" => "Sells to revenue teams in Brazil.", "source" => "job_board_search",
+                                                      "query" => "solutions engineer", "link" => "https://jobs.ashbyhq.com/contoso",
+                                                      "seen" => { "board" => "https://jobs.ashbyhq.com/contoso", "roles" => 12, "fitting" => 2,
+                                                                  "owner" => "confirmed" } })
+    fabrikam = create(:company, :proposed, name: "Fabrikam", domain: "fabrikam.example")
+
+    expect(run_task("verifier:proposals").out).to include(
+      "2 proposals wait for you:", "- Contoso (contoso.example), id #{contoso.id}",
+      "found by a job-board search (solutions engineer); its board, read free: 12 roles, 2 holding one of your titles (it names the company)",
+      "why: Sells to revenue teams in Brazil."
+    )
+    tracked = run_task("verifier:track_company", contoso.id, NOTE: "It fits.")
+    expect(tracked.out).to include("Contoso: tracked\n", "Its board, read free: Its board is its own: watched at https://jobs.ashbyhq.com/contoso.")
+    expect(Verifier::BoardRead).to have_received(:run!).with(contoso)
+    expect(CheckRun.sole).to have_attributes(status: "done", requested_by: "human:operator")
+    expect(CheckNowJob.queue_adapter).not_to be_a(ActiveJob::QueueAdapters::InlineAdapter)
+
+    expect(run_task("verifier:dismiss_company", fabrikam.id, NOTE: "Not my market.").out).to include("Fabrikam: declined, and never proposed again")
+    expect(run_task("verifier:proposals").out).to include("No proposal waits for you.")
+  end
+
+  it "looks for the careers pages of the companies you track alone" do
+    create(:company, name: "Archived Co", domain: "archived.example", tracking: "dismissed")
+    create(:company, :proposed, name: "Proposed Co", domain: "proposed.example")
+
+    expect(run_task("verifier:resolve").aborted).to eq("No companies to resolve.")
+  end
 end

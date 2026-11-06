@@ -40,6 +40,15 @@ module Authority
     posting.tracking == "tracked" && posting.company&.tracking == "tracked" && !posting.title_pending? &&
       posting.verification_state == "pending" && posting.last_checked_at.nil?
   end
+  # A company the operator's own client proposes (4b): suggested, with why, and still a proposal when its why is
+  # refreshed.
+  PROPOSED = ->(company) { company.suggested? && company.proposal.present? && (company.new_record? || company.tracking_in_database == "suggested") }
+  # The free read of a proposal's board, started when the client tracks it on the operator's word (4b), as the
+  # operator's own Track starts it: a company read, no ceiling (the worker runs with no API key), no verdict.
+  BOARD_READ = lambda do |run|
+    run.kind == "company" && run.request == { "read" => "board" } && run.ceiling_usd.to_d.zero? &&
+      run.requested_by == "agent:assistant" && run.status == "queued" && run.company&.tracked?
+  end
   # A draft as the drafter wrote it: not approved, and not edited (Stage 2c).
   AS_WRITTEN = lambda do |draft|
     draft.status == "draft" && draft.approved_at.nil? && draft.edited_at.nil? && !draft.edited?
@@ -76,7 +85,7 @@ module Authority
       about: "Propose a role at a company the operator tracks, bring its reasons up to date, or withdraw it, only while " \
              "it is a suggestion the operator hasn't acted on.",
       rules: [
-        Rule.new(model: "Posting", actions: %i[create], only_if: ->(posting) { SUGGESTED.call(posting) && !posting.company&.dismissed? }),
+        Rule.new(model: "Posting", actions: %i[create], only_if: ->(posting) { SUGGESTED.call(posting) && posting.company&.tracked? }),
         Rule.new(model: "Posting", actions: %i[update], attributes: %w[fit], only_if: SUGGESTED),
         Rule.new(model: "Posting", actions: %i[destroy], only_if: ->(posting) { posting.tracking_in_database == "suggested" })
       ]
@@ -85,8 +94,18 @@ module Authority
       about: "Companies from a Clay export: created, and their research added; never their name, domain, or kind once on " \
              "record, nor whether the operator tracks them.",
       rules: [
-        Rule.new(model: "Company", actions: %i[create], except: %w[tracking]),
-        Rule.new(model: "Company", actions: %i[update], except: %w[name domain kind tracking])
+        Rule.new(model: "Company", actions: %i[create], except: %w[tracking proposal]),
+        Rule.new(model: "Company", actions: %i[update], except: %w[name domain kind tracking proposal])
+      ]
+    },
+    "companies:suggest" => {
+      about: "Propose a company that may fit the operator, as their own Claude client: added as suggested, with its name, " \
+             "domain and why (where it was found, and what the app's own free read of its board saw), never tracked and " \
+             "never with a careers page; its why refreshed while it is still a proposal. Only the operator, or the " \
+             "client on their word, tracks one.",
+      rules: [
+        Rule.new(model: "Company", actions: %i[create], attributes: %w[name domain tracking proposal], only_if: PROPOSED),
+        Rule.new(model: "Company", actions: %i[update], attributes: %w[proposal], only_if: PROPOSED)
       ]
     },
     "postings:import" => {
@@ -139,7 +158,8 @@ module Authority
     },
     "watchlist:curate" => {
       about: "On the operator's word, with their reason: track or archive a role or a company, add a role to a company " \
-             "they track (tracked, its title given, never checked), or change a role's own page at the employer. Never a " \
+             "they track (tracked, its title given, never checked), or change a role's own page at the employer; and, on " \
+             "tracking a company proposed to them, start the free read of the board it was proposed with. Never a " \
              "verdict, a company's name, careers page or kind, nor anything of an application.",
       rules: [
         Rule.new(model: "Company", actions: %i[update], attributes: %w[tracking]),
@@ -147,7 +167,8 @@ module Authority
         Rule.new(model: "Posting", actions: %i[update], attributes: %w[tracking job_url posting_url],
                  only_if: ->(posting) { !posting.posting_url_changed? || posting.posting_url_in_database.nil? }),
         Rule.new(model: "Posting", actions: %i[create], attributes: %w[company_id role_title location job_url posting_url tracking],
-                 only_if: ADDED)
+                 only_if: ADDED),
+        Rule.new(model: "CheckRun", actions: %i[create], only_if: BOARD_READ)
       ]
     },
     "review:recommend" => {
@@ -183,12 +204,13 @@ module Authority
                                    "100 and why, for the operator to rank roles by. Tracks, dismisses and sends nothing.",
                             scopes: %w[fit:write] },
     "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
-                                  "contacts, activities, the roles it proposes, the fit it weighs, and what it recommends on the " \
-                                  "review queue), and curates the watch list on the operator's word (tracks or archives roles " \
-                                  "and companies, adds a role, changes a role's own page), one credential per call holding only " \
-                                  "that tool's scopes. Decides, approves, deletes, moves a stage, and sends nothing.",
+                                  "contacts, activities, the roles and companies it proposes, the fit it weighs, and what it " \
+                                  "recommends on the review queue), and curates the watch list on the operator's word (tracks " \
+                                  "or archives roles and companies, adds a role, changes a role's own page), one credential per " \
+                                  "call holding only that tool's scopes. Decides, approves, deletes, moves a stage, and sends " \
+                                  "nothing.",
                            scopes: %w[drafts:write resume_reviews:write contacts:write activities:write postings:suggest fit:write
-                                      review:recommend watchlist:curate] }
+                                      review:recommend watchlist:curate companies:suggest] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.

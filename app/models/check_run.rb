@@ -70,6 +70,18 @@ class CheckRun < ApplicationRecord
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
+  # The free read of a proposal's board on tracking it (4b), on its company's check (one at a time per company), or
+  # the company's check already under way: no ceiling, since the worker runs with no API key.
+  def self.start_board!(company, requested_by: AuditEvent::OPERATOR)
+    abandon_stale!
+    where(company: company, kind: "company").active.first || create!(
+      kind: "company", company: company, requested_by: requested_by, ceiling_usd: 0, request: { "read" => "board" }
+    ).tap { |run| CheckNowJob.perform_later(run) }
+  end
+
+  # The read of a proposal's board on tracking it (4b), not a check of its roles.
+  def board_read? = kind == "company" && request["read"] == "board"
+
   # A role's description read (2b), or the read already under way: free, so no ceiling.
   def self.start_describe!(posting, requested_by: AuditEvent::OPERATOR)
     abandon_stale!

@@ -41,6 +41,7 @@ from verifier.contract import (
     AtsBoard,
     Listing,
     LlmUsage,
+    OwnBoardTarget,
     PageResult,
     ResolutionResult,
     ResolutionStep,
@@ -93,8 +94,9 @@ class PageReader(Protocol):
     ) -> tuple[PageResult, RenderedPage | None]: ...
     def homepage(self, target: ResolveTarget, url: str) -> tuple[PageResult, RenderedPage | None]: ...
     def guess_board(self, target: ResolveTarget) -> tuple[AtsBoard, list[Listing]] | None: ...
-    def board_confirms(self, board: AtsBoard, target: ResolveTarget) -> bool: ...
+    def board_confirms(self, board: AtsBoard, target: ResolveTarget | OwnBoardTarget) -> bool: ...
     def board_links(self, board: AtsBoard) -> list[str] | None: ...
+    def board_behind(self, url: str) -> tuple[AtsBoard, list[Listing]] | None: ...
 
 
 class LinkPicker(Protocol):
@@ -123,11 +125,23 @@ class Resolver:
         except Exception as error:  # one company's surprise keeps the checks made, and their cost
             return attempt.finish(outcome="error", reason=f"unexpected:{type(error).__name__}")
 
+    def own_board(self, target: OwnBoardTarget) -> ResolutionResult:
+        """The board a company was proposed with (4b): read through its API, and whose it is, as a guessed board's is
+        confirmed. Free: a board's API, and its page rendered for its links when the vendor records no name; never
+        the LLM, never the ladder. Resolved at medium when it is the company's, a low candidate when nothing says."""
+        attempt = _Attempt(self, target)
+        try:
+            return attempt.own_board()
+        except (CreditExhausted, LlmConfigError):
+            raise
+        except Exception as error:
+            return attempt.finish(outcome="error", reason=f"unexpected:{type(error).__name__}")
+
 
 class _Attempt:
     """One company's walk down the ladder. Each step returns a result when it ends the walk."""
 
-    def __init__(self, resolver: Resolver, target: ResolveTarget):
+    def __init__(self, resolver: Resolver, target: ResolveTarget | OwnBoardTarget):
         self.resolver = resolver
         self.reader = resolver.reader
         self.target = target
@@ -261,12 +275,29 @@ class _Attempt:
         if not found:
             return None
         board, listings = found
+        guessed = f"A {board.vendor} board named {board.board!r}, guessed from the company's name or domain"
+        return self.owned(board, listings, "ats_guess", guessed)
+
+    def own_board(self) -> ResolutionResult:
+        found = self.reader.board_behind(self.target.url)
+        if not found:
+            return self.finish(outcome="failed", failure="not_found", evidence=f"No known board at {self.target.url}.")
+        board, listings = found
+        proposed = f"The {board.vendor} board named {board.board!r} the company was proposed with"
+        return self.owned(board, listings, "proposal", proposed) or self.finish(
+            outcome="failed", failure="not_found", evidence=self.checks[-1].notes
+        )
+
+    def owned(self, board: AtsBoard, listings: list[Listing], step, described: str) -> ResolutionResult | None:
+        """A board read through its API, at `step`: resolved at medium when it is the company's (the vendor records the
+        same name, or its page links to the company's site), a low candidate when nothing says, None when it is
+        another company's."""
         url = ats.board_url(board)
         self.checks.append(
             PageResult(
                 target_id=self.target.id,
                 url=url,
-                step="ats_guess",
+                step=step,
                 checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 outcome="ok",
                 method=f"ats_api:{board.vendor}",
@@ -275,27 +306,26 @@ class _Attempt:
                 listing_count=len(listings),
             )
         )
-        guessed = f"A {board.vendor} board named {board.board!r}, guessed from the company's name or domain"
         if self.reader.board_confirms(board, self.target):
             owner, host = "confirmed", None
-            why = f"{guessed}, records the same company name."
+            why = f"{described}, records the same company name."
         else:
             # The board's own link back to a company site says whose it is.
             owner, host = ats.board_owner(self.reader.board_links(board), self.target.domain)
             why = {
-                "confirmed": f"{guessed}, links to {host}, the company's own site.",
-                "elsewhere": f"{guessed}, links to {host}: another company's board.",
-                None: f"{guessed}; nothing confirms it is this company's (its page names no company site).",
+                "confirmed": f"{described}, links to {host}, the company's own site.",
+                "elsewhere": f"{described}, links to {host}: another company's board.",
+                None: f"{described}; nothing confirms it is this company's (its page names no company site).",
             }[owner]
         self.checks[-1] = self.checks[-1].model_copy(update={"notes": why})
         if owner == "elsewhere":
             self.checks[-1] = self.checks[-1].model_copy(update={"reason": "board_of_another_company"})
-            return None  # discarded: the ladder goes on
+            return None  # discarded
         return self.finish(
             outcome="resolved" if owner == "confirmed" else "candidate",
             careers_page_url=url,
             ats=board,
-            method="ats_guess",
+            method=step,
             confidence="medium" if owner == "confirmed" else "low",
             evidence=why,
         )
@@ -459,7 +489,7 @@ class ServicesReader:
         candidates = ats.board_candidates(target.domain, target.name)
         return ats.guessed_boards(candidates, self.services.http, wait=self.services.throttle.wait)
 
-    def board_confirms(self, board: AtsBoard, target: ResolveTarget) -> bool:
+    def board_confirms(self, board: AtsBoard, target: ResolveTarget | OwnBoardTarget) -> bool:
         self.services.throttle.wait(ats.api_host(board))
         return ats.names_match(ats.board_name(board, self.services.http), target.name)
 

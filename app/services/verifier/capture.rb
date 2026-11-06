@@ -80,7 +80,8 @@ module Verifier
         elsewhere!(known, company) if known && company
         added = company_from(own, company_name, actor) unless known || company
         company ||= known&.company || added.company
-        again = chosen_again(company, own.url, actor) if known # a role found by where it was found, at an archived company
+        # A role found by where it was found, at a company archived, or a role added at a company proposed (4b).
+        again = chosen_again(company, own.url, actor) if known || company.suggested?
         known ||= by_link(company, own.url) || (by_title(company, title) if title.present?)
         note = note.to_s.squish.presence
         placed = known ? choose!(known, own, source, note, actor) : create_role!(company, own, title.presence, location, source, check, note, actor)
@@ -171,12 +172,16 @@ module Verifier
     end
 
     # A company the operator archived, chosen again by pasting a link to it, or to a role there (4a): tracked again,
-    # its roles archived with it left as they are. Returns what was done, in a sentence, or nil.
+    # its roles archived with it left as they are. A company proposed to them (4b), chosen the same way, is tracked, its
+    # board read at once, free. Returns what was done, in a sentence, or nil.
     def chosen_again(company, url, actor)
-      return unless company.dismissed?
+      return if company.tracked?
 
+      proposal = company.suggested?
       Tracking.track_company!(company, note: "Added by URL: #{url}.", with_roles: false, actor: actor)
-      "#{company.name} was archived: tracked again (its archived roles stay archived)."
+      return "#{company.name} was archived: tracked again (its archived roles stay archived)." unless proposal
+
+      "#{company.name} was proposed to you: tracked#{BoardRead.link(company) ? ', and the board it was proposed with is read now, free' : ''}."
     end
 
     def existing(link, name)

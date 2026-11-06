@@ -13,6 +13,15 @@ FactoryBot.define do
       careers_page_url { "https://#{domain || 'careers.example'}/careers" }
     end
 
+    # Proposed by the operator's own Claude client (4b): not tracked, with why and the board it named.
+    trait :proposed do
+      tracking { "suggested" }
+      proposal do
+        { "why" => "Sells to revenue teams in Brazil.", "source" => "job_board_search",
+          "link" => "https://jobs.ashbyhq.com/#{name.parameterize}", "written_by" => "agent:assistant" }
+      end
+    end
+
     trait :resolved do
       with_careers_page
       resolution_status { "resolved" }

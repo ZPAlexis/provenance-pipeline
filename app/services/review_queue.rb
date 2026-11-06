@@ -53,6 +53,7 @@ module ReviewQueue
   def closing(company, finding)
     return "Resolved: what was seen changed." if finding
     return "Resolved: its company is archived." if company.dismissed?
+    return "Resolved: its company is not tracked." unless company.tracked?
 
     "Resolved: no longer asked by the record."
   end
@@ -147,9 +148,10 @@ module ReviewQueue
 
   # --- What a company's record asks of the operator now ----------------------
 
-  # Nothing is asked about a company the operator archived (4a): its open items close, and none is raised.
+  # Nothing is asked about a company the operator archived (4a), or one proposed to them and not yet tracked (4b): its
+  # open items close, and none is raised.
   def findings(company)
-    return [] if company.dismissed?
+    return [] unless company.tracked?
 
     [ candidate(company), kind(company), no_page(company), partial_list(company), page_changed(company),
       *company.postings.where.not(tracking: "dismissed").flat_map { |posting| [ suspect(posting), unconfirmed(posting) ] } ].compact

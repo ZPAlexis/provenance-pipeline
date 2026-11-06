@@ -15,6 +15,19 @@ namespace :verifier do
   end
 
   report_stop = ->(run) { puts "\nSTOPPED EARLY: #{run.stopped}. Results so far are kept in #{run.dir}." if run.stopped }
+  # A company proposed to the operator (4b) and chosen by a command has the board it was proposed with read at once,
+  # free: here and now, so the command can say what it found.
+  board_reads_here = lambda do |&work|
+    was = CheckNowJob.queue_adapter
+    CheckNowJob.queue_adapter = :inline
+    work.call
+  ensure
+    CheckNowJob.queue_adapter = was
+  end
+  board_read_said = lambda do |company, since|
+    run = company.check_runs.where(kind: "company").where(created_at: since..).newest_first.first
+    puts "Its board, read free: #{run.summary || run.error}" if run&.board_read?
+  end
 
   desc "Test A: extract listings from every careers page with a recorded roles count. [MODEL=claude-haiku-4-5]"
   task test_a: :environment do
@@ -102,8 +115,9 @@ namespace :verifier do
       if ENV["IDS"].present?
         Company.where(id: ENV["IDS"].split(",").map(&:strip))
       else
-        { nil => Company.unresolved, "on_record" => Company.unresolved.with_careers_page,
-          "none" => Company.unresolved.needing_careers_page }.fetch(ENV["PAGE"].presence) do
+        # Only companies the operator tracks: an archived one, or one proposed to them (4b), is never looked for.
+        { nil => Company.tracked.unresolved, "on_record" => Company.tracked.unresolved.with_careers_page,
+          "none" => Company.tracked.unresolved.needing_careers_page }.fetch(ENV["PAGE"].presence) do
           abort "PAGE is on_record or none."
         end
       end
@@ -234,10 +248,12 @@ namespace :verifier do
     Verifier::Capture.parse(url)
     Verifier::Capture.careers_page(ENV["PAGE"]) if ENV["PAGE"].present?
     puts "Backed up to #{DatabaseBackup.call}"
+    since = Time.current
     # COMPANY_NAME, never NAME: shells set NAME already (WSL sets it to the machine's name).
-    added = Verifier::Capture.company!(url, name: ENV["COMPANY_NAME"], page: ENV["PAGE"])
+    added = board_reads_here.call { Verifier::Capture.company!(url, name: ENV["COMPANY_NAME"], page: ENV["PAGE"]) }
     company = added.company
     puts added.note
+    board_read_said.call(company, since)
     unless ENV["CHECK"] == "1"
       case company.resolution_status
       when "resolved" then puts "Not read: CHECK=1 reads its roles now."
@@ -272,10 +288,14 @@ namespace :verifier do
     own = Verifier::Capture.parse(url, role: true)
     Verifier::Capture.at_company!(company, own) if company
     puts "Backed up to #{DatabaseBackup.call}"
-    placed = Verifier::Capture.role!(link: url, title: ENV["TITLE"], location: ENV["LOCATION"], source: ENV["SOURCE"],
-                                     company_name: ENV["COMPANY"], company: company, check: check)
+    since = Time.current
+    placed = board_reads_here.call do
+      Verifier::Capture.role!(link: url, title: ENV["TITLE"], location: ENV["LOCATION"], source: ENV["SOURCE"],
+                              company_name: ENV["COMPANY"], company: company, check: check)
+    end
     posting = placed.posting
     puts placed.note
+    board_read_said.call(posting.company, since)
     unless check
       puts "Not checked: CHECK=1 checks it now, its own page first."
       next
@@ -611,7 +631,8 @@ namespace :verifier do
   end
 
   desc "Archive a company: never checked, suggested from or reviewed again, its tracked and suggested roles archived " \
-       "with it (track it again to undo). Refused while it has an open application. Audited as you; backs up first. " \
+       "with it (track it again to undo). Refused while it has an open application. A company proposed to you is " \
+       "declined, and never proposed again. Audited as you; backs up first. " \
        "Usage: NOTE=\"why\" bin/rails \"verifier:dismiss_company[company_id]\""
   task :dismiss_company, [ :id ] => :environment do |_task, args|
     company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}: its id is in its page's address."
@@ -619,24 +640,56 @@ namespace :verifier do
     abort "#{company.name} is already archived." if company.dismissed?
 
     puts "Backed up to #{DatabaseBackup.call}"
+    declined = company.suggested?
     roles = Verifier::Tracking.dismiss_company!(company, note: ENV["NOTE"])
-    puts "#{company.name}: archived, with #{roles.size} #{roles.one? ? 'role' : 'roles'} in play archived with it"
+    puts declined ? "#{company.name}: declined, and never proposed again" :
+                    "#{company.name}: archived, with #{roles.size} #{roles.one? ? 'role' : 'roles'} in play archived with it"
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
   end
 
   desc "Track an archived company again, and the roles archived with it, each as it was (ROLES=0 leaves them " \
-       "archived). Audited as you; backs up first. Usage: NOTE=\"why\" bin/rails \"verifier:track_company[company_id]\""
+       "archived); or a company proposed to you, reading the board it was proposed with now, free (no API key). " \
+       "Audited as you; backs up first. Usage: NOTE=\"why\" bin/rails \"verifier:track_company[company_id]\""
   task :track_company, [ :id ] => :environment do |_task, args|
     company = Company.find_by(id: args[:id]) or abort "No company #{args[:id].inspect}: its id is in its page's address."
     abort "Say why: NOTE=\"...\" becomes the audit reasoning." if ENV["NOTE"].blank?
-    abort "#{company.name} is already tracked." unless company.dismissed?
+    abort "#{company.name} is already tracked." if company.tracked?
 
     puts "Backed up to #{DatabaseBackup.call}"
-    back = Verifier::Tracking.track_company!(company, note: ENV["NOTE"], with_roles: ENV["ROLES"] != "0")
-    puts "#{company.name}: tracked, with #{back.size} #{back.one? ? 'role' : 'roles'} back"
+    proposal = company.suggested?
+    since = Time.current
+    back = board_reads_here.call { Verifier::Tracking.track_company!(company, note: ENV["NOTE"], with_roles: ENV["ROLES"] != "0") }
+    puts proposal ? "#{company.name}: tracked" : "#{company.name}: tracked, with #{back.size} #{back.one? ? 'role' : 'roles'} back"
+    if proposal
+      Verifier::BoardRead.link(company) ? board_read_said.call(company, since) : puts("No known board to read: Check now finds its careers page.")
+    end
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
+  end
+
+  desc "The companies your own Claude client proposed (4b), waiting for you: each with its id, where it was found, " \
+       "what its board listed when the app read it, and why it may fit. Track one (verifier:track_company) or decline " \
+       "it (verifier:dismiss_company). Reads only."
+  task proposals: :environment do
+    proposals = Company.suggested.order(:name).to_a
+    puts proposals.empty? ? "No proposal waits for you." : "#{proposals.size} #{proposals.one? ? 'proposal waits' : 'proposals wait'} for you:"
+    proposals.each do |company|
+      proposal = company.proposal || {}
+      seen = proposal["seen"] || {}
+      board = if seen["board"]
+        fitting = ", #{seen['fitting']} holding one of your titles" if seen["fitting"]
+        owner = { "confirmed" => "it names the company", "unconfirmed" => "nothing ties it to the company",
+                  "another company's" => "another company's" }[seen["owner"]]
+        "its board, read free: #{seen['roles']} roles#{fitting}#{" (#{owner})" if owner}"
+      else
+        "no known board read"
+      end
+      source = Verifier::Proposals::SOURCES.fetch(proposal["source"], "somewhere")
+      puts "\n- #{company.name} (#{company.domain || 'no domain'}), id #{company.id}"
+      puts "  found by #{source}#{" (#{proposal['query']})" if proposal['query']}; #{board}"
+      puts "  why: #{proposal['why'].to_s.squish.truncate(300)}"
+    end
   end
 
   desc "Fill in each posting's own page at the employer from the listing it already matched. No API cost; " \

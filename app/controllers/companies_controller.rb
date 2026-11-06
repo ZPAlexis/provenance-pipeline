@@ -21,8 +21,10 @@ class CompaniesController < ApplicationController
   # play, or tracked again with the roles archived with it (unless asked not to).
   def track
     company = Company.find(params[:id])
+    proposal = company.suggested?
     back = Verifier::Tracking.track_company!(company, note: params[:note], with_roles: params[:with_roles] == "1")
-    redirect_to company_path(company), notice: "#{company.name}: tracked#{", #{helpers.pluralize(back.size, 'role')} back with it" if back.any?}.",
+    read = (Verifier::BoardRead.link(company) ? " The board it was proposed with is being read now, free." : " Check now finds its careers page.") if proposal
+    redirect_to company_path(company), notice: "#{company.name}: tracked#{", #{helpers.pluralize(back.size, 'role')} back with it" if back.any?}.#{read}",
                                        status: :see_other
   rescue ArgumentError => e
     redirect_to company_path(company), alert: "#{e.message.upcase_first}.", status: :see_other

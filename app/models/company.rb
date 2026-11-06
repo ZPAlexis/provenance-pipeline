@@ -17,9 +17,10 @@ class Company < ApplicationRecord
   #
   # resolved   careers_page_url is set, with its method and confidence.
   #            high: found on the company's own domain, or a board its own
-  #            page links to or embeds. medium: a guessed board the vendor's
-  #            own record confirms. confirmed: a human confirmed a candidate, or
-  #            set the page by hand (method "manual").
+  #            page links to or embeds. medium: a guessed board, or the board a
+  #            proposal named (method "proposal", 4b), that the vendor's own record
+  #            or the board's link home confirms. confirmed: a human confirmed a
+  #            candidate, or set the page by hand (method "manual").
   # candidate  a low-confidence find (an unconfirmed guess, or a link the LLM
   #            picked), held in resolution_candidate_url until a human
   #            confirms or rejects it. Never written as the watched page.
@@ -29,7 +30,7 @@ class Company < ApplicationRecord
   #            "anonymised" is a posting whose employer is withheld: there is
   #            no company to find. "rejected" is a candidate a human turned down.
   RESOLUTION_STATUSES = %w[resolved candidate failed].freeze
-  RESOLUTION_METHODS = %w[imported path_probe homepage_link page_link ats_guess llm_link manual].freeze
+  RESOLUTION_METHODS = %w[imported path_probe homepage_link page_link ats_guess llm_link proposal manual].freeze
   RESOLUTION_CONFIDENCES = %w[high medium low confirmed].freeze
   RESOLUTION_FAILURES = %w[no_domain anonymised not_found blocked inaccessible rejected].freeze
 
@@ -47,8 +48,11 @@ class Company < ApplicationRecord
   BOARD_MAX_AGE = 30.days
 
   # Whether the operator follows the company (4a), as with a role: tracked, or archived ("dismissed", the stored word
-  # for it, as for roles). Only a tracked company is watched; archiving one archives its roles in play with it.
-  TRACKING = %w[tracked dismissed].freeze
+  # for it, as for roles). Only a tracked company is watched; archiving one archives its roles in play with it. Since 4b
+  # a company may also be "suggested": proposed by the operator's own Claude client (companies:suggest), with why in
+  # `proposal`, and not watched until the operator, or the client on their word, tracks it. Archiving a proposal
+  # declines it, for good: it is never proposed again.
+  TRACKING = %w[tracked suggested dismissed].freeze
 
   validates :name, presence: true
   validates :domain, uniqueness: true, allow_nil: true
@@ -77,6 +81,7 @@ class Company < ApplicationRecord
   scope :unresolved, -> { where(resolution_status: nil) }
   scope :resolution_candidates, -> { where(resolution_status: "candidate") }
   scope :tracked, -> { where(tracking: "tracked") }
+  scope :suggested, -> { where(tracking: "suggested") }
   scope :dismissed, -> { where(tracking: "dismissed") }
   # Companies whose name or domain, or the place of one of their roles, hold every word typed (the Companies page's Find):
   # a company has no place of its own on record, so "Brazil" finds those with a role there.
@@ -103,6 +108,12 @@ class Company < ApplicationRecord
       find_or_initialize_by(name: name)
     end
   end
+
+  # Followed by the operator: the only state in which a company is checked, suggested from, or reviewed (4a).
+  def tracked? = tracking == "tracked"
+
+  # Proposed by the operator's own Claude client (4b), not yet tracked or declined.
+  def suggested? = tracking == "suggested"
 
   # Archived by the operator: never watched, suggested from or reviewed until tracked again.
   def dismissed? = tracking == "dismissed"
