@@ -98,6 +98,49 @@ RSpec.describe Verifier::Proposals do
     expect(AuditEvent.count - before).to eq(1)
   end
 
+  it "reads only the boards of those it will save: one on record and tracked waits no read" do
+    create(:company, name: "Litware", domain: "litware.example")
+    finder = worker_class.new([ board_read ])
+
+    outcomes = propose(candidate(name: "Litware", domain: "litware.example", links: [ "https://jobs.ashbyhq.com/litware" ]), candidate,
+                       finder: finder, weigher: worker_class.new([]))
+
+    expect(outcomes.map(&:status)).to eq(%w[refused created])
+    expect(finder.asked[:targets]).to contain_exactly(hash_including(name: "Fabrikam"))
+  end
+
+  it "never writes a proposal onto another company whose board its link is, reading nothing for it" do
+    litware = create(:company, :proposed, name: "Litware", domain: "litware.example", board_vendor: "lever", board_token: "litware",
+                                          board_confirmed_at: Time.current)
+    finder = worker_class.new([])
+    taken = candidate(link: "https://jobs.lever.co/litware", links: [])
+
+    outcome = propose(taken, finder: finder).sole
+    checked = described_class.check([ taken ], finder: finder).sole
+
+    said = "its link is Litware's, on record (litware.example), not fabrikam.example's: give the link to its own roles, or none"
+    expect([ outcome.status, outcome.note ]).to eq([ "refused", "Fabrikam: #{said}" ])
+    expect([ checked.company, checked.refusal ]).to eq([ nil, said ])
+    expect(litware.reload.proposal["why"]).to eq("Sells to revenue teams in Brazil.")
+    expect(finder.asked).to be_nil
+  end
+
+  it "says whether each is on record and in which state, and reads the boards of the rest, writing nothing" do
+    create(:company, name: "Litware", domain: "litware.example", tracking: "dismissed")
+    finder = worker_class.new([ board_read ])
+    weigher = worker_class.new([ { "kind" => "suggestion", "target_id" => "c0",
+                                   "roles" => [ { "suggested" => true, "listing" => { "title" => "Solutions Engineer" } } ] } ])
+
+    checked = described_class.check([ candidate(name: "Litware", domain: "litware.example"), candidate, candidate(name: "Nameless", domain: "") ],
+                                    finder: finder, weigher: weigher)
+
+    expect(checked.map { |each| [ each.company&.name, each.seen&.fetch("roles", nil), each.fitting.size, each.refusal ] }).to eq([
+      [ "Litware", nil, 0, nil ], [ nil, 3, 1, nil ], [ nil, nil, 0, "give the company's own domain (acme.com)" ]
+    ])
+    expect(finder.asked[:targets]).to contain_exactly(hash_including(name: "Fabrikam"))
+    expect(Company.count).to eq(1)
+  end
+
   it "refreshes the why of a company proposed already, keeping its name" do
     proposed = create(:company, :proposed, name: "Fabrikam", domain: "fabrikam.example")
     old_why = proposed.proposal["why"]

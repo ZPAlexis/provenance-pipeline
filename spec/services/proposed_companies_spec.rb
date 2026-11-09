@@ -73,7 +73,7 @@ RSpec.describe "A company proposed and not yet tracked" do
     it "is said to be a proposal, not watched" do
       expect(said(call(:CompanyStatus, company: "Contoso"))).to include("Contoso (contoso.example), proposed by the operator's own Claude " \
                                                                          "client: not watched until the operator tracks it, id #{proposal.id}")
-      expect(said(call(:ListCompanies, tracking: "all"))).to include("- Contoso (contoso.example), suggested, id #{proposal.id}")
+      expect(said(call(:ListCompanies, tracking: "all"))).to include("- Contoso (contoso.example), proposed, id #{proposal.id}")
     end
   end
 

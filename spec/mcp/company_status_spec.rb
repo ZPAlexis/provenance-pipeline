@@ -42,6 +42,7 @@ RSpec.describe ProvenanceMcp::Tools::CompanyStatus do
       - Office Manager (archived, still listed): #{id.call('Office Manager')}
       Careers page last checked: 2026-10-14 13:33 UTC (7 days ago)
       Applications: 1 (screening 1)
+      Company review: none
       </record>
     TEXT
   end
@@ -169,14 +170,17 @@ RSpec.describe ProvenanceMcp do
     begin
       client.connect(mode: :modern)
       expect(client.tools.map(&:name)).to include("get_company_status", "get_application_materials", "save_draft", "save_resume_review",
-                                                   "list_contacts", "save_contact", "log_activity", "query_audit_log", "get_analytics")
+                                                   "list_contacts", "save_contact", "log_activity", "query_audit_log", "get_analytics",
+                                                   "get_company_preferences", "save_company_preferences", "check_company",
+                                                   "suggest_companies", "save_company_review")
 
       response = client.call_tool(name: "get_company_status", arguments: { company: "no-such-company.example" })
       expect(response.dig("result", "isError")).to be(true)
       expect(response.dig("result", "content", 0, "text")).to eq('No company matches "no-such-company.example".')
 
       # The prompts a client offers to pick, and the completion of their application as it is typed (none on record here).
-      expect(client.prompts.map { |prompt| prompt["name"] }).to eq(%w[cover_letter find_roles outreach_note review_queue resume_review tailored_resume weigh_roles])
+      expect(client.prompts.map { |prompt| prompt["name"] }).to eq(%w[cover_letter find_companies find_roles outreach_note review_queue resume_review
+                                                                       review_companies tailored_resume weigh_roles])
       expect(client.complete(ref: { type: "ref/prompt", name: "cover_letter" }, argument: { name: "application", value: "acme" }))
         .to include("values" => [])
     ensure

@@ -50,12 +50,35 @@ module ProvenanceMcp
     tells you to, with their reason, never on your own judgment: a fit score, a recommendation or a stale answer is a
     reason to ask them, not to act. Archiving a company archives its roles in play; it is refused while an
     application there is open.
+    To find companies that may fit the person, use the find_companies prompt: get_company_preferences (what they want
+    of a company, with the rules a company review keeps), check_company (whether one is on record, and its job board
+    read free), suggest_companies (proposed for them to track or decline, never tracked), save_company_review. To
+    review companies on record, use review_companies; asked to review companies without which or how many, say how
+    many are due (list_companies' fit filters) and ask first. Review a company only when the person asks. Never
+    propose a company tracked or archived: an archived one was declined or let go. Read LinkedIn only in what the
+    person pastes to you: never open it yourself (nothing here can stop your own web tools, so this is yours to keep).
+    Save the company preferences with save_company_preferences only on the person's word, as they said them. A
+    proposal is tracked or declined only on their word, with track_or_archive_companies. A company's fit and a role's
+    fit are two scores: never weigh one into the other.
     Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score,
-    save_recommendation, and the watch-list tools above) save what you wrote, were told, weighed or recommend back to
-    the record: use them only when the person asks you to. Each save is recorded as yours, for them to edit, approve,
-    accept, archive, undo or delete; nothing is ever sent, no tool decides a review item, and no tool moves an
-    application between stages.
+    save_recommendation, suggest_companies, save_company_review, save_company_preferences, and the watch-list tools
+    above) save what you wrote, were told, weighed or recommend back to the record: use them only when the person asks
+    you to. Each save is recorded as yours, for them to edit, approve, accept, archive, undo or delete;
+    nothing is ever sent, no tool decides a review item, and no tool moves an application between stages.
   TEXT
+
+  # The values the company tools take (4b step 4), as literals: the tools load before Rails boots (the server answers
+  # discovery at once), so their schemas can't read the app's constants. spec/mcp/companies_spec.rb ties each to the
+  # app's own (SearchProfile, CompanyReview, Verifier::Proposals).
+  module CompanyValues
+    STAGES = %w[pre_seed seed series_a series_b series_c_plus public private bootstrapped].freeze
+    SIZES = %w[1-10 11-50 51-200 201-500 501-1000 1001-5000 5001+].freeze
+    MODELS = %w[b2b b2c b2b2c].freeze
+    SOURCES = %w[job_board_search lookalike news list linkedin other].freeze
+    ABOUT = %w[wants avoids stage size business_model industries excluded places].freeze
+    VERDICTS = %w[match miss unknown].freeze
+    MAX = 10 # companies a call
+  end
 
   # A tool's answer that is a refusal the client should read (no such company, a missing input), not a failure.
   class Refusal < StandardError; end
@@ -111,10 +134,10 @@ module ProvenanceMcp
   end
 
   # What a prompt's argument could be, as the operator types it: an application's company and role, the contact an
-  # outreach note is for (2e), or a kind of review item (2g).
+  # outreach note is for (2e), a kind of review item (2g), a company to find more like, or which companies to review (4b).
   def complete(params)
     argument = params.dig(:argument, :name).to_s
-    return { completion: { values: [] } } unless %w[application contact kind].include?(argument)
+    return { completion: { values: [] } } unless %w[application contact kind like which].include?(argument)
 
     ready!
     typed = params.dig(:argument, :value).to_s
@@ -122,6 +145,8 @@ module ProvenanceMcp
       case argument
       when "application" then applications(typed)
       when "contact" then contacts(typed, params.dig(:context, :arguments, :application))
+      when "like" then Company.matching(typed.strip.presence).limit(101).pluck(:name).sort_by { |name| [ name.downcase, name ] }
+      when "which" then Prompts::ReviewCompanies::WHICH.keys.select { |which| which.include?(typed.strip.downcase.tr(' ', '_')) }
       else ReviewItem::KINDS.select { |kind| kind.include?(typed.strip.downcase.tr(' ', '_')) }
       end
     end

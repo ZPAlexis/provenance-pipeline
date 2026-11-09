@@ -35,8 +35,9 @@ RSpec.describe "The watch list through MCP" do
 
       text = said(call(:ListCompanies))
 
-      expect(text).to start_with("Companies: tracked 2, archived 1, all 3. Of the tracked: no careers page yet 1, page to confirm 0, " \
-                                 "no role tracked 1, none still listed 0.\nShowing 1 to 2 of 2")
+      expect(text).to start_with("Companies: tracked 2, proposed 0, archived 1, all 3. Of the tracked: no careers page yet 1, page to " \
+                                 "confirm 0, no role tracked 1, none still listed 0; by fit: 85 and up 0, 70 and up 0, 50 and up 0, " \
+                                 "not reviewed 2, stale 0, due a review 0.\nShowing 1 to 2 of 2")
       expect(text).to include("<record>\n- Acme (acme.example), id #{acme.id}\n  careers page: watched at https://acme.example/careers; " \
                               "roles: 1 tracked, 1 suggested (1 still listed); application: none; last checked: never")
       expect(text).to include("- Bare Inc (bare.example), id", "careers page: none found; roles: none").and(not_include("Contoso"))

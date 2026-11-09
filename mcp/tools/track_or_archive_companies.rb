@@ -13,8 +13,10 @@ module ProvenanceMcp
                   "reason. An archived company is never checked, suggested from or reviewed again, and its tracked and " \
                   "suggested roles are archived with it; tracking it again brings those roles back as they were (unless " \
                   "with_roles is false). All or none: a company with an open application can't be archived, and then " \
-                  "nothing changes. Those already so are left as they are. Up to #{MAX} a call. Recorded as yours, with " \
-                  "the reason; the operator undoes it in the app, or asks you to."
+                  "nothing changes. Those already so are left as they are. A company proposed to the operator is " \
+                  "accepted by tracking it (the board it was proposed with is read at once, free) or declined by " \
+                  "archiving it (never proposed again). Up to #{MAX} a call. Recorded as yours, with the reason; the " \
+                  "operator undoes it in the app, or asks you to."
       scopes "watchlist:curate"
       input_schema(
         properties: {

@@ -83,6 +83,45 @@ module ProvenanceMcp
         TEXT
     end
 
+    # How a company is reviewed and saved (4b step 4), in the operator's voice: the shared rules, then the answer's shape.
+    def company_fit_instructions
+      [ "Review how well each company fits what I want of a company, for me to choose which to watch: advice, never a " \
+        "claim. Write in English.",
+        rules.fetch("company_fit"),
+        <<~TEXT.strip ].join("\n\n")
+          Review each company on its own, from what you can source on the open web: its own site, its careers page or job
+          board, news and funding records. Read LinkedIn only in what I paste to you: never open it yourself. Save each
+          with save_company_review as you go: the company, the preferences version from here, the score, why, its stage,
+          size and business model in the values below, its industries in my words where they apply, the regions it
+          operates and hires in, the facts each with their links, one point per preference (about: wants, avoids, stage,
+          size, business_model, industries, excluded or places), concerns, open questions, the sources you checked, and
+          the model you are. Then give me the companies you reviewed, best first, each with its score and why in a line.
+        TEXT
+    end
+
+    # What the operator wants of a company (4b), fenced as data (their own words), with the places and titles a review
+    # also weighs, and the version a review is saved against.
+    def company_preferences(profile)
+      listed = ->(items, labels = nil) { items.presence&.map { |item| labels ? "#{item} (#{labels.fetch(item, item)})" : item }&.join(", ") || "(any)" }
+      fence("profile", [ "What they want: #{profile.company_wants || '(not said)'}",
+                         "What they avoid: #{profile.company_avoids || '(not said)'}",
+                         "Stages: #{listed.call(profile.company_stages, SearchProfile::COMPANY_STAGES)}",
+                         "Sizes (people): #{listed.call(profile.company_sizes)}",
+                         "Business models: #{listed.call(profile.company_models, SearchProfile::COMPANY_MODELS)}",
+                         "Industries: #{listed.call(profile.company_industries)}",
+                         "Words to avoid: #{profile.company_excluded.join(', ').presence || '(none)'}",
+                         "Places they can work: #{listed.call(profile.places)}",
+                         "Titles they search for: #{listed.call(profile.titles)}" ].join("\n"),
+            version: profile.company_preferences_version)
+    end
+
+    # The values a review's stage, size and business model take: the preferences' own lists.
+    def company_values
+      "A review's stage is one of #{SearchProfile::COMPANY_STAGES.map { |key, label| "#{key} (#{label})" }.join(', ')}; its size one of " \
+        "#{SearchProfile::COMPANY_SIZES.join(', ')} (people); its business model one of " \
+        "#{SearchProfile::COMPANY_MODELS.map { |key, label| "#{key} (#{label})" }.join(', ')}. Leave out what you couldn't source."
+    end
+
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out. Every tool keeps
     # its own framing (counts, ids, what to do next) outside them, and puts what came from the record or a page read
     # (names, titles, places, notes, bodies, reasoning) inside.
