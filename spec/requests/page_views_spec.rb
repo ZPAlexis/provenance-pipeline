@@ -9,8 +9,10 @@ RSpec.describe "Page views", type: :request do
   let!(:lost) { create(:check_run, :role, company: company, posting: role, status: "running", started_at: 2.hours.ago, updated_at: 2.hours.ago) }
   let!(:lost_company) { create(:check_run, company: company, status: "queued", updated_at: 2.hours.ago) }
   let!(:lost_everything) { create(:check_run, kind: "all", company: nil, status: "running", started_at: 5.hours.ago, updated_at: 5.hours.ago) }
-  # A company the operator's own client proposed (4b).
+  # A company the operator's own client proposed (4b), the company preferences, and a review of each.
   let!(:proposal) { create(:company, :proposed, name: "Contoso", domain: "contoso.example") }
+  let!(:profile) { SearchProfile.create!(titles: [ "Sales Engineer" ], places: [ "Brazil" ], company_models: %w[b2b]) }
+  let!(:reviews) { [ create(:company_review, company: company, stage: "series_b", industries: [ "Fintech" ]), create(:company_review, company: proposal) ] }
 
   # The statements that would change the record, made while the block runs.
   def writes
@@ -24,7 +26,9 @@ RSpec.describe "Page views", type: :request do
     credential, = AgentCredential.issue!(actor: "agent:verifier", scopes: %w[postings:verify], purpose: "verifier:verify",
                                          ttl: 1.hour, issued_by: AuditEvent::OPERATOR)
     pages = [ root_path, check_all_path, changes_path, audit_path, analytics_path, roles_path, role_path(role),
-              companies_path, company_path(company), company_path(proposal), companies_path(tab: "all"), applications_path, application_path(application), review_path,
+              companies_path, company_path(company), company_path(proposal), companies_path(tab: "all"), companies_path(tab: "suggested"),
+              companies_path(fit: "70", sort: "fit", stage: "series_b", industry: "fintech"), companies_path(fit: "stale"),
+              applications_path, application_path(application), review_path,
               agents_path, agent_credential_path(credential), profile_path, about_path, check_run_path(lost, poll: 1) ]
 
     pages.each do |page|
@@ -65,7 +69,7 @@ RSpec.describe "Page views", type: :request do
 
     get company_path(proposal)
 
-    expect(response.body).to include("Proposed by your own Claude client: not watched, checked or reviewed until you track it.",
+    expect(response.body).to include("Proposed by your own Claude client: not watched or checked until you track it.",
                                      "Track it", "Why track it?", "Declined for good: it is never proposed again.",
                                      "Reading the board it was proposed with, free")
     get companies_path(tab: "all")

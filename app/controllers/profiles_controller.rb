@@ -26,6 +26,21 @@ class ProfilesController < ApplicationController
     redirect_to profile_path(anchor: "resume"), alert: "#{e.message.upcase_first}.", status: :see_other
   end
 
+  # What the operator wants of a company (4b), its own form: saved as theirs through CompanyPreferences, which audits
+  # their own words by a hash alone. Saving it finds no suggestions (role suggestions read the rest of the profile); a
+  # company review read against the preferences before is stale from now on.
+  def company_preferences
+    profile = SearchProfile.current or return redirect_to(profile_path(anchor: "company"), alert: "Save the profile first: the company " \
+                                                                                                  "preferences are kept with it.", status: :see_other)
+    saved = CompanyPreferences.save!(profile, company_preference_params.to_h)
+    due = CompanyReviews.due(profile: profile).count
+    said = "#{helpers.pluralize(due, 'company')} tracked or proposed #{due == 1 ? 'is' : 'are'} due a review against them." if profile.company_preferences?
+    redirect_to profile_path(anchor: "company"), status: :see_other,
+                                                 notice: saved ? "Company preferences saved. #{said}".strip : "Nothing to save: they are as they were."
+  rescue ArgumentError => e
+    redirect_to profile_path(anchor: "company"), alert: "Not saved: #{e.message}.", status: :see_other
+  end
+
   def update
     @profile = editing
     return render(:show, status: :unprocessable_content) unless @profile.valid?
@@ -70,5 +85,11 @@ class ProfilesController < ApplicationController
 
   def profile_params
     params.expect(search_profile: [ :titles_text, :excluded_words_text, :places_text, work_modes: [], levels: [] ])
+  end
+
+  # The lists of words come as text, one per line (or comma-separated); the stages, sizes and models ticked.
+  def company_preference_params
+    params.expect(company_preferences: [ :company_wants, :company_avoids, :company_industries, :company_excluded,
+                                         company_stages: [], company_sizes: [], company_models: [] ])
   end
 end

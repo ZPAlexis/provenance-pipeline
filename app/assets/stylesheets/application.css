@@ -513,3 +513,17 @@ form.inline { display: inline-block; margin: 0 0 0 6px; }
   border: 1px solid var(--line);
   border-radius: 6px;
 }
+
+/* Finding companies (Stage 4b): a proposal's own words, a review point by point, and narrowing by what reviews found */
+
+dl.facts dd.said { white-space: pre-line; max-width: 760px; }
+.company-review ul.points li { margin-bottom: 6px; }
+.facts-form select {
+  max-width: 200px;
+  padding: 4px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}

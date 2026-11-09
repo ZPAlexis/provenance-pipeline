@@ -19,6 +19,14 @@ RSpec.describe SearchProfile do
     expect(profile.work_modes).to eq(%w[remote anywhere])
   end
 
+  it "keeps the company preferences' own words with plain line breaks, digested alike from the page or a command" do
+    typed = described_class.new(titles: [ "Solutions Engineer" ], company_wants: " Revenue tools.\r\nUsed daily. ")
+    given = described_class.new(titles: [ "Solutions Engineer" ], company_wants: "Revenue tools.\nUsed daily.")
+
+    expect(typed.company_wants).to eq("Revenue tools.\nUsed daily.")
+    expect(typed.company_preferences_digest).to eq(given.company_preferences_digest)
+  end
+
   it "is sent to the worker under the contract's names" do
     profile = described_class.new(titles: [ "Solutions Engineer" ], excluded_words: [ "Intern" ], places: [ "Brazil" ],
                                   work_modes: [ "remote" ], levels: [ "senior" ])

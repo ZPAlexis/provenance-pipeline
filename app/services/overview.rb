@@ -33,7 +33,8 @@ module Overview
       watched: Company.watched.count,
       boards: Company.watched.where.not(board_vendor: nil).count,
       candidates: Company.tracked.resolution_candidates.count,
-      unresolved: Company.tracked.where(resolution_status: [ nil, "failed" ]).count
+      unresolved: Company.tracked.where(resolution_status: [ nil, "failed" ]).count,
+      proposed: Company.suggested.count # proposals waiting for the operator (4b)
     }
   end
 

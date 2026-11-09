@@ -15,6 +15,11 @@ module ProfilesHelper
   def work_mode_options = SearchProfile::WORK_MODES.map { |mode| [ mode, WORK_MODE_LABELS.fetch(mode) ] }
   def level_options = SearchProfile::LEVELS.map { |level| [ level, LEVEL_LABELS.fetch(level) ] }
 
+  # What the operator wants of a company (4b): the lists ticked.
+  def company_stage_options = SearchProfile::COMPANY_STAGES.to_a
+  def company_size_options = SearchProfile::COMPANY_SIZES.map { |size| [ size, "#{size} people" ] }
+  def company_model_options = SearchProfile::COMPANY_MODELS.to_a
+
   def fit_note_label(note) = FIT_NOTE_LABELS.fetch(note, note.to_s.humanize)
   def fit_notes(notes) = safe_join(notes.map { |note| tag.span(fit_note_label(note), class: "badge unsure") }, " ")
 

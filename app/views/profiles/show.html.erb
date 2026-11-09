@@ -114,3 +114,82 @@
     It costs nothing and writes nothing.
   </p>
 <% end %>
+
+<h2 id="company">What you want of a company</h2>
+<p class="muted small">
+  Your own Claude client weighs a company against these when you ask it to review one, and proposes companies that may
+  fit them; where a company hires is weighed against your places above. A review read against them before is marked
+  stale when you change them. What you want and avoid, and the words to avoid, are your own business: the record of
+  each save holds them by a hash, never their text.
+</p>
+<% if @profile.persisted? %>
+  <%= form_with model: @profile, scope: :company_preferences, url: company_preferences_profile_path, method: :patch, class: "profile-form" do |f| %>
+    <div class="field">
+      <%= f.label :company_wants, "What you want" %>
+      <p class="hint">In your own words: what it makes and for whom, how it works, what matters to you in a company.</p>
+      <%= f.text_area :company_wants, rows: 3, placeholder: "Software for sales and revenue teams; a product people use daily" %>
+    </div>
+
+    <div class="field">
+      <%= f.label :company_avoids, "What you avoid" %>
+      <p class="hint">A company that does any of it scores at most 49, however much else it meets.</p>
+      <%= f.text_area :company_avoids, rows: 3, placeholder: "Ad tech built on tracking people" %>
+    </div>
+
+    <fieldset class="field">
+      <legend>Stages</legend>
+      <div class="choices">
+        <%= f.collection_check_boxes :company_stages, company_stage_options, :first, :last do |box| %>
+          <%= box.label { box.check_box + " " + box.text } %>
+        <% end %>
+      </div>
+      <p class="hint">None ticked: any.</p>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Sizes</legend>
+      <div class="choices">
+        <%= f.collection_check_boxes :company_sizes, company_size_options, :first, :last do |box| %>
+          <%= box.label { box.check_box + " " + box.text } %>
+        <% end %>
+      </div>
+      <p class="hint">None ticked: any.</p>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Business models</legend>
+      <div class="choices">
+        <%= f.collection_check_boxes :company_models, company_model_options, :first, :last do |box| %>
+          <%= box.label { box.check_box + " " + box.text } %>
+        <% end %>
+      </div>
+      <p class="hint">None ticked: any.</p>
+    </fieldset>
+
+    <div class="field">
+      <%= f.label :company_industries, "Industries" %>
+      <p class="hint">One per line, in your own words. A review names a company's industries in these words where they fit, so the Companies page can filter on them.</p>
+      <%= f.text_area :company_industries, value: @profile.company_industries_text, rows: 3, placeholder: "Fintech\nDeveloper tools" %>
+    </div>
+
+    <div class="field">
+      <%= f.label :company_excluded, "Words to avoid" %>
+      <p class="hint">One per line: an industry or a kind of product you won't work for. A company found doing one scores at most 49.</p>
+      <%= f.text_area :company_excluded, value: @profile.company_excluded_text, rows: 3, placeholder: "Gambling" %>
+    </div>
+
+    <div class="actions">
+      <%= f.button "Save company preferences", type: "submit", class: "btn primary" %>
+    </div>
+  <% end %>
+  <% if @profile.company_preferences? %>
+    <% due = CompanyReviews.due(profile: @profile).count %>
+    <p class="muted small">
+      Version <code><%= @profile.company_preferences_version %></code>, what a review is read against:
+      <%= pluralize(due, "company") %> tracked or proposed <%= due == 1 ? "has" : "have" %> no review against them as they are now
+      (on the Companies page: Not reviewed, or Stale).
+    </p>
+  <% end %>
+<% else %>
+  <p class="muted small">Save the profile above first: the company preferences are kept with it.</p>
+<% end %>

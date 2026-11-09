@@ -69,6 +69,10 @@
     <div class="value"><%= @companies[:candidates] %></div>
     <div class="label">Careers pages to confirm</div>
   <% end %>
+  <%= link_to companies_path(tab: "suggested"), class: "tile" do %>
+    <div class="value"><%= @companies[:proposed] %></div>
+    <div class="label">Companies proposed to you</div>
+  <% end %>
   <div class="tile">
     <div class="value"><%= money(@spend[:last_30_days]) %></div>
     <div class="label">API credit, last 30 days</div>

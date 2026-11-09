@@ -1,17 +1,32 @@
 class CompaniesController < ApplicationController
-  # The Companies page's tabs and filters (4a), shared with the MCP client's list_companies (WatchList).
+  # The Companies page's tabs and filters (4a; 4b's fit and facts), shared with the MCP client's list_companies (WatchList).
   TABS = WatchList::TABS
   FILTERS = WatchList::FILTERS
+  FITS = WatchList::FITS
+  FACTS = WatchList::FACTS
 
+  # Words and a review's facts narrow every count; within a tab, what needs a look (never on Suggested, where nothing is
+  # watched yet), then the fit. Sorted by name, or best fit first.
   def index
     @tab = TABS.key?(params[:tab]) ? params[:tab] : "tracked"
-    @filter = params[:filter] if FILTERS.key?(params[:filter])
+    @filter = params[:filter] if FILTERS.key?(params[:filter]) && @tab != "suggested"
+    @fit = params[:fit] if FITS.key?(params[:fit])
+    @sort = "fit" if params[:sort] == "fit"
+    @facts = FACTS.keys.to_h { |fact| [ fact, params[fact].to_s.strip ] }.compact_blank
     @q = params[:q].to_s.strip.presence
-    found = Company.matching(@q) # every company when nothing is typed
+    @keep = { tab: @tab, filter: @filter, fit: @fit, sort: @sort, q: @q, **@facts.symbolize_keys }
+    @profile = SearchProfile.current
+    found = WatchList.by_facts(Company.matching(@q), @facts) # every company when nothing is typed or chosen
     @counts, @filter_counts = WatchList.counts(found, @tab)
-    @companies = WatchList.narrow(WatchList.in_tab(found, @tab), @filter).order(:name).to_a
+    narrowed = WatchList.narrow(WatchList.in_tab(found, @tab), @filter)
+    @fit_counts = WatchList.fit_counts(narrowed, profile: @profile)
+    @companies = WatchList.by_fit(narrowed, @fit, profile: @profile).order(:name).to_a
     ids = @companies.map(&:id)
-    # Per company: its roles by tracking and answer, its newest application, and when it was last verified.
+    # Per company: its newest review, its roles by tracking and answer, its newest application, and when it was last verified.
+    @reviews = WatchList.reviews(ids)
+    @companies = @companies.sort_by.with_index { |company, index| [ -(@reviews[company.id]&.score || -1), index ] } if @sort
+    @reviewed = CompanyReview.exists?
+    @fact_options = @reviewed ? WatchList.fact_options : {}
     @roles = WatchList.role_counts(ids)
     @applications = WatchList.applications(ids)
     @last_checked = WatchList.last_checked(ids)
@@ -39,17 +54,39 @@ class CompaniesController < ApplicationController
     redirect_to company_path(company), alert: "#{e.message.upcase_first}.", status: :see_other
   end
 
+  # Several proposals tracked at once (4b), under one note, each on the record: all or none. Each one's board is read
+  # once the tracking commits, free, one after another. Backed up first (at most daily): undoing one archives it, which
+  # declines it for good.
+  def track_many
+    companies = Company.suggested.where(id: Array(params[:ids])).order(:name).to_a
+    if companies.empty?
+      return redirect_back_or_to(companies_path(tab: "suggested"), alert: "Select the proposals to track first.", status: :see_other)
+    end
+
+    DatabaseBackup.daily
+    ApplicationRecord.transaction { companies.each { |company| Verifier::Tracking.track_company!(company, note: params[:note], with_roles: false) } }
+    redirect_back_or_to companies_path(tab: "suggested"), notice: "#{helpers.pluralize(companies.size, 'company')} tracked. #{reading(companies)}",
+                                                          status: :see_other
+  rescue ArgumentError => e
+    redirect_back_or_to companies_path(tab: "suggested"), alert: "None tracked: #{e.message}.", status: :see_other
+  end
+
   # Several companies archived at once, under one note, each with its roles and on the record: all or none. Backed
-  # up first (at most daily), since undoing many is many clicks.
+  # up first (at most daily), since undoing many is many clicks. A proposal archived is declined, for good.
   def dismiss_many
     companies = Company.where(id: Array(params[:ids])).order(:name).to_a
     return redirect_back_or_to(companies_path, alert: "Select the companies to archive first.", status: :see_other) if companies.empty?
 
     DatabaseBackup.daily
+    proposals = companies.all?(&:suggested?)
     roles = ApplicationRecord.transaction { companies.sum { |company| Verifier::Tracking.dismiss_company!(company, note: params[:note]).size } }
-    redirect_back_or_to companies_path, notice: "#{helpers.pluralize(companies.size, 'company')} archived, with #{helpers.pluralize(roles, 'role')} " \
-                                                "in play: never checked, suggested from or reviewed, until you track one again.",
-                                        status: :see_other
+    said = if proposals
+      "#{helpers.pluralize(companies.size, 'proposal')} declined: archived, and never proposed again."
+    else
+      "#{helpers.pluralize(companies.size, 'company')} archived, with #{helpers.pluralize(roles, 'role')} " \
+        "in play: never checked, suggested from or reviewed, until you track one again."
+    end
+    redirect_back_or_to companies_path, notice: said, status: :see_other
   rescue ArgumentError => e
     redirect_back_or_to companies_path, alert: "None archived: #{e.message}.", status: :see_other
   end
@@ -110,9 +147,25 @@ class CompaniesController < ApplicationController
     @in_play = @company.postings.not_dismissed.count
     @open_application = @company.applications.open.includes(:posting).first
     @archived_with = @company.dismissed? ? Verifier::Tracking.archived_with(@company).size : 0
+    # How well it fits the company preferences (4b): its newest review, and the scores before it.
+    @profile = SearchProfile.current
+    @review, *@earlier_reviews = @company.company_reviews.newest_first.limit(6).to_a
   end
 
   private
+
+  # What tracking these proposals reads: the boards they were proposed with, free; Check now finds the others' pages.
+  def reading(companies)
+    read = companies.count { |company| Verifier::BoardRead.link(company) }
+    rest = companies.size - read
+    boards = if read == companies.size then companies.one? ? "Its board is" : "Their boards are"
+    elsif read.positive? then "#{read} of their boards #{read == 1 ? 'is' : 'are'}"
+    end
+    pages = if rest == companies.size then "Check now finds #{companies.one? ? 'its careers page' : 'their careers pages'}."
+    elsif rest.positive? then "Check now finds the careers #{rest == 1 ? 'page of the other one' : "pages of the other #{rest}"}."
+    end
+    [ ("#{boards} being read now, free#{', one after another' if read > 1}." if boards), pages ].compact.join(" ")
+  end
 
   def decide(done = "Its careers page is watched: check it now to read its roles.")
     company = Company.find(params[:id])

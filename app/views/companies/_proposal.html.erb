@@ -1,0 +1,25 @@
+<%# Why your own Claude client proposed this company (4b): why it may fit, where it was found, and what its board listed
+    when proposed (the app's own free read, never the client's word). Kept once it is tracked or declined. %>
+<% proposal = company.proposal %>
+<h2 id="proposal"><%= company.suggested? ? "Proposed" : "How it was proposed" %></h2>
+<dl class="facts">
+  <dt>Why it may fit</dt>
+  <dd class="said"><%= proposal["why"] %></dd>
+  <dt>Found by</dt>
+  <dd><%= proposal_source(proposal) %></dd>
+  <dt>Its board</dt>
+  <dd><%= proposal_board(proposal) %></dd>
+  <% if proposal["link"].present? %>
+    <dt>Where its roles are</dt>
+    <dd><%= outside_link(proposal["link"]) %></dd>
+  <% end %>
+  <% if Array(proposal["links"]).any? %>
+    <dt>Where it was found</dt>
+    <dd><%= safe_join(proposal["links"].map { |url| outside_link(url) }, tag.br) %></dd>
+  <% end %>
+  <dt>By</dt>
+  <dd>
+    Your Claude client, through MCP<%= " (model reported: #{proposal['reported_model']})" if proposal["reported_model"] %>,
+    <%= ago(company.created_at) %>
+  </dd>
+</dl>

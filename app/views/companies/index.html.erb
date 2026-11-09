@@ -1,10 +1,14 @@
 <% content_for :title, "Companies · Provenance Pipeline" %>
+<%# Links keep what the list is narrowed by (words, a review's facts, the tab, what needs a look, the fit, the sort), changed as given. %>
+<% list = ->(**changes) { companies_path(@keep.merge(changes).compact_blank) } %>
+<% fact_keys = CompaniesController::FACTS.keys.map(&:to_sym) %>
 <div class="page-head">
   <div>
     <h1>Companies</h1>
     <p class="sub">
-      The companies you track: each one's careers page is watched for roles. Archive one you no longer want, with its
-      roles: it is never checked, suggested from or reviewed again, until you track it.
+      The companies you track: each one's careers page is watched for roles. Those your own Claude client proposes wait
+      under Suggested until you track or archive them. Archive one you no longer want, with its roles: it is never
+      checked, suggested from or reviewed again, until you track it.
     </p>
   </div>
 </div>
@@ -40,33 +44,94 @@
 
 <nav class="tabs">
   <% CompaniesController::TABS.each do |tab, label| %>
-    <%= link_to companies_path(tab: tab, q: @q), class: ("current" if tab == @tab) do %>
+    <%= link_to companies_path(@keep.slice(:q, *fact_keys).merge(tab: tab).compact_blank), class: ("current" if tab == @tab) do %>
       <%= label %> <span class="count"><%= @counts.fetch(tab) %></span>
     <% end %>
   <% end %>
 </nav>
 
-<%= render "shared/find", url: companies_path, keep: { tab: @tab, filter: @filter }, value: @q,
-                          clear: companies_path(tab: @tab, filter: @filter), placeholder: "Name, domain, or a place it hires in" %>
+<% if @tab == "suggested" %>
+  <p class="muted small">
+    Proposed by your own Claude client, each with why it may fit, where it was found, and what its board listed when it
+    was proposed (the app's own read, free). Track one to watch it: the board it was proposed with is read at once,
+    free. Archive one to decline it: it is never proposed again.
+  </p>
+<% end %>
 
-<nav class="filters" aria-label="What needs a look">
-  <%= link_to companies_path(tab: @tab, q: @q), class: [ "filter", ("current" if @filter.nil?) ] do %>
-    All <span class="count"><%= @counts.fetch(@tab) %></span>
-  <% end %>
-  <% CompaniesController::FILTERS.each do |filter, (label, holds, _)| %>
-    <%= link_to companies_path(tab: @tab, filter: filter, q: @q), class: [ "filter", ("current" if filter == @filter) ], title: holds do %>
-      <%= label %> <span class="count"><%= @filter_counts.fetch(filter) %></span>
+<%= render "shared/find", url: companies_path, keep: @keep.except(:q), value: @q,
+                          clear: list.call(q: nil), placeholder: "Name, domain, or a place it hires in" %>
+
+<% if @fact_options.any? %>
+  <%= form_with url: companies_path, method: :get, class: "find-form facts-form", "aria-label": "Narrow by what reviews found" do %>
+    <% @keep.except(*fact_keys).compact_blank.each do |name, value| %>
+      <%= hidden_field_tag name, value, id: nil %>
     <% end %>
+    <span class="muted small">Reviews found:</span>
+    <% @fact_options.each do |fact, options| %>
+      <%= select_tag fact, options_for_select(options, @facts[fact]), include_blank: "Any #{CompaniesController::FACTS.fetch(fact).downcase}",
+                           "aria-label": CompaniesController::FACTS.fetch(fact), id: nil %>
+    <% end %>
+    <button type="submit" class="btn small">Narrow</button>
+    <%= link_to "Clear", list.call(**fact_keys.index_with(nil)), class: "small" if @facts.any? %>
   <% end %>
-</nav>
+<% end %>
+
+<% unless @tab == "suggested" %>
+  <nav class="filters" aria-label="What needs a look">
+    <%= link_to list.call(filter: nil), class: [ "filter", ("current" if @filter.nil?) ] do %>
+      All <span class="count"><%= @counts.fetch(@tab) %></span>
+    <% end %>
+    <% CompaniesController::FILTERS.each do |filter, (label, holds, _)| %>
+      <%= link_to list.call(filter: filter), class: [ "filter", ("current" if filter == @filter) ], title: holds do %>
+        <%= label %> <span class="count"><%= @filter_counts.fetch(filter) %></span>
+      <% end %>
+    <% end %>
+  </nav>
+<% end %>
+
+<% if @fit || @reviewed %>
+  <nav class="filters" aria-label="Filter by fit">
+    <span class="muted small">Fit:</span>
+    <%= link_to "Any", list.call(fit: nil), class: [ "filter", ("current" if @fit.nil?) ] %>
+    <% CompaniesController::FITS.each do |fit, label| %>
+      <%= link_to list.call(fit: fit), class: [ "filter", ("current" if fit == @fit) ] do %>
+        <%= label %> <span class="count"><%= @fit_counts.fetch(fit) %></span>
+      <% end %>
+    <% end %>
+  </nav>
+<% end %>
 
 <% if @companies.empty? %>
-  <p class="empty"><%= @q ? "No company here matches “#{@q}”." : "None." %></p>
+  <p class="empty">
+    <% if @q %>
+      No company here matches “<%= @q %>”<%= " with the filters chosen" if @filter || @fit || @facts.any? %>.
+    <% elsif @filter || @fit || @facts.any? %>
+      No company here with the filters chosen.
+    <% elsif @tab == "suggested" %>
+      No proposal waits for you. Your own Claude client proposes companies that may fit when you ask it to.
+    <% else %>
+      None.
+    <% end %>
+  </p>
 <% else %>
-  <% bulk = @tab == "tracked" %>
+  <% suggested = @tab == "suggested" %>
+  <% bulk = @tab == "tracked" || suggested %>
+  <% fit_sort = link_to("Fit#{' ↓' if @sort}", list.call(sort: (@sort ? nil : "fit")), title: (@sort ? "Back to name order" : "Best fit first")) %>
   <%= tag.div(data: { controller: ("bulk" if bulk) }) do %>
-    <% if bulk %>
-      <%= form_with url: dismiss_many_companies_path, method: :patch, id: "bulk-archive", class: "bulk-form",
+    <% if suggested %>
+      <%= form_with url: track_many_companies_path, method: :patch, id: "bulk-companies", class: "bulk-form" do |form| %>
+        <span class="muted small" data-bulk-target="count">None selected</span>
+        <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why", placeholder: "Why track them, or decline them?" %>
+        <%= form.submit "Track selected", class: "btn small primary", disabled: true,
+                                          data: { bulk_target: "submit",
+                                                  turbo_confirm: "Track the selected proposals? Each one's board is read at once, free; " \
+                                                                 "one with no known board waits for Check now to find its careers page." } %>
+        <%= form.submit "Archive selected", class: "btn small", disabled: true, formaction: dismiss_many_companies_path,
+                                            data: { bulk_target: "submit",
+                                                    turbo_confirm: "Decline the selected proposals? They are archived, and never proposed again." } %>
+      <% end %>
+    <% elsif bulk %>
+      <%= form_with url: dismiss_many_companies_path, method: :patch, id: "bulk-companies", class: "bulk-form",
                     data: { turbo_confirm: "Archive the selected companies, with their tracked and suggested roles? They are never " \
                                            "checked, suggested from or reviewed again, until you track one again." } do |form| %>
         <span class="muted small" data-bulk-target="count">None selected</span>
@@ -82,14 +147,18 @@
             <% if bulk %>
               <th><input type="checkbox" aria-label="Select every company listed" data-bulk-target="all" data-action="bulk#all"></th>
             <% end %>
-            <th>Company</th><th>Careers page</th><th>Roles</th><th>Application</th><th>Last checked</th>
+            <% if suggested %>
+              <th>Company</th><th>Found by</th><th>Its board, when proposed</th><th><%= fit_sort %></th><th>Why it may fit</th><th>Proposed</th>
+            <% else %>
+              <th>Company</th><th>Careers page</th><th>Roles</th><th>Application</th><th><%= fit_sort %></th><th>Last checked</th>
+            <% end %>
           </tr>
         </thead>
         <tbody>
           <% @companies.each do |company| %>
             <tr>
               <% if bulk %>
-                <td><input type="checkbox" name="ids[]" value="<%= company.id %>" form="bulk-archive" aria-label="Select <%= company.name %>"
+                <td><input type="checkbox" name="ids[]" value="<%= company.id %>" form="bulk-companies" aria-label="Select <%= company.name %>"
                            data-bulk-target="box" data-action="bulk#count"></td>
               <% end %>
               <td>
@@ -97,16 +166,26 @@
                 <%= tracking_badge(company.tracking) if !company.tracked? && @tab == "all" %>
                 <div class="small"><%= domain_link(company) %></div>
               </td>
-              <td><%= careers_page_cell(company) %></td>
-              <td><%= roles_summary(company, @roles) %></td>
-              <td>
-                <% if (application = @applications[company.id]) %>
-                  <%= link_to stage_badge(application.stage), application_path(application) %>
-                <% else %>
-                  <span class="muted">—</span>
-                <% end %>
-              </td>
-              <td><%= ago(@last_checked[company.id]) %></td>
+              <% if suggested %>
+                <% proposal = company.proposal || {} %>
+                <td class="small"><%= proposal_source(proposal) %></td>
+                <td class="small"><%= proposal_board(proposal) %></td>
+                <td><%= company_fit_cell(@reviews[company.id], @profile) %></td>
+                <td class="reason"><%= proposal["why"].to_s.truncate(240) %></td>
+                <td><%= ago(company.created_at) %></td>
+              <% else %>
+                <td><%= careers_page_cell(company) %></td>
+                <td><%= roles_summary(company, @roles) %></td>
+                <td>
+                  <% if (application = @applications[company.id]) %>
+                    <%= link_to stage_badge(application.stage), application_path(application) %>
+                  <% else %>
+                    <span class="muted">—</span>
+                  <% end %>
+                </td>
+                <td><%= company_fit_cell(@reviews[company.id], @profile) %></td>
+                <td><%= ago(@last_checked[company.id]) %></td>
+              <% end %>
             </tr>
           <% end %>
         </tbody>

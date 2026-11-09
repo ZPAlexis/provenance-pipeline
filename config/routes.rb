@@ -33,6 +33,7 @@ Rails.application.routes.draw do
       patch :dismiss
     end
     patch :dismiss_many, on: :collection
+    patch :track_many, on: :collection
     resources :contacts, only: %i[create update destroy]
   end
   resources :check_runs, only: %i[create show]
@@ -46,6 +47,7 @@ Rails.application.routes.draw do
     patch :related
     patch :resume
     delete :resume, action: :remove_resume
+    patch :company_preferences
   end
   get "review", to: "review_items#index", as: :review
   resources :review_items, only: [] do

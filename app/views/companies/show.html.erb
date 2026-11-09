@@ -10,7 +10,7 @@
 <% if @company.dismissed? %>
   <p class="muted small">Archived: never checked, suggested from or reviewed, until you track it again.</p>
 <% elsif @company.suggested? %>
-  <p class="muted small">Proposed by your own Claude client: not watched, checked or reviewed until you track it. Tracking it reads the board it was proposed with at once, free; archiving it declines it for good.</p>
+  <p class="muted small">Proposed by your own Claude client: not watched or checked until you track it. Tracking it reads the board it was proposed with at once, free; archiving it declines it for good.</p>
 <% end %>
 
 <dl class="facts">
@@ -44,6 +44,12 @@
     <% end %>
   </dl>
 </details>
+
+<%# A proposal (4b): why it may fit and how well, before checking it; once tracked, after its roles. %>
+<% if @company.suggested? %>
+  <%= render "companies/proposal", company: @company if @company.proposal.present? %>
+  <%= render "companies/review", company: @company, review: @review, earlier: @earlier_reviews, profile: @profile %>
+<% end %>
 
 <% if @company.resolution_status == "candidate" %>
   <h2>Is this its careers page?</h2>
@@ -106,6 +112,11 @@
   </div>
 <% else %>
   <p class="empty">No role on record here yet.</p>
+<% end %>
+
+<% unless @company.suggested? %>
+  <%= render "companies/review", company: @company, review: @review, earlier: @earlier_reviews, profile: @profile %>
+  <%= render "companies/proposal", company: @company if @company.proposal.present? %>
 <% end %>
 
 <%= render "contacts", company: @company, contacts: @contacts %>

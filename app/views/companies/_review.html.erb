@@ -1,0 +1,87 @@
+<%# How well this company fits your company preferences (4b): its newest review, as your own Claude client researched it
+    when you asked, and the scores before it. Advice for choosing companies, never weighed into a role's fit. %>
+<h2 id="review">Company review</h2>
+<% if review %>
+  <section class="check-now company-review">
+    <p class="fit-head"><%= fit_badge(review.score) %> <span class="muted small">of 100</span> <%= review.why %></p>
+    <% if review.stale?(profile) %>
+      <p class="small warn">Your company preferences or places changed since it was reviewed: ask your Claude client to review it again for a current score.</p>
+    <% end %>
+    <% if review.thin? %>
+      <p class="small warn">It knows less than it doesn't: more of your preferences came out unknown than met and missed together.</p>
+    <% end %>
+    <% facts = review_facts(review) %>
+    <% if facts.present? %><p class="small"><span class="muted">Found:</span> <%= facts %></p><% end %>
+
+    <p class="small"><strong>Point by point</strong></p>
+    <% if review.points.any? %>
+      <ul class="small drew-on points">
+        <% review.points.each do |point| %>
+          <li>
+            <%= verdict_badge(point["verdict"]) %> <span class="muted"><%= review_about(point["about"]) %>:</span> <%= point["preference"] %>
+            <% if point["evidence"].present? || Array(point["sources"]).any? %>
+              <br><span class="muted"><%= point["evidence"] %><%= source_links(point["sources"]) %></span>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="muted small">It weighed no preference point by point.</p>
+    <% end %>
+
+    <% if review.facts.any? %>
+      <p class="small"><strong>What it found</strong></p>
+      <ul class="small drew-on">
+        <% review.facts.each do |fact| %>
+          <li><span class="muted"><%= fact["about"].to_s.tr("_", " ").upcase_first %>:</span> <%= fact["said"] %><%= source_links(fact["sources"]) %></li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <div class="fit-lists">
+      <div>
+        <p class="small"><strong>Concerns</strong></p>
+        <% if review.concerns.any? %>
+          <ul class="small drew-on"><% review.concerns.each do |concern| %><li><%= concern %></li><% end %></ul>
+        <% else %>
+          <p class="muted small">None it named.</p>
+        <% end %>
+      </div>
+      <div>
+        <p class="small"><strong>Open questions</strong></p>
+        <% if review.questions.any? %>
+          <ul class="small drew-on"><% review.questions.each do |question| %><li><%= question %></li><% end %></ul>
+        <% else %>
+          <p class="muted small">None it named.</p>
+        <% end %>
+      </div>
+    </div>
+
+    <% if review.sources.any? %>
+      <details class="description">
+        <summary class="muted small"><%= pluralize(review.sources.size, "source") %> checked</summary>
+        <ul class="small drew-on"><% review.sources.each do |url| %><li><%= outside_link(url) %></li><% end %></ul>
+      </details>
+    <% end %>
+    <p class="muted small">
+      Reviewed <%= ago(review.created_at) %> by <%= review.writer %><%= " (model reported: #{review.reported_model})" if review.reported_model %>,
+      against your company preferences and places as they were then. Advice for choosing companies: it claims nothing, and
+      never weighs into a role's fit.
+    </p>
+    <% if earlier.any? %>
+      <p class="muted small">Before: <%= safe_join(earlier.map { |before| "#{before.score} on #{before.created_at.to_date}" }, ", ") %>.</p>
+    <% end %>
+  </section>
+<% elsif !profile&.company_preferences? %>
+  <p class="muted small">
+    Not reviewed. A review weighs a company against what you want of one: set that on
+    <%= link_to "the Profile page", profile_path(anchor: "company") %> first.
+  </p>
+<% elsif company.dismissed? %>
+  <p class="muted small">Not reviewed: an archived company isn't.</p>
+<% else %>
+  <p class="muted small">
+    Not reviewed yet. Your own Claude client reviews a company only when you ask it to: it researches the company and
+    weighs it against your company preferences, point by point, with its sources.
+  </p>
+<% end %>

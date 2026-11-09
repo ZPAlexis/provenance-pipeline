@@ -38,7 +38,8 @@ class SearchProfile < ApplicationRecord
   normalizes :work_modes, :levels, with: ->(list) { Array(list).compact_blank.uniq }
   normalizes(*COMPANY_WORDS, with: ->(list) { Array(list).map(&:squish).compact_blank.uniq(&:downcase) })
   normalizes :company_stages, :company_sizes, :company_models, with: ->(list) { Array(list).map { |each| each.to_s.strip }.compact_blank.uniq }
-  normalizes :company_wants, :company_avoids, with: ->(text) { text.to_s.strip.presence }
+  # A browser sends a textarea's line breaks as CRLF: kept as LF, so the same words digest alike from the page or a command.
+  normalizes :company_wants, :company_avoids, with: ->(text) { text.to_s.gsub("\r\n", "\n").strip.presence }
 
   # The one profile edited on the Profile page.
   def self.current = order(:created_at).first
