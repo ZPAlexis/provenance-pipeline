@@ -164,6 +164,42 @@ RSpec.describe "Finding companies", type: :request do
     end
   end
 
+  # 4b step 5: each role's company fit beside its own fit, never weighed into it.
+  describe "company fit beside role fit" do
+    let!(:fabrikam) { create(:company, :resolved, name: "Fabrikam") }
+    let!(:northwind) { create(:company, :resolved, name: "Northwind") }
+    let!(:analyst) { create(:posting, company: fabrikam, role_title: "Pipeline Analyst", tracking: "tracked") }
+    let!(:architect) { create(:posting, company: northwind, role_title: "Revenue Architect", tracking: "tracked") }
+
+    before do
+      create(:company_review, company: northwind, score: 88)
+      create(:company_review, company: fabrikam, score: 52, preferences_digest: "sha256:before")
+    end
+
+    it "shows each role's company fit on the Roles page, stale marked, and sorts by it or by the role's fit" do
+      get roles_path
+
+      expect(response.body).to include("Company fit", ">88<", ">52<", " stale", company_path(northwind, anchor: "review"))
+      expect(response.body.index("Pipeline Analyst")).to be < response.body.index("Revenue Architect") # company order
+
+      get roles_path(sort: "company_fit")
+      expect(response.body).to include("Company fit ↓")
+      expect(response.body.index("Revenue Architect")).to be < response.body.index("Pipeline Analyst")
+      get roles_path(sort: "fit")
+      expect(response.body).to include("Fit ↓").and(not_include("Company fit ↓"))
+    end
+
+    it "shows a role's company fit on its page, linked to the review, or that its company isn't reviewed" do
+      get role_path(analyst)
+      expect(response.body).to include("Company fit", ">52<", "Fabrikam&#39;s review", company_path(fabrikam, anchor: "review"),
+                                       "a separate score, never weighed into this role's fit")
+
+      bare = create(:posting, company: create(:company, :resolved, name: "Woodgrove"), role_title: "Deal Desk Analyst")
+      get role_path(bare)
+      expect(response.body).to include("not reviewed", "your own Claude client reviews a company only when you ask")
+    end
+  end
+
   describe "a company's page" do
     let!(:company) { create(:company, :resolved, name: "Fabrikam", domain: "fabrikam.example") }
 

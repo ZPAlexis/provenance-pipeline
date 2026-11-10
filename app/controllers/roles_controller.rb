@@ -5,6 +5,8 @@ class RolesController < ApplicationController
   ANSWERS = %w[verified_live not_found inaccessible pending].freeze
   # The fit a list can be narrowed to (2f): at least this score, or not weighed yet.
   FITS = { "85" => "85 and up", "70" => "70 and up", "50" => "50 and up", "none" => "Not weighed" }.freeze
+  # What a list can be sorted by, best first: the role's fit, or its company's (4b).
+  SORTS = %w[fit company_fit].freeze
 
   def index
     @tab = TABS.include?(params[:tab]) ? params[:tab] : "tracked"
@@ -58,6 +60,9 @@ class RolesController < ApplicationController
     @descriptions = @role.role_descriptions.newest_first.to_a
     @fit = FitScores.shown([ @role ])[@role.id]
     @earlier_fits = @role.fit_scores.newest_first.offset(1).limit(5).to_a
+    # Its company's fit (4b), beside the role's: never weighed into it.
+    @company_review = CompanyReviews.newest(@role.company)
+    @profile = SearchProfile.current
     @fit_run = CheckRun.where(kind: "fit").active.first || @role.check_runs.where(kind: "fit").newest_first.first
     @history = @role.audit_events.order(occurred_at: :desc).includes(:credential)
     # The checks whose matching said something about this role, newest first.
@@ -89,14 +94,19 @@ class RolesController < ApplicationController
 
   # Each listed role's newest fit (2f), the list narrowed by fit and sorted by it when asked, and what weighing the
   # unscored would take: the roles offered (tracked or suggested) with no current score and a description to weigh.
+  # Beside it (4b), each role's company fit: its company's newest review against the company preferences, worked out
+  # when shown, to sort by too. Two scores: the company's never weighs into the role's.
   def fits(roles)
     @fits = FitScores.shown(roles.map(&:id))
+    @profile = SearchProfile.current
+    @company_fits = WatchList.reviews(roles.map(&:company_id).uniq)
     @fit = params[:fit] if FITS.key?(params[:fit])
-    @sort = "fit" if params[:sort] == "fit"
+    @sort = params[:sort] if SORTS.include?(params[:sort])
     at_least = ->(floor) { roles.count { |role| @fits[role.id] && @fits[role.id].score.score >= floor } }
     @fit_counts = FITS.keys.to_h { |key| [ key, key == "none" ? roles.count { |role| !@fits[role.id] } : at_least.call(key.to_i) ] }
     @roles = roles.select { |role| @fit == "none" ? !@fits[role.id] : @fits[role.id] && @fits[role.id].score.score >= @fit.to_i } if @fit
-    @roles = @roles.sort_by.with_index { |role, index| [ -(@fits[role.id]&.score&.score || -1), index ] } if @sort
+    score = ->(role) { @sort == "fit" ? @fits[role.id]&.score&.score : @company_fits[role.company_id]&.score }
+    @roles = @roles.sort_by.with_index { |role, index| [ -(score.call(role) || -1), index ] } if @sort
     @unscored = FitScores.weighable(FitScores.unscored(FitScores.offered.includes(:company).to_a))
     # Any weighing under way (one at a time), or the last batch for an hour after it ends.
     @fit_run = CheckRun.where(kind: "fit").active.first || CheckRun.where(kind: "fit", posting_id: nil).newest_first.first

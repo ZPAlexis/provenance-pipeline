@@ -28,6 +28,7 @@ RSpec.describe "Page views", type: :request do
     pages = [ root_path, check_all_path, changes_path, audit_path, analytics_path, roles_path, role_path(role),
               companies_path, company_path(company), company_path(proposal), companies_path(tab: "all"), companies_path(tab: "suggested"),
               companies_path(fit: "70", sort: "fit", stage: "series_b", industry: "fintech"), companies_path(fit: "stale"),
+              roles_path(sort: "company_fit"), roles_path(tab: "suggested", sort: "fit"),
               applications_path, application_path(application), review_path,
               agents_path, agent_credential_path(credential), profile_path, about_path, check_run_path(lost, poll: 1) ]
 

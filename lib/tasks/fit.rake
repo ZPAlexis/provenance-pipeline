@@ -50,7 +50,8 @@ namespace :fit do
     abort e.message.upcase_first
   end
 
-  desc "Roles by how well they fit your resume, best first: each one's newest score, and whether it is stale. " \
+  desc "Roles by how well they fit your resume, best first: each one's newest score, whether it is stale, and its " \
+       "company's fit beside it where the company is reviewed (a separate score). " \
        "[MIN=70] [LIMIT=n]"
   task list: :environment do
     postings = Posting.includes(:company, :application).where(id: FitScore.select(:posting_id)).index_by(&:id)
@@ -60,10 +61,14 @@ namespace :fit do
     shown = shown.select { |entry| entry.score.score >= ENV["MIN"].to_i } if ENV["MIN"].present?
     shown = shown.sort_by { |entry| [ -entry.score.score, postings[entry.score.posting_id].role_title.downcase ] }
     shown = shown.first(ENV["LIMIT"].to_i) if ENV["LIMIT"].present?
+    # Its company's fit beside it (4b), where the company is reviewed: a separate score, never weighed in.
+    companies = WatchList.reviews(postings.values.map(&:company_id).uniq)
     shown.each do |entry|
       posting = postings[entry.score.posting_id]
+      company = companies[posting.company_id]
       puts "#{entry.score.score.to_s.rjust(3)}  #{posting.id}  #{named.call(posting)} (#{posting.tracking}" \
-           "#{', applied' if posting.application})#{"  stale: #{entry.stale.to_sentence} changed" if entry.stale?}"
+           "#{', applied' if posting.application})#{"  stale: #{entry.stale.to_sentence} changed" if entry.stale?}" \
+           "#{"  company fit #{company.score}#{' (stale)' if company.stale?}" if company}"
     end
   end
 

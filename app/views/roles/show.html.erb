@@ -29,6 +29,19 @@
     <dt>Why suggested</dt>
     <dd><%= fit_reasons(@role) %></dd>
   <% end %>
+  <dt>Company fit</dt>
+  <dd>
+    <% if @company_review %>
+      <%= company_fit_cell(@company_review, @profile) %>
+      <span class="muted small">
+        · <%= link_to "#{@role.company.name}'s review", company_path(@role.company, anchor: "review") %> against your company
+        preferences: a separate score, never weighed into this role's fit
+      </span>
+    <% else %>
+      <span class="muted">not reviewed</span>
+      <span class="muted small">· your own Claude client reviews a company only when you ask</span>
+    <% end %>
+  </dd>
 </dl>
 
 <details class="add" <%= "open" if params[:own_page] %>>

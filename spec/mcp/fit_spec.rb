@@ -170,6 +170,32 @@ RSpec.describe "Finding and weighing roles through MCP" do
     end
   end
 
+  # 4b step 5: a role's company fit shown beside it, its company's newest review against the company preferences;
+  # never part of what a role is weighed from.
+  it "shows each role's company fit beside it, in finding and weighing, as a separate score never weighed in" do
+    beta = create(:company, :resolved, name: "Beta", domain: "beta.example")
+    create(:company_review, company: company, score: 81)
+    create(:company_review, company: beta, score: 40, preferences_digest: "sha256:before")
+    described = create(:posting, company: company, role_title: "Customer Engineer", job_url: "https://acme.example/jobs/1")
+    describe_role(described)
+    fits = [ 0, 3 ].map do |index|
+      Verifier::Suggestions::Fit.new(company: index.zero? ? company : beta, listing: listing("Customer Engineer", index + 1), title: "Customer Engineer",
+                                     level: nil, place: "Brazil", work_mode: "remote", suggested: true, ruled_out: nil, notes: [],
+                                     reasoning: "Holds it.", on_record: nil, key: "#{read.id}:#{index}")
+    end
+    allow(Verifier::Suggestions).to receive(:preview)
+      .and_return(Verifier::Suggestions::Preview.new(companies: 2, unread: 0, weighed: 4, read_between: [ nil, nil ], problems: [], fits: fits))
+
+    found = said(call(:FindRoles, titles: [ "Customer Engineer" ]))
+    weigh = said(call(:RolesToWeigh, roles: [ described.id ]))
+
+    expect(found).to include("- Customer Engineer at Acme · Brazil · remote · company fit 81: key #{read.id}:0",
+                             "- Customer Engineer at Beta · Brazil · remote · company fit 40 (stale): key #{read.id}:3",
+                             "a separate score to rank by, never part of a role's fit")
+    expect(weigh).to include("Role id #{described.id}: Customer Engineer at Acme (tracked; company fit 81, a separate score: never weigh it in).",
+                             "never let it move the role's score", "and its company's fit beside it where the company is reviewed")
+  end
+
   describe "the prompts" do
     it "find roles by meaning and weigh them, from the profile; and weigh the roles already offered" do
       found = ProvenanceMcp::Prompts::FindRoles.template({ focus: "customer engineering" }).messages.sole.to_h.dig(:content, :text)
@@ -177,8 +203,9 @@ RSpec.describe "Finding and weighing roles through MCP" do
 
       expect(found).to include("judged by meaning", "find_roles", "suggest_roles", "reads each role's own page first", "save_fit_score",
                                "Look first for: customer engineering", "<profile>", "Titles they search for: Sales Engineer",
-                               "Nothing here tracks a role")
+                               "Nothing here tracks a role", "two scores, never merged")
       expect(weigh).to start_with("Weigh 3 of my roles that have no current fit score")
+      expect(weigh).to include("its company's fit\nbeside it where the company is reviewed (two scores, never merged)")
     end
   end
 

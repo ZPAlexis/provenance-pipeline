@@ -76,8 +76,9 @@
         <%= form.submit "Archive selected", class: "btn small", disabled: true, data: { bulk_target: "submit" } %>
       <% end %>
     <% end %>
-    <%= render "table", roles: @roles, fit: @tab == "suggested", bulk: bulk, fits: @fits,
-                        sort: roles_path(tab: @tab, answer: @answer, q: @q, fit: @fit, sort: (@sort ? nil : "fit")), sorted: @sort %>
+    <%= render "table", roles: @roles, fit: @tab == "suggested", bulk: bulk, fits: @fits, company_fits: @company_fits, profile: @profile,
+                        sorts: ->(key) { roles_path(tab: @tab, answer: @answer, q: @q, fit: @fit, sort: (@sort == key ? nil : key)) },
+                        sorted: @sort %>
   <% end %>
 <% elsif @fit %>
   <p class="empty">No <%= @tab %> role listed here is <%= RolesController::FITS.fetch(@fit).downcase %>.</p>

@@ -7,7 +7,11 @@
         <% end %>
         <th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th>
         <% if local_assigns[:fits] %>
-          <th><%= link_to "Fit#{' ↓' if local_assigns[:sorted]}", local_assigns[:sort], title: (local_assigns[:sorted] ? "Back to company order" : "Best fit first") %></th>
+          <% sorted = local_assigns[:sorted] %>
+          <th><%= link_to "Fit#{' ↓' if sorted == 'fit'}", sorts.call("fit"),
+                          title: (sorted == "fit" ? "Back to company order" : "Best fit to your resume first") %></th>
+          <th><%= link_to "Company fit#{' ↓' if sorted == 'company_fit'}", sorts.call("company_fit"),
+                          title: (sorted == "company_fit" ? "Back to company order" : "Its company's review against your company preferences, best first: a separate score, never weighed into the role's") %></th>
         <% end %>
         <% if local_assigns[:fit] %><th>Why suggested</th><% else %><th>Own page</th><% end %>
         <th>Watch list</th>
@@ -25,7 +29,10 @@
           <td class="muted"><%= role.location %></td>
           <td><%= answer_badge(role.verification_state) %></td>
           <td><%= ago(role.last_checked_at) %></td>
-          <% if local_assigns[:fits] %><td><%= fit_cell(fits[role.id]) %></td><% end %>
+          <% if local_assigns[:fits] %>
+            <td><%= fit_cell(fits[role.id]) %></td>
+            <td><%= company_fit_cell(company_fits[role.company_id], profile) %></td>
+          <% end %>
           <% if local_assigns[:fit] %>
             <td class="reason"><%= fit_reasons(role) %></td>
           <% else %>

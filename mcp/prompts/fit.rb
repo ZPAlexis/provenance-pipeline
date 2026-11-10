@@ -26,7 +26,8 @@ module ProvenanceMcp
                are as last read: it reads each role's own page first and suggests only those still up, with their
                descriptions. Tell me which were gone.
             4. Weigh each one suggested with get_roles_to_weigh by the fit rules, saving each with save_fit_score.
-            5. Give me what you weighed, best first, with each score and why in a line.
+            5. Give me what you weighed, best first, with each score and why in a line, and its company's fit beside it
+               where the company is reviewed: two scores, never merged.
             Nothing here tracks a role or sends anything: I track the ones I want, in the app or by asking you.
           TEXT
         end
@@ -58,8 +59,9 @@ module ProvenanceMcp
             Weigh #{count} of my roles that have no current fit score, against my resume.
             Call get_roles_to_weigh (up to 10 at a time) and weigh each by the fit rules it gives, saving each with
             save_fit_score as you go. A role named there with no description read yet: read it with read_descriptions
-            first. Then give me what you weighed, best first, with each score and why in a line. Nothing here tracks a
-            role: I track the ones I want, in the app or by asking you.
+            first. Then give me what you weighed, best first, with each score and why in a line, and its company's fit
+            beside it where the company is reviewed (two scores, never merged). Nothing here tracks a role: I track the
+            ones I want, in the app or by asking you.
           TEXT
         end
       end
