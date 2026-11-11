@@ -47,7 +47,7 @@ Every result carries a confidence, so a person looks only where it matters. **Hi
 
 One job's own posting is never a careers page. A company's own page of many employers' roles comes back as a candidate with a *suggested kind*: a recruiter's client roles (its careers page, once the operator says so) or an aggregator's listings (never its careers page).
 
-**A board a company was proposed with** (4b, `own_board`): when the operator tracks a company their own Claude client proposed, the board it named is read through its API and kept only as a guessed board is, if its vendor records the same company name or its own page links home (medium); a board nothing ties to the company is a candidate (low); another company's is discarded. Nothing else is tried, and the command never calls the LLM: Rails starts it with no API key at all.
+**A board a company was proposed with** (4b, `own_board`): when the operator tracks a company their own Claude client proposed, the board it named is read through its API and kept only as a guessed board is, if its vendor records the same company name or its own page links home (medium); a board nothing ties to the company is a candidate (low); another company's is discarded. Nothing else is tried, and the command never calls the LLM: Rails starts it with no API key at all. The same read, followed by `suggest` against the profile's titles, is how the client's `check_company` and `suggest_companies` see a board before a company is proposed, recording nothing but what a proposal keeps of it.
 
 ## How postings are verified
 
