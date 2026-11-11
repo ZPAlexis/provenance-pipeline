@@ -108,6 +108,55 @@
   <p class="muted small">Save the profile above first: the resume is kept with it.</p>
 <% end %>
 
+<h2 id="background">Background information</h2>
+<p class="muted small">
+  What you'd tell the assistant about yourself beyond your resume, in three parts, each read only by what may use it (said
+  under each). Keep it short: the fit scorer weighs everything it is given, so a long background crowds out your resume.
+  Write only what is safe to quote: your own Claude client may hold all of it in one conversation. Held in this database
+  only; the record of each save names each part's size and a hash, never its text. Each change is a new version, and
+  what read it says which.
+</p>
+<% if @profile.persisted? %>
+  <% current, *earlier = @backgrounds %>
+  <% if current %>
+    <p class="small">Saved <%= ago(current.created_at) %>: <%= Backgrounds.said(current) %>. Version <code><%= current.version %></code>.</p>
+  <% end %>
+  <% if @background_error %><p class="small warn" role="alert"><%= @background_error %></p><% end %>
+  <%= form_with url: background_profile_path, method: :patch, scope: :background, id: "background-form", class: "profile-form" do |f| %>
+    <% Background::PARTS.each do |part, about| %>
+      <div class="field">
+        <%= f.label part, about[:label] %>
+        <p class="hint"><%= about[:use] %></p>
+        <%= f.text_area part, value: (@background_given ? @background_given[part] : current&.public_send(part)), rows: about[:rows],
+                              placeholder: about[:placeholder] %>
+        <p class="hint">At most <%= number_with_delimiter(Background::MAX_CHARS) %> characters<%= "; #{current.words(part)} words now" if current %>.</p>
+      </div>
+    <% end %>
+  <% end %>
+  <div class="button-row">
+    <button type="submit" form="background-form" class="btn primary small"><%= current ? "Save changes" : "Save background" %></button>
+    <% if current %>
+      <%= button_to "Delete background", background_profile_path, method: :delete, class: "btn small",
+                                         data: { turbo_confirm: "Delete your background, and every earlier version of it? This can't be undone." } %>
+    <% end %>
+  </div>
+  <% if earlier.any? %>
+    <details class="description">
+      <summary class="muted small"><%= pluralize(earlier.size, "earlier version") %></summary>
+      <% earlier.each do |version| %>
+        <p class="muted small">Saved <%= version.created_at.to_date %>, version <code><%= version.version %></code> (<%= Backgrounds.said(version) %>)</p>
+        <% Background::PARTS.each do |part, about| %>
+          <% next if version.text_of(part).empty? %>
+          <p class="small"><strong><%= about[:label] %></strong></p>
+          <div class="description-text"><%= version.text_of(part) %></div>
+        <% end %>
+      <% end %>
+    </details>
+  <% end %>
+<% else %>
+  <p class="muted small">Save the profile above first: the background is kept with it.</p>
+<% end %>
+
 <%= turbo_frame_tag "profile-preview" do %>
   <p class="muted">
     Preview weighs the profile above, saved or not, against every watched company's roles as its page last listed them.

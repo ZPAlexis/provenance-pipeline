@@ -47,6 +47,8 @@ Rails.application.routes.draw do
     patch :related
     patch :resume
     delete :resume, action: :remove_resume
+    patch :background
+    delete :background, action: :remove_background
     patch :company_preferences
   end
   get "review", to: "review_items#index", as: :review

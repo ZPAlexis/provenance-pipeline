@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_06_000003) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_11_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -83,6 +83,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000003) do
     t.index ["credential_id"], name: "index_audit_events_on_credential_id"
     t.index ["occurred_at"], name: "index_audit_events_on_occurred_at"
     t.index ["target_type", "target_id"], name: "index_audit_events_on_target"
+  end
+
+  create_table "backgrounds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "search_profile_id", null: false
+    t.text "looking_for"
+    t.text "role_preferences"
+    t.text "not_on_resume"
+    t.string "looking_for_hash"
+    t.string "role_preferences_hash"
+    t.string "not_on_resume_hash"
+    t.string "content_hash", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["search_profile_id", "created_at"], name: "index_backgrounds_on_search_profile_id_and_created_at"
+    t.index ["search_profile_id"], name: "index_backgrounds_on_search_profile_id"
   end
 
   create_table "check_runs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -424,6 +439,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_06_000003) do
   add_foreign_key "applications", "companies"
   add_foreign_key "applications", "postings"
   add_foreign_key "audit_events", "agent_credentials", column: "credential_id"
+  add_foreign_key "backgrounds", "search_profiles", on_delete: :cascade
   add_foreign_key "check_runs", "companies"
   add_foreign_key "check_runs", "postings", on_delete: :nullify
   add_foreign_key "company_reviews", "companies", on_delete: :cascade

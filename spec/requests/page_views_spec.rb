@@ -12,6 +12,11 @@ RSpec.describe "Page views", type: :request do
   # A company the operator's own client proposed (4b), the company preferences, and a review of each.
   let!(:proposal) { create(:company, :proposed, name: "Contoso", domain: "contoso.example") }
   let!(:profile) { SearchProfile.create!(titles: [ "Sales Engineer" ], places: [ "Brazil" ], company_models: %w[b2b]) }
+  # Two versions of the background (4c), so the Profile page shows the newest and folds the one before.
+  let!(:background) do
+    later { Backgrounds.keep!(profile, looking_for: "A long-term role.") }
+    later { Backgrounds.keep!(profile, looking_for: "A long-term role.", not_on_resume: "Portuguese, native.") }
+  end
   let!(:reviews) { [ create(:company_review, company: company, stage: "series_b", industries: [ "Fintech" ]), create(:company_review, company: proposal) ] }
 
   # The statements that would change the record, made while the block runs.

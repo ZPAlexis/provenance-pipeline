@@ -61,6 +61,6 @@ RSpec.describe CompanyPreferences do
     expect(event).to have_attributes(actor: "agent:assistant", reasoning: "Company preferences saved on the operator's word.")
     expect(event.credential.reload.scopes).to eq(%w[company_preferences:write])
     expect(Authority::HUMAN_ONLY).to include("Edit the search profile (its company preferences aside, which the operator's own client " \
-                                             "may save on their word) or the resume")
+                                             "may save on their word), the resume, or the background information")
   end
 end

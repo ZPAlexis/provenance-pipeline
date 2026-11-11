@@ -27,8 +27,11 @@ class Resume < ApplicationRecord
 
   # Its non-blank lines, each stripped, numbered from 1 as the worker's draft numbers them (draft.resume_lines),
   # so a line cited by number means the same line in the app, the worker, and an MCP client.
-  def numbered_lines
-    text.split(/\r\n|[\n\r\v\f\u001c-\u001e\u0085  ]/).map { |line| line.gsub(/\A[[:space:]]+|[[:space:]]+\z/, "") }
-        .reject(&:empty?).each.with_index(1).map { |line, number| [ number, line ] }
+  def numbered_lines = self.class.lines_of(text).each.with_index(1).map { |line, number| [ number, line ] }
+
+  # A text's non-blank lines, each stripped, split as Python's str.splitlines splits them: the worker's way, shared
+  # with the background (4c), whose lines are cited the same way.
+  def self.lines_of(text)
+    text.to_s.split(/\r\n|[\n\r\v\f\u001c-\u001e\u0085  ]/).map { |line| line.gsub(/\A[[:space:]]+|[[:space:]]+\z/, "") }.reject(&:empty?)
   end
 end

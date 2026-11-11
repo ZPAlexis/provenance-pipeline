@@ -5,6 +5,29 @@ class ProfilesController < ApplicationController
   def show
     @profile = SearchProfile.current || SearchProfile.new(work_modes: SearchProfile::WORK_MODES)
     @resumes = @profile.persisted? ? @profile.resumes.newest_first.to_a : []
+    @backgrounds = @profile.persisted? ? @profile.backgrounds.newest_first.to_a : []
+  end
+
+  # The background beyond the resume (4c), in its three parts: a new version when any part changed, audited by each
+  # part's size and hash. A refused save shows the page again with what was typed, so a long paste isn't lost.
+  def background
+    profile = SearchProfile.current or return redirect_to(profile_path(anchor: "background"), status: :see_other,
+                                                                                                alert: "Save the profile first: the background is kept with it.")
+    kept = Backgrounds.keep!(profile, params.expect(background: Background::PARTS.keys.map(&:to_sym)).to_h)
+    redirect_to profile_path(anchor: "background"), status: :see_other,
+                                                    notice: kept ? "Background saved: #{Backgrounds.said(kept)}." : "Nothing to save: it is the same as now."
+  rescue ArgumentError => e
+    show
+    @background_given = params.dig(:background)&.permit(*Background::PARTS.keys)&.to_h
+    @background_error = "Not saved: #{e.message}."
+    render :show, status: :unprocessable_content
+  end
+
+  def remove_background
+    removed = Backgrounds.remove!(SearchProfile.current)
+    redirect_to profile_path(anchor: "background"), notice: "Background deleted, with all #{removed} of its saved versions.", status: :see_other
+  rescue ArgumentError => e
+    redirect_to profile_path(anchor: "background"), alert: "#{e.message.upcase_first}.", status: :see_other
   end
 
   # The resume pasted below the profile (2b): a new version when its text changed, audited by size and hash.

@@ -20,3 +20,6 @@ Rails.application.config.filter_parameters += [
 
 # What the operator wants of a company and avoids (4b), in their own words: their values and stances, too.
 Rails.application.config.filter_parameters += [ /\Acompany_(wants|avoids|excluded)/ ]
+
+# The operator's background beyond the resume (4c), its three parts.
+Rails.application.config.filter_parameters += [ /\A(looking_for|role_preferences|not_on_resume)\z/ ]
