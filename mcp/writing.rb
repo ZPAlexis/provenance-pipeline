@@ -72,17 +72,33 @@ module ProvenanceMcp
     end
 
     # How a role's fit is weighed and saved (2f step 3), in the operator's voice: the shared rules, then the answer's shape.
-    def fit_instructions
+    # Since 4c a role's fit is read two ways: the ATS fit (the resume alone) and, when a background is saved, the
+    # Background fit beside it.
+    def fit_instructions(background: nil)
       [ "Weigh how well each role below fits my resume, for me to rank roles by: advice, never a claim. Write in English.",
-        rules.fetch("grounding"), rules.fetch("fit"),
-        <<~TEXT.strip ].join("\n\n")
-          Weigh each role on its own, from its description and my resume alone. Save each with save_fit_score as you go:
-          the role's id, the resume version from here, the score, the level, the matches with the resume lines by their
-          numbers, the gaps, why, and the model you are. Then give me the roles you weighed, best first, each with its
-          score and why in a line, and its company's fit beside it where the company is reviewed.
+        rules.fetch("grounding"), rules.fetch("fit"), (rules.fetch("background_fit") if background),
+        <<~TEXT.strip, (<<~TEXT.strip if background) ].compact.join("\n\n")
+          Weigh each role on its own. Its ATS fit comes from its description and my resume alone. Save each with
+          save_fit_score as you go: the role's id, the resume version from here, the score, the level, the matches with the
+          resume lines by their numbers, the gaps, why, and the model you are. Then give me the roles you weighed, best
+          first, each with its score and why in a line, and its company's fit beside it where the company is reviewed.
           A role's company fit, when shown, is another score: its company against my company preferences. Never weigh it
           into the role's fit, and never let it move the role's score.
         TEXT
+          My background is below, its lines numbered B1, B2 and so on. Read each role a second time with it, by the
+          background_fit rules, and save that reading in the same save_fit_score call: the background version from here,
+          the Background fit's score and why, the covered gaps (each with what the role asks, the background lines by
+          number, where to address it: resume, cover_letter or both, and a note), and the preferences the role touches (each
+          a match or a miss, with why and its lines). In my summary, give the ATS fit first, the Background fit beside it.
+        TEXT
+    end
+
+    # The operator's background (4c), every part, its lines numbered across the parts, fenced as data: their own word.
+    def background(background)
+      lines = background.numbered_lines.group_by(&:last).flat_map do |part, numbered|
+        [ "#{Background::PARTS.dig(part, :label)}:", *numbered.map { |number, line, _| "[B#{number}] #{line}" } ]
+      end
+      fence("background", lines.join("\n"), saved: background.created_at.utc.to_date, version: background.version)
     end
 
     # A company's fit beside a role (4b step 5): its newest review's score, marked stale, said as the other score it is.
@@ -137,7 +153,7 @@ module ProvenanceMcp
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out. Every tool keeps
     # its own framing (counts, ids, what to do next) outside them, and puts what came from the record or a page read
     # (names, titles, places, notes, bodies, reasoning) inside.
-    FENCES = %w[role_description resume profile notes contacts contact review evidence record draft].freeze
+    FENCES = %w[role_description resume background profile notes contacts contact review evidence record draft].freeze
 
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
     # the newest resume numbered by line, the profile, the notes, its contacts, the one it is to (when the writing is to

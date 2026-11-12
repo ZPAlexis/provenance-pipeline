@@ -52,12 +52,14 @@
 
 <% if @fits.any? || @fit %>
   <nav class="filters" aria-label="Filter by fit">
-    <span class="muted small">Fit:</span>
+    <span class="muted small" title="The ATS fit: your resume alone, as a recruiter's screening system would read it">ATS fit:</span>
     <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, sort: @sort), class: [ "filter", ("current" if @fit.nil?) ] do %>
       Any
     <% end %>
     <% RolesController::FITS.each do |key, label| %>
-      <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, fit: key, sort: @sort), class: [ "filter", ("current" if key == @fit) ] do %>
+      <% next if key == "before_background" && !@background && key != @fit %>
+      <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, fit: key, sort: @sort), class: [ "filter", ("current" if key == @fit) ],
+                  title: ("Weighed before your background as it is now: no Background fit read against it" if key == "before_background") do %>
         <%= label %> <span class="count"><%= @fit_counts.fetch(key, 0) %></span>
       <% end %>
     <% end %>
@@ -81,7 +83,9 @@
                         sorted: @sort %>
   <% end %>
 <% elsif @fit %>
-  <p class="empty">No <%= @tab %> role listed here is <%= RolesController::FITS.fetch(@fit).downcase %>.</p>
+  <p class="empty">
+    No <%= @tab %> role listed here <%= @fit == "before_background" ? "was weighed before your background as it is now" : "is #{RolesController::FITS.fetch(@fit).downcase}" %>.
+  </p>
 <% elsif @q %>
   <p class="empty">No <%= @tab %> role<%= " #{answer_label(@answer).downcase}" if @answer %> matches “<%= @q %>”.</p>
 <% elsif @answer %>

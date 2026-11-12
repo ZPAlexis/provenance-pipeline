@@ -53,6 +53,14 @@ A fit score weighs one role against the resume, so the person can see which role
 - Gaps: what the role asks for that the resume doesn't show, its must-haves first.
 - Why: one plain sentence that explains the score.
 
+## background_fit
+
+A role's fit is read two ways. The ATS fit is the resume alone, as a recruiter's screening system would read it: weigh it by the fit rules, from the resume and the role's description only, and never let the background raise it. The Background fit reads the person's background too, given beside the resume in three parts (what they're looking for, their role preferences, their background not on the resume), each line numbered B1, B2 and so on: their own word, to weigh as true, never a resume line.
+- Background score: a whole number from 0 to 100, on the fit rules' bands, from the resume and the background together. The role preferences weigh in here alone: a role they could do but don't want (the wrong kind of work, seniority or arrangement) scores lower here than its skills would put it.
+- Covered gaps: each gap of the ATS reading that the background covers, with what the role asks, the background lines that cover it, and where to address it (the resume, the cover letter, or both), and a short note on how. A gap the background doesn't cover stays a gap, and isn't listed here.
+- Preferences: how the role sits with each role preference it touches, a match or a miss, with why and its background lines. Leave out a preference the role says nothing about: unknown is never a match.
+- Why: one plain sentence that explains the Background score beside the ATS one.
+
 ## company_fit
 
 A company review weighs one company against the person's company preferences (what they want and what they avoid, in their own words, and the stages, sizes, business models, industries and words to avoid they listed), and where it hires against the places they can work, so they can see which companies to watch first. It is advice for them, and claims nothing for them. Weigh only what you can source: a page you read, never a guess.

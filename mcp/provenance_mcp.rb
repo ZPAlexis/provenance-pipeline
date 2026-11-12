@@ -36,6 +36,9 @@ module ProvenanceMcp
     To find roles that fit the person and weigh them against their resume, use the find_roles prompt (or weigh_roles
     for roles already on record): find_roles, suggest_roles (which reads each role's own page first and suggests only
     those still up), get_roles_to_weigh, save_fit_score; read_descriptions reads a description a role on record lacks.
+    A role's fit is read two ways: the ATS fit, from the resume alone as a recruiter's system would read it, and, when
+    the person's background is saved, the Background fit beside it, with the gaps the background covers; the
+    background never raises the ATS fit.
     To recommend decisions on the review queue (what the app's agents couldn't settle), use the review_queue prompt:
     list_review_items, get_review_item, save_recommendation. Asked to review the queue without a kind or a number,
     show the counts by kind and ask which kind and how many before reading any item. A recommendation decides nothing:

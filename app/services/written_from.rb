@@ -22,6 +22,15 @@ module WrittenFrom
       raise ArgumentError, "resume version #{resume_version.inspect} isn't on record: read #{reread} again, and cite the lines as they are now"
   end
 
+  # The background version the client read (4c), by the short version it was given, as the resume's is found.
+  def background!(background_version, reread:)
+    backgrounds = SearchProfile.current&.backgrounds&.newest_first.to_a
+    raise ArgumentError, "no background is saved: it is pasted on the Profile page" if backgrounds.empty?
+
+    backgrounds.find { |version| version.version == background_version.to_s.strip.downcase } or
+      raise ArgumentError, "background version #{background_version.inspect} isn't on record: read #{reread} again, and cite its lines as they are now"
+  end
+
   # A letter's or a note's lines drawn on: [{ "line", "text", "used_for" }], as the in-app drafter keeps them.
   def drawn_on(resume, items)
     dropped = 0

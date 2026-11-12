@@ -21,8 +21,11 @@ module FitScores
     def tally = { "weighed" => scores.size, "not weighed" => unweighed.size }.select { |_, count| count.positive? }
   end
 
-  # A role's newest score as the pages show it: with what has changed since it was weighed (empty when nothing has).
-  Shown = Data.define(:score, :stale) do
+  # A role's newest score as the pages show it: with what has changed since it was weighed (empty when nothing has), and
+  # (4c) whether its Background fit no longer reads the background as it is.
+  Shown = Data.define(:score, :stale, :background_stale) do
+    def initialize(score:, stale:, background_stale: false) = super
+
     def stale? = stale.any?
   end
 
@@ -44,10 +47,22 @@ module FitScores
   # The newest score of each of `postings` that has one, by posting id, with whether the resume or its description has
   # changed since.
   def shown(postings)
-    resume = SearchProfile.current&.resumes&.newest_first&.first
+    profile = SearchProfile.current
+    resume = profile&.resumes&.newest_first&.first
+    background = profile&.backgrounds&.newest_first&.first
     descriptions = RoleDescription.where(posting: postings).select(:id, :posting_id, :content_hash, :first_read_at, :created_at)
                                   .newest_first.group_by(&:posting_id) # their hashes, not their text
-    newest(postings).transform_values { |score| Shown.new(score:, stale: score.stale_for(resume, descriptions[score.posting_id]&.first)) }
+    newest(postings).transform_values do |score|
+      Shown.new(score:, stale: score.stale_for(resume, descriptions[score.posting_id]&.first), background_stale: score.background_stale_for(background))
+    end
+  end
+
+  # Those of `postings` weighed before the background as it is now (4c): a score, but no Background fit read against
+  # it. None while no background is saved.
+  def before_background(postings)
+    background = SearchProfile.current&.backgrounds&.newest_first&.first or return []
+    scores = newest(postings.map(&:id))
+    postings.select { |posting| (score = scores[posting.id]) && (!score.background_reading? || score.background_stale_for(background)) }
   end
 
   # Those of `postings` with no score yet, or whose newest is stale: the resume or the description changed since.
@@ -141,7 +156,12 @@ module FitScores
   # A score the operator's own Claude client weighed through MCP (2f step 3), saved as `actor` under the credential of
   # that one call: read against the resume version the client saw and the role's newest description, its matches'
   # lines resolved to the resume's own. Returns the score and what was saved, in words.
-  def save!(posting, score:, why:, resume_version:, level: nil, matches: [], gaps: [], reported_model: nil, actor: "agent:assistant")
+  #
+  # Since 4c the score is the ATS fit, and `background` may carry the Background fit, read with the background version
+  # the client saw: { version:, score:, why:, covered: [{ asks:, lines:, address_in:, note: }], preferences: [{ preference:,
+  # verdict:, why:, lines: }] }, its lines (B4, or 4) resolved to the background's own.
+  def save!(posting, score:, why:, resume_version:, level: nil, matches: [], gaps: [], reported_model: nil, actor: "agent:assistant",
+            background: nil)
     raise ArgumentError, "a score is a whole number from 0 to 100" unless score.is_a?(Integer) && score.between?(0, 100)
     raise ArgumentError, "say why, in a sentence" if why.to_s.strip.empty?
 
@@ -153,11 +173,48 @@ module FitScores
       score: score, level: level.to_s.strip.presence, matches: matches, gaps: WrittenFrom.gaps(gaps), why: why.to_s.strip,
       dropped_lines: dropped, resume: resume, resume_hash: resume.content_hash, role_description: description,
       description_hash: description.content_hash, written_by: actor, reported_model: WrittenFrom.reported(reported_model),
-      run_id: "mcp:#{Authority.credential&.id}"
+      run_id: "mcp:#{Authority.credential&.id}", **background_reading(background)
     )
     AuditEvent.record!(actor: actor, action: "create", target: saved, reasoning: "Saved through MCP: #{said(saved)}.",
                        changes_made: facts(saved).transform_values { |value| [ nil, value ] })
     [ saved, "#{said(saved)}." ]
+  end
+
+  # The Background fit's attributes (4c), from what the client gives: none when it gives none.
+  def background_reading(given)
+    given = WrittenFrom.plain(given)
+    return {} if given.values.all?(&:blank?)
+
+    score = given["score"]
+    raise ArgumentError, "a Background fit is a whole number from 0 to 100" unless score.is_a?(Integer) && score.between?(0, 100)
+    raise ArgumentError, "say why the Background fit is what it is, in a sentence" if given["why"].to_s.strip.empty?
+
+    background = WrittenFrom.background!(given["version"], reread: "the roles to weigh")
+    dropped = 0
+    cite = lambda do |numbers|
+      lines, missing = background.cite(numbers)
+      dropped += missing
+      lines
+    end
+    covered = Array(given["covered"]).filter_map do |item|
+      item = WrittenFrom.plain(item)
+      next if item["asks"].to_s.strip.empty?
+
+      where = item["address_in"].to_s.strip.presence || "resume"
+      raise ArgumentError, "a covered gap is addressed in #{FitScore::ADDRESS_IN.keys.join(', or ')}" unless FitScore::ADDRESS_IN.key?(where)
+
+      { "asks" => item["asks"].to_s.strip, "lines" => cite.call(item["lines"]), "address_in" => where, "note" => item["note"].to_s.strip.presence }.compact
+    end
+    preferences = Array(given["preferences"]).filter_map do |item|
+      item = WrittenFrom.plain(item)
+      next if item["preference"].to_s.strip.empty?
+      raise ArgumentError, "a preference is a match or a miss" unless FitScore::PREFERENCE_VERDICTS.include?(item["verdict"].to_s.strip)
+
+      { "preference" => item["preference"].to_s.strip, "verdict" => item["verdict"].to_s.strip, "why" => item["why"].to_s.strip.presence,
+        "lines" => cite.call(item["lines"]) }.compact
+    end
+    { background_score: score, background_why: given["why"].to_s.strip, covered: covered, preferences: preferences,
+      background_dropped_lines: dropped, background: background, background_hash: background.content_hash }
   end
 
   def record_call(llm, run)
@@ -182,11 +239,21 @@ module FitScores
                 summary: parts.empty? ? "Nothing to weigh." : "#{parts.join('; ')}.")
   end
 
-  # A score in a few words, its text aside: "72 for Sales Engineer at Acme (2 matches, 1 gap)".
+  # A score in a few words, its text aside: "72 for Sales Engineer at Acme (2 matches, 1 gap)"; and its Background fit
+  # (4c), when read: "; Background fit 81 (2 gaps covered, preferences 3 met, 1 missed)".
   def said(score)
     dropped = WrittenFrom.dropped(score.dropped_lines)
     "#{score.score} for #{score.posting.role_title} at #{score.posting.company.name} " \
-      "(#{WrittenFrom.counted(score.matches.size, 'match')}, #{WrittenFrom.counted(score.gaps.size, 'gap')})#{dropped}"
+      "(#{WrittenFrom.counted(score.matches.size, 'match')}, #{WrittenFrom.counted(score.gaps.size, 'gap')})#{dropped}#{background_said(score)}"
+  end
+
+  def background_said(score)
+    return "" unless score.background_reading?
+
+    tally = score.preference_tally
+    lines = WrittenFrom.counted(score.background_dropped_lines, "background line")
+    "; Background fit #{score.background_score} (#{score.covered.size} #{score.covered.one? ? 'gap' : 'gaps'} covered, preferences " \
+      "#{tally['match']} met, #{tally['miss']} missed#{"; #{lines} it named #{score.background_dropped_lines == 1 ? "isn't" : "aren't"} in the background, left out" if score.background_dropped_lines.positive?})"
   end
 
   # A role's scores are deleted with it by the database (review pass R4): each one's destroy event is recorded first, by
@@ -200,9 +267,11 @@ module FitScores
 
   # What a score's audit events say of it: its score, counts and hashes, never its text.
   def facts(score)
+    background = ({ "background_score" => score.background_score, "covered" => score.covered.size, "preferences" => score.preference_tally,
+                    "background_hash" => score.background_hash } if score.background_reading?)
     { "score" => score.score, "matches" => score.matches.size, "gaps" => score.gaps.size, "resume_hash" => score.resume_hash,
-      "description_hash" => score.description_hash, "written_by" => score.written_by }
+      "description_hash" => score.description_hash, "written_by" => score.written_by, **background.to_h }
   end
 
-  private_class_method :record, :record_call, :weighed, :facts
+  private_class_method :record, :record_call, :weighed, :facts, :background_reading, :background_said
 end

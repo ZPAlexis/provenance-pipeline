@@ -52,7 +52,7 @@ RSpec.describe "drafts:, reviews: and fit: commands" do
     create(:posting, company: company, role_title: "Solutions Engineer", tracking: "suggested", job_url: "https://acme.example/jobs/2")
 
     expect(run_task("fit:list").out).to include(" 72  #{role.id}  Acme / Sales Engineer (tracked, applied)")
-    expect(run_task("fit:show", role.id).out).to include("Acme / Sales Engineer: 72 of 100", "Discovery at volume [line 2]", "- Spanish: Not shown.")
+    expect(run_task("fit:show", role.id).out).to include("Acme / Sales Engineer: ATS fit 72 of 100", "Discovery at volume [line 2]", "- Spanish: Not shown.")
     planned = run_task("fit:score")
     expect(planned.out).to include("1 role unscored: 1 can be weighed", "Run it with GO=1.")
     expect(FitScore.count).to eq(1)

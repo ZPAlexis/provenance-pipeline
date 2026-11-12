@@ -4,7 +4,9 @@ class RolesController < ApplicationController
   # The answers a tab can be narrowed to, in the order the filters show them.
   ANSWERS = %w[verified_live not_found inaccessible pending].freeze
   # The fit a list can be narrowed to (2f): at least this score, or not weighed yet.
-  FITS = { "85" => "85 and up", "70" => "70 and up", "50" => "50 and up", "none" => "Not weighed" }.freeze
+  # Since 4c, by the ATS fit (the resume alone), or those weighed before the background as it is now.
+  FITS = { "85" => "85 and up", "70" => "70 and up", "50" => "50 and up", "none" => "Not weighed",
+           "before_background" => "Before your background" }.freeze
   # What a list can be sorted by, best first: the role's fit, or its company's (4b).
   SORTS = %w[fit company_fit].freeze
 
@@ -102,9 +104,17 @@ class RolesController < ApplicationController
     @company_fits = WatchList.reviews(roles.map(&:company_id).uniq)
     @fit = params[:fit] if FITS.key?(params[:fit])
     @sort = params[:sort] if SORTS.include?(params[:sort])
-    at_least = ->(floor) { roles.count { |role| @fits[role.id] && @fits[role.id].score.score >= floor } }
-    @fit_counts = FITS.keys.to_h { |key| [ key, key == "none" ? roles.count { |role| !@fits[role.id] } : at_least.call(key.to_i) ] }
-    @roles = roles.select { |role| @fit == "none" ? !@fits[role.id] : @fits[role.id] && @fits[role.id].score.score >= @fit.to_i } if @fit
+    @background = @profile&.backgrounds&.newest_first&.first
+    before = FitScores.before_background(roles).to_set(&:id)
+    holds = lambda do |role, key|
+      case key
+      when "none" then !@fits[role.id]
+      when "before_background" then before.include?(role.id)
+      else @fits[role.id] && @fits[role.id].score.score >= key.to_i
+      end
+    end
+    @fit_counts = FITS.keys.to_h { |key| [ key, roles.count { |role| holds.call(role, key) } ] }
+    @roles = roles.select { |role| holds.call(role, @fit) } if @fit
     score = ->(role) { @sort == "fit" ? @fits[role.id]&.score&.score : @company_fits[role.company_id]&.score }
     @roles = @roles.sort_by.with_index { |role, index| [ -(score.call(role) || -1), index ] } if @sort
     @unscored = FitScores.weighable(FitScores.unscored(FitScores.offered.includes(:company).to_a))

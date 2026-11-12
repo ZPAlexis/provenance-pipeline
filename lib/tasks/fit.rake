@@ -50,8 +50,9 @@ namespace :fit do
     abort e.message.upcase_first
   end
 
-  desc "Roles by how well they fit your resume, best first: each one's newest score, whether it is stale, and its " \
-       "company's fit beside it where the company is reviewed (a separate score). " \
+  desc "Roles by how well they fit your resume, best first: each one's newest ATS fit, whether it is stale, its Background " \
+       "fit beside it (4c, where read; marked when the background changed since), and its company's fit where the company " \
+       "is reviewed (a separate score). " \
        "[MIN=70] [LIMIT=n]"
   task list: :environment do
     postings = Posting.includes(:company, :application).where(id: FitScore.select(:posting_id)).index_by(&:id)
@@ -66,8 +67,10 @@ namespace :fit do
     shown.each do |entry|
       posting = postings[entry.score.posting_id]
       company = companies[posting.company_id]
-      puts "#{entry.score.score.to_s.rjust(3)}  #{posting.id}  #{named.call(posting)} (#{posting.tracking}" \
+      score = entry.score
+      puts "#{score.score.to_s.rjust(3)}  #{posting.id}  #{named.call(posting)} (#{posting.tracking}" \
            "#{', applied' if posting.application})#{"  stale: #{entry.stale.to_sentence} changed" if entry.stale?}" \
+           "#{"  background fit #{score.background_score}#{' (background changed since)' if entry.background_stale}" if score.background_reading?}" \
            "#{"  company fit #{company.score}#{' (stale)' if company.stale?}" if company}"
     end
   end
@@ -79,7 +82,7 @@ namespace :fit do
     score = posting.fit_scores.includes(:llm_call, :resume, :role_description).newest_first.first or
       abort "#{named.call(posting)} isn't weighed yet: fit:score[#{posting.id}]."
 
-    puts "#{named.call(posting)}: #{score.score} of 100"
+    puts "#{named.call(posting)}: ATS fit #{score.score} of 100 (the resume alone)"
     puts "  #{score.why}"
     puts "  Level: #{score.level}" if score.level
     puts "\nMatches"
@@ -98,5 +101,16 @@ namespace :fit do
          "#{score.role_description ? "read #{score.role_description.first_read_at.to_date}" : '(no longer on record)'}"
     stale = score.stale_for(SearchProfile.current&.resumes&.newest_first&.first, posting.role_descriptions.newest_first.first)
     puts "Stale: #{stale.to_sentence} changed since; fit:score[#{posting.id}] weighs it again." if stale.any?
+    if score.background_reading?
+      background = SearchProfile.current&.backgrounds&.newest_first&.first
+      puts "\nBackground fit: #{score.background_score} of 100 (with the background, version #{score.background_hash.delete_prefix('sha256:')[0, 12]})"
+      puts "  #{score.background_why}"
+      puts "  Gaps the background covers:", *score.covered.map { |gap|
+        "  - #{gap['asks']}: in #{FitScore::ADDRESS_IN.fetch(gap['address_in'])}#{" (#{gap['note']})" if gap['note']}" \
+          "#{" [B#{gap['lines'].map { |line| line['line'] }.join(', B')}]" if gap['lines'].any?}"
+      } if score.covered.any?
+      puts "  Role preferences:", *score.preferences.map { |point| "  - #{point['verdict']}: #{point['preference']}#{" (#{point['why']})" if point['why']}" } if score.preferences.any?
+      puts "Stale: the background changed since." if score.background_stale_for(background)
+    end
   end
 end

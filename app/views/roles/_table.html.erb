@@ -8,8 +8,8 @@
         <th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th>
         <% if local_assigns[:fits] %>
           <% sorted = local_assigns[:sorted] %>
-          <th><%= link_to "Fit#{' ↓' if sorted == 'fit'}", sorts.call("fit"),
-                          title: (sorted == "fit" ? "Back to company order" : "Best fit to your resume first") %></th>
+          <th><%= link_to "ATS fit#{' ↓' if sorted == 'fit'}", sorts.call("fit"),
+                          title: (sorted == "fit" ? "Back to company order" : "Your resume alone, as a recruiter's screening system would read it: best first") %></th>
           <th><%= link_to "Company fit#{' ↓' if sorted == 'company_fit'}", sorts.call("company_fit"),
                           title: (sorted == "company_fit" ? "Back to company order" : "Its company's review against your company preferences, best first: a separate score, never weighed into the role's") %></th>
         <% end %>

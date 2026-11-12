@@ -186,7 +186,7 @@ RSpec.describe "Finding companies", type: :request do
       expect(response.body).to include("Company fit ↓")
       expect(response.body.index("Revenue Architect")).to be < response.body.index("Pipeline Analyst")
       get roles_path(sort: "fit")
-      expect(response.body).to include("Fit ↓").and(not_include("Company fit ↓"))
+      expect(response.body).to include("ATS fit ↓").and(not_include("Company fit ↓"))
     end
 
     it "shows a role's company fit on its page, linked to the review, or that its company isn't reviewed" do

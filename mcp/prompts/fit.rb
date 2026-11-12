@@ -25,9 +25,10 @@ module ProvenanceMcp
                suggest and why, and suggest them with suggest_roles when I say so (each with why, in a sentence). The lists
                are as last read: it reads each role's own page first and suggests only those still up, with their
                descriptions. Tell me which were gone.
-            4. Weigh each one suggested with get_roles_to_weigh by the fit rules, saving each with save_fit_score.
-            5. Give me what you weighed, best first, with each score and why in a line, and its company's fit beside it
-               where the company is reviewed: two scores, never merged.
+            4. Weigh each one suggested with get_roles_to_weigh by the fit rules, saving each with save_fit_score: its ATS
+               fit from my resume alone, and, when my background is saved, its Background fit beside it.
+            5. Give me what you weighed, best first by the ATS fit, with each score and why in a line, the Background fit
+               beside it, and its company's fit where the company is reviewed: separate scores, never merged.
             Nothing here tracks a role or sends anything: I track the ones I want, in the app or by asking you.
           TEXT
         end
@@ -43,25 +44,31 @@ module ProvenanceMcp
       end
     end
 
-    # Weighing the roles already offered (tracked or suggested) that have no current score (2f step 3).
+    # Weighing the roles already offered (tracked or suggested) that have no current score (2f step 3), or (4c) those
+    # weighed before the background as it is now.
     class WeighRoles < Prompt
       prompt_name "weigh_roles"
       title "Weigh my roles"
-      description "Your tracked and suggested roles with no current fit score, weighed against your resume from their " \
+      description "Your tracked and suggested roles with no current fit score, or those weighed before your background, " \
+                  "weighed against your resume (the ATS fit) and your background (the Background fit) from their " \
                   "descriptions, a few at a time, each saved as it is weighed."
       arguments [ MCP::Prompt::Argument.new(name: "how_many", title: "How many",
-                                            description: "Optional: how many roles to weigh this time (5 when left out)") ]
+                                            description: "Optional: how many roles to weigh this time (5 when left out)"),
+                  MCP::Prompt::Argument.new(name: "before_background", title: "Before my background",
+                                            description: "Optional: yes to weigh again the roles weighed before your background") ]
 
       class << self
-        def compose(how_many: nil, **)
+        def compose(how_many: nil, before_background: nil, **)
           count = how_many.to_s.strip.match?(/\A\d+\z/) ? how_many.to_i.clamp(1, 50) : 5
+          again = before_background.to_s.strip.downcase.match?(/\A(y|yes|true|1)\z/)
           <<~TEXT.strip
-            Weigh #{count} of my roles that have no current fit score, against my resume.
-            Call get_roles_to_weigh (up to 10 at a time) and weigh each by the fit rules it gives, saving each with
+            Weigh #{count} of my roles #{again ? 'weighed before my background as it is now, again' : 'that have no current fit score'}, against my resume and my background.
+            Call get_roles_to_weigh#{' with before_background' if again} (up to 10 at a time) and weigh each by the rules it gives, two
+            ways: the ATS fit from my resume alone, and the Background fit with my background too, saving both with
             save_fit_score as you go. A role named there with no description read yet: read it with read_descriptions
-            first. Then give me what you weighed, best first, with each score and why in a line, and its company's fit
-            beside it where the company is reviewed (two scores, never merged). Nothing here tracks a role: I track the
-            ones I want, in the app or by asking you.
+            first. Then give me what you weighed, best first by the ATS fit, with each score and why in a line, the
+            Background fit beside it, and its company's fit where the company is reviewed (separate scores, never merged).
+            Nothing here tracks a role: I track the ones I want, in the app or by asking you.
           TEXT
         end
       end

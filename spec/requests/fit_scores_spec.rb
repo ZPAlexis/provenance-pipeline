@@ -93,7 +93,7 @@ RSpec.describe "Fit scores", type: :request do
       weighed(other, score: 41)
 
       get roles_path
-      expect(response.body).to include(">88<", ">41<", "Fit:", "85 and up", "Not weighed")
+      expect(response.body).to include(">88<", ">41<", "ATS fit:", "85 and up", "Not weighed")
 
       get roles_path(fit: "70")
       expect(response.body).to include("Sales Engineer</a>").and(not_include("Solutions Engineer</a>", "Account Executive</a>"))
@@ -104,7 +104,7 @@ RSpec.describe "Fit scores", type: :request do
       body = response.body
       expect(body.index("Sales Engineer</a>")).to be < body.index("Solutions Engineer</a>")
       expect(body.index("Solutions Engineer</a>")).to be < body.index("Account Executive</a>")
-      expect(body).to include("Fit ↓")
+      expect(body).to include("ATS fit ↓")
     end
 
     it "offers to weigh the unscored with their description, with the cost asked first, and runs them as one batch" do

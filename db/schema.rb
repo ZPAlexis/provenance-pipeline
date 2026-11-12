@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_11_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_11_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -252,11 +252,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_000001) do
     t.string "run_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "background_score"
+    t.text "background_why"
+    t.jsonb "covered", default: [], null: false
+    t.jsonb "preferences", default: [], null: false
+    t.integer "background_dropped_lines", default: 0, null: false
+    t.uuid "background_id"
+    t.string "background_hash"
+    t.index ["background_id"], name: "index_fit_scores_on_background_id"
     t.index ["llm_call_id"], name: "index_fit_scores_on_llm_call_id"
     t.index ["posting_id", "created_at"], name: "index_fit_scores_on_posting_id_and_created_at"
     t.index ["posting_id"], name: "index_fit_scores_on_posting_id"
     t.index ["resume_id"], name: "index_fit_scores_on_resume_id"
     t.index ["role_description_id"], name: "index_fit_scores_on_role_description_id"
+    t.check_constraint "background_score IS NULL OR background_score >= 0 AND background_score <= 100", name: "fit_scores_background_score_range"
     t.check_constraint "score >= 0 AND score <= 100", name: "fit_scores_score_range"
   end
 
@@ -450,6 +459,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_000001) do
   add_foreign_key "drafts", "llm_calls"
   add_foreign_key "drafts", "resumes", on_delete: :nullify
   add_foreign_key "drafts", "role_descriptions", on_delete: :nullify
+  add_foreign_key "fit_scores", "backgrounds", on_delete: :nullify
   add_foreign_key "fit_scores", "llm_calls"
   add_foreign_key "fit_scores", "postings", on_delete: :cascade
   add_foreign_key "fit_scores", "resumes", on_delete: :nullify

@@ -203,9 +203,11 @@ RSpec.describe "Finding and weighing roles through MCP" do
 
       expect(found).to include("judged by meaning", "find_roles", "suggest_roles", "reads each role's own page first", "save_fit_score",
                                "Look first for: customer engineering", "<profile>", "Titles they search for: Sales Engineer",
-                               "Nothing here tracks a role", "two scores, never merged")
+                               "Nothing here tracks a role", "fit from my resume alone, and, when my background is saved, its Background fit beside it",
+                               "separate scores, never merged")
       expect(weigh).to start_with("Weigh 3 of my roles that have no current fit score")
-      expect(weigh).to include("its company's fit\nbeside it where the company is reviewed (two scores, never merged)")
+      expect(weigh).to include("the ATS fit from my resume alone, and the Background fit with my background too",
+                               "its company's fit where the company is reviewed (separate scores, never merged)")
     end
   end
 
