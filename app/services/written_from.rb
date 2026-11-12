@@ -66,6 +66,11 @@ module WrittenFrom
     [ cited, dropped ]
   end
 
+  # Whether any of the items given cites a background line (4c): a line drawn on named "B3", or `background_lines`.
+  def cites_background?(*lists)
+    lists.flatten.any? { |item| (item = plain(item)) && (item["line"].to_s.strip.match?(/\AB\d/i) || Array(item["background_lines"]).any?) }
+  end
+
   # The background version a piece of writing read (4c), when it says one, and the part its kind may use; nil when it
   # names none. A version given for a kind that reads no part of it is refused.
   def background_read!(background_version, part, reread:)

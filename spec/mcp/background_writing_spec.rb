@@ -48,11 +48,12 @@ RSpec.describe "Resume reviews and tailored resumes with the background, through
                                  "[B3] Set up a first Salesforce sales-operations process.\n[B4] Portuguese, native.\n</background>")
     expect(materials).not_to include("Internal-facing", "A long-term role")
     expect(said(call(:ApplicationMaterials, application: "acme sales"))).not_to include("<background")
-    expect(said(call(:ApplicationMaterials, application: "acme sales", kind: "cover_letter"))).not_to include("<background")
+    # A letter reads what they're looking for alone (step 4), never this part.
+    expect(said(call(:ApplicationMaterials, application: "acme sales", kind: "cover_letter"))).not_to include("Set up a first Salesforce")
 
     expect(prompt("tailored_resume")).to include(ProvenanceMcp::Writing.rules["background_resume"], "background_lines", "[B3] Set up")
     expect(prompt("resume_review")).to include("from your background, not on the resume")
-    expect(prompt("cover_letter")).not_to include("background_resume", "<background")
+    expect(prompt("cover_letter")).not_to include(ProvenanceMcp::Writing.rules["background_resume"], "Set up a first Salesforce")
     expect(said(call(:WritingRules, kind: "resume_review"))).to include(ProvenanceMcp::Writing.rules["background_resume"])
   end
 
@@ -75,7 +76,7 @@ RSpec.describe "Resume reviews and tailored resumes with the background, through
     expect(said(review(background_version: "0123456789ab"))).to start_with("Not saved: background version \"0123456789ab\" isn't on record")
   end
 
-  it "saves a tailored resume's changes drawn from the background, flagged; and a letter reads none of it yet" do
+  it "saves a tailored resume's changes drawn from the background, flagged" do
     text = said(call(:SaveDraft, application: "acme sales", kind: "tailored_resume", resume_version: resume.version, language: "English",
                                  body: "Jordan Sample\nSales engineer, eight years.\nSet up a first Salesforce sales-operations process.",
                                  background_version: background.version,
@@ -85,9 +86,6 @@ RSpec.describe "Resume reviews and tailored resumes with the background, through
     expect(text).to include("Tailored resume in English: 13 words, 2 changes (1 drawn from your background, not on the resume, for you to confirm)")
     expect(draft.from_background(draft.tailoring).sole["background_lines"].map { |line| line["line"] }).to eq([ 3 ])
     expect(draft.background_hash).to eq(background.hash_of("not_on_resume"))
-    expect(said(call(:SaveDraft, application: "acme sales", kind: "cover_letter", resume_version: resume.version, language: "English",
-                                 body: "Dear Acme team.", background_version: background.version)))
-      .to eq("Not saved: this kind of writing reads no part of the background.")
 
     shown = said(call(:GetDraft, draft: draft.id))
     expect(shown).to include("- Added the Salesforce process [lines ] [from the background, not on the resume, to confirm: B3]",

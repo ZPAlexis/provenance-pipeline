@@ -40,7 +40,7 @@ module ProvenanceMcp
           },
           note: { type: "string", description: "One or two sentences to the operator about it" },
           revises: { type: "string", description: "The id of the saved draft this one polishes, if it does" },
-          background_version: { type: "string", description: "A tailored resume's: the background's version, as get_application_materials gives it, when it drew on it" },
+          background_version: { type: "string", description: "The background's version, as get_application_materials gives it, when it read the background (a letter never cites its lines)" },
           model: { type: "string", description: "The model you are, as you know it (recorded as reported)" }
         },
         required: %w[application kind resume_version language body]

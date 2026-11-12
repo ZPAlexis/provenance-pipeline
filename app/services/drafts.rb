@@ -128,6 +128,8 @@ module Drafts
   #
   # Since 4c, a tailored resume read against the background version the client saw (`background_version`) may bring in a
   # line of the background not on the resume: its change cites it (`background_lines`), flagged for the operator to confirm.
+  # A cover letter or an outreach note reads only what the operator is looking for, for motivation: it records the
+  # version read, and a background line cited anywhere in it is refused, since every claim in it traces to the resume.
   def save!(application, kind:, language:, body:, resume_version:, subject: nil, lines_drawn_on: [], changes: [], gaps: [],
             note: nil, revises: nil, contact: nil, reported_model: nil, actor: "agent:assistant", background_version: nil)
     raise ArgumentError, "a draft is one of: #{Draft::KINDS.join(', ')}" unless Draft::KINDS.include?(kind)
@@ -145,6 +147,10 @@ module Drafts
     raise ArgumentError, "it revises no draft of this application (#{revises})" if revises.present? && !earlier
 
     part = ReadsBackground::PARTS[kind]
+    if ReadsBackground::MOTIVATION_ONLY.include?(kind) && WrittenFrom.cites_background?(lines_drawn_on, changes)
+      raise ArgumentError, "a cover letter or an outreach note cites no line of the background: what the operator is looking for " \
+                           "is their motivation, never a claim, and every claim traces to a line of the resume"
+    end
     background = WrittenFrom.background_read!(background_version, part, reread: "the application's materials")
     drew_on, dropped = WrittenFrom.drawn_on(resume, lines_drawn_on)
     tailoring, dropped_too = WrittenFrom.with_lines(resume, changes, "change", background: background, part: part)
@@ -170,7 +176,8 @@ module Drafts
     gaps = draft.gaps.empty? ? "no gaps" : "#{counted(draft.gaps.size, 'gap')} flagged"
     dropped = WrittenFrom.dropped(draft.dropped_lines)
     revised = "; it revises the #{draft.revises.label.downcase} of #{draft.revises.created_at.utc.to_date}" if draft.revises
-    "#{draft.label} in #{draft.language}: #{counted(draft.words, 'word')}, #{made}, #{gaps}#{dropped}#{revised}."
+    read = "; it read what you're looking for, for motivation" if draft.background_hash && ReadsBackground::MOTIVATION_ONLY.include?(draft.kind)
+    "#{draft.label} in #{draft.language}: #{counted(draft.words, 'word')}, #{made}, #{gaps}#{read}#{dropped}#{revised}."
   end
 
   # The operator's edit of a draft's text; nil when it says the same. An approved draft returns to a draft.

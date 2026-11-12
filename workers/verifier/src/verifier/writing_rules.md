@@ -46,6 +46,12 @@ When the person's background not on the resume is given, it is their own word ab
 - Each point, suggestion or change drawn from it names its background lines, so it is flagged "from your background, not on the resume" for the person to confirm before they use it.
 - Never present it as already on the resume, never claim more than its lines state, and never draw on it for anything else: a gap it doesn't cover stays a gap.
 
+## background_letter
+
+When what the person is looking for is given, it is their own word on their motivation: the kind of role and work they want, and where they want to grow. A cover letter or an outreach note may use it for why they want this role, in their voice, and only for that.
+- It is never a claim of experience: every claim of what they have done still traces to a line of the resume, and none of its lines is ever cited as a line drawn on.
+- Use it only where the role connects to it. Never recite it, and never let it promise what the resume doesn't show.
+
 ## fit
 
 A fit score weighs one role against the resume, so the person can see which roles to apply to first. It is advice for them, and claims nothing for them. Weigh the work and the level the role asks for; where the role is and how it is worked are weighed elsewhere.

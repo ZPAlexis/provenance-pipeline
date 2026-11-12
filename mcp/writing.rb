@@ -69,9 +69,11 @@ module ProvenanceMcp
         ("Stress this, as long as the resume shows it: #{stress.strip}" if stress.to_s.strip.present?),
         rules.fetch("grounding"), rules.fetch(kind),
         (rules.fetch("background_resume") if background && kind.in?(%w[resume_review tailored_resume])),
+        (rules.fetch("background_letter") if background && kind.in?(%w[cover_letter outreach_note])),
         (rules.fetch("style") if kind.in?(%w[cover_letter outreach_note])),
         AFTER.fetch(kind).strip,
         (BACKGROUND_AFTER if background && kind.in?(%w[resume_review tailored_resume])),
+        (BACKGROUND_LETTER_AFTER if background && kind.in?(%w[cover_letter outreach_note])),
         "Then wait for what I want changed, and keep every change to these rules." ].compact.join("\n\n")
     end
 
@@ -81,6 +83,13 @@ module ProvenanceMcp
       (background_version), and cite its lines by their B numbers in background_lines on each strength, suggestion or
       change drawn from it. Each is flagged "from your background, not on the resume" for me to confirm, and shown to me
       that way.
+    TEXT
+
+    # How a letter or a note that read what the operator is looking for is saved (4c): the version, never a cited line.
+    BACKGROUND_LETTER_AFTER = <<~TEXT.strip
+      When you save it, give the background version from the materials (background_version), so the draft records what
+      it read. Cite no background line in lines_drawn_on: what I'm looking for is motivation, and every claim in the text
+      traces to a line of my resume.
     TEXT
 
     # The newest background and the part `kind` of writing may read (ReadsBackground::PARTS), as [background, part];
@@ -94,8 +103,10 @@ module ProvenanceMcp
     # One part of the background, its lines numbered as the whole's are, fenced as data with its version.
     def background_part(background, part)
       lines = background.lines_of(part).map { |number, line, _| "[B#{number}] #{line}" }
-      "#{Background::PARTS.dig(part, :label)}, the operator's own word (cite its lines by their B numbers; anything you draw " \
-        "from it is flagged for them to confirm):\n" +
+      how = if part == "looking_for" then "their motivation only, never a claim of experience; cite none of its lines"
+      else "cite its lines by their B numbers; anything you draw from it is flagged for them to confirm"
+      end
+      "#{Background::PARTS.dig(part, :label)}, the operator's own word (#{how}):\n" +
         fence("background", lines.join("\n"), part: part, version: background.version)
     end
 
