@@ -9,11 +9,14 @@ module ProvenanceMcp
       description "Saves a cover letter, an outreach note, or a tailored resume you wrote for an application, only when " \
                   "the operator asks you to save it. Give the resume_version from get_application_materials and cite " \
                   "resume lines by their numbers; an outreach note to someone named gives their contact. A polished " \
-                  "version of a saved draft names it in `revises`: the earlier one stays. The operator edits and " \
-                  "approves it in the app; nothing is sent."
+                  "version of a saved draft names it in `revises`: the earlier one stays. A tailored resume's change " \
+                  "drawn from the operator's background not on the resume cites its lines in background_lines, with the " \
+                  "background_version: it is flagged for them to confirm. The operator edits and approves it in the app; " \
+                  "nothing is sent."
       scopes "drafts:write"
 
       LINES = { type: "array", items: { type: "integer" }, description: "Resume lines, by their numbers" }.freeze
+      BACKGROUND_LINES = { type: "array", items: { type: "string" }, description: "Background lines it draws on, as B4 (or 4): flagged for the operator to confirm" }.freeze
       input_schema(
         properties: {
           application: { type: "string", description: "Its id, or its company and role" },
@@ -29,7 +32,7 @@ module ProvenanceMcp
           },
           changes: {
             type: "array", description: "A tailored resume's: what changed and why, naming the original lines",
-            items: { type: "object", properties: { change: { type: "string" }, lines: LINES }, required: %w[change lines] }
+            items: { type: "object", properties: { change: { type: "string" }, lines: LINES, background_lines: BACKGROUND_LINES }, required: %w[change lines] }
           },
           gaps: {
             type: "array", description: "What the role asks for that the resume doesn't show",
@@ -37,6 +40,7 @@ module ProvenanceMcp
           },
           note: { type: "string", description: "One or two sentences to the operator about it" },
           revises: { type: "string", description: "The id of the saved draft this one polishes, if it does" },
+          background_version: { type: "string", description: "A tailored resume's: the background's version, as get_application_materials gives it, when it drew on it" },
           model: { type: "string", description: "The model you are, as you know it (recorded as reported)" }
         },
         required: %w[application kind resume_version language body]
@@ -44,13 +48,13 @@ module ProvenanceMcp
 
       class << self
         def answer(application:, kind:, resume_version:, language:, body:, subject: nil, contact: nil, lines_drawn_on: [], changes: [],
-                   gaps: [], note: nil, revises: nil, model: nil)
+                   gaps: [], note: nil, revises: nil, model: nil, background_version: nil)
           found = Lookup.application(application)
           to = Lookup.contact(found.company, contact) if contact.to_s.strip.present?
           draft, summary = Drafts.save!(found, kind: kind == "outreach_note" ? "outreach" : kind, language: language, body: body,
                                                resume_version: resume_version, subject: subject, contact: to, lines_drawn_on: lines_drawn_on,
                                                changes: changes, gaps: gaps, note: note, revises: revises, reported_model: model,
-                                               actor: ASSISTANT)
+                                               actor: ASSISTANT, background_version: background_version)
           ProvenanceMcp.text("Saved for #{Writing.label(found)}#{", to #{to.name}" if to}: #{summary}",
                              "Draft id #{draft.id}. The operator edits and approves it on the application's page in the app " \
                              "(/applications/#{found.id}#drafts); nothing is sent.")

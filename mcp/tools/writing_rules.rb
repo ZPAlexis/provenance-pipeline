@@ -16,7 +16,7 @@ module ProvenanceMcp
       )
 
       class << self
-        def answer(kind:, language: nil) = ProvenanceMcp.text(Writing.instructions(kind, language: language))
+        def answer(kind:, language: nil) = ProvenanceMcp.text(Writing.instructions(kind, language: language, background: Writing.background_for(kind)))
       end
     end
   end

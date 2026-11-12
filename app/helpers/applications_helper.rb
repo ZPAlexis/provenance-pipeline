@@ -38,4 +38,16 @@ module ApplicationsHelper
     days = application.days_in_stage
     days.zero? ? "since today" : "for #{pluralize(days, 'day')}"
   end
+
+  # A point, suggestion or change drawn from the background not on the resume (4c): flagged for the operator to confirm,
+  # with the background lines it rests on. Nothing for one that cites none.
+  def from_background(item)
+    lines = Array(item["background_lines"])
+    return if lines.empty?
+
+    tag.div(class: "small") do
+      safe_join([ tag.span("from your background, not on the resume: confirm it", class: "badge unsure"),
+                  *lines.map { |line| safe_join([ tag.br, tag.span("[B#{line['line']}] #{line['text']}", class: "muted") ]) } ])
+    end
+  end
 end

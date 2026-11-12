@@ -3,6 +3,7 @@
     them is sent or claimed. %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
 <% description = application.posting.role_descriptions.newest_first.first %>
+<% background = SearchProfile.current&.backgrounds&.newest_first&.first %>
 <% lines = ->(cited) { "#{"line".pluralize(cited.size)} #{cited.map { |line| line["line"] }.join(", ")}" } %>
 <h2 id="reviews">Resume reviews</h2>
 <% needs = Drafts.missing(application) %>
@@ -37,7 +38,7 @@
       <p class="small"><strong>Strengths</strong>: what the role asks that your resume shows</p>
       <ul class="small">
         <% review.strengths.each do |strength| %>
-          <li><%= strength["point"] %><% if strength["lines"].any? %> <span class="muted">· <%= lines.call(strength["lines"]) %></span><% end %></li>
+          <li><%= strength["point"] %><% if strength["lines"].any? %> <span class="muted">· <%= lines.call(strength["lines"]) %></span><% end %><%= from_background(strength) %></li>
         <% end %>
       </ul>
       <p class="small"><strong>Gaps</strong>: what the role asks that your resume doesn't show</p>
@@ -50,7 +51,7 @@
       <p class="small"><strong>Suggestions</strong> for this role</p>
       <ul class="small">
         <% review.suggestions.each do |suggestion| %>
-          <li><%= suggestion["change"] %><% if suggestion["lines"].any? %> <span class="muted">· <%= lines.call(suggestion["lines"]) %></span><% end %></li>
+          <li><%= suggestion["change"] %><% if suggestion["lines"].any? %> <span class="muted">· <%= lines.call(suggestion["lines"]) %></span><% end %><%= from_background(suggestion) %></li>
         <% end %>
       </ul>
     </div>
@@ -70,7 +71,8 @@
       <% if written_by&.credential %> · <%= link_to "its credential", agent_credential_path(written_by.credential) %><% end %>
     </p>
     <% stale = [ ("your resume" if resume && resume.content_hash != review.resume_hash),
-                 ("the role's description" if description && description.content_hash != review.description_hash) ].compact %>
+                 ("the role's description" if description && description.content_hash != review.description_hash),
+                 ("your background not on the resume" if review.background_stale_for(background)) ].compact %>
     <% if stale.any? %>
       <p class="small warn"><%= stale.to_sentence.upcase_first %> <%= stale.one? ? "has" : "have" %> changed since it was written.</p>
     <% end %>

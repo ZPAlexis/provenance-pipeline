@@ -4,6 +4,7 @@
 <% needs = Drafts.missing(application) %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
 <% description = application.posting.role_descriptions.newest_first.first %>
+<% background = SearchProfile.current&.backgrounds&.newest_first&.first %>
 <h2 id="drafts">Drafts</h2>
 <section class="check-now">
   <% if needs.any? %>
@@ -99,7 +100,7 @@
         <ul class="small drew-on">
           <% draft.tailoring.each do |change| %>
             <% named = change["lines"].map { |line| line["line"] } %>
-            <li><%= change["change"] %> <span class="muted">· <%= named.any? ? "#{'line'.pluralize(named.size)} #{named.join(', ')}" : "no line named" %></span></li>
+            <li><%= change["change"] %> <span class="muted">· <%= named.any? ? "#{'line'.pluralize(named.size)} #{named.join(', ')}" : "no line named" %></span><%= from_background(change) %></li>
           <% end %>
         </ul>
       </details>
@@ -135,7 +136,8 @@
       <p class="muted small"><%= said.end_with?("”") ? said : "#{said}." %></p>
     <% end %>
     <% stale = [ ("your resume" if resume && resume.content_hash != draft.resume_hash),
-                 ("the role's description" if description && description.content_hash != draft.description_hash) ].compact %>
+                 ("the role's description" if description && description.content_hash != draft.description_hash),
+                 ("the background it read" if draft.background_stale_for(background)) ].compact %>
     <% if stale.any? %>
       <p class="small warn">
         <%= stale.to_sentence.upcase_first %> <%= stale.one? ? "has" : "have" %> changed since it was written: a new draft reads

@@ -21,8 +21,8 @@ module ProvenanceMcp
       def compose(application:, language: nil, stress: nil, contact: nil, **)
         found = ProvenanceMcp::Lookup.application(application)
         to = ProvenanceMcp::Lookup.contact(found.company, contact) if kind == "outreach_note" && contact.to_s.strip.present?
-        [ ProvenanceMcp::Writing.instructions(kind, language: language, stress: stress, to: to),
-          ProvenanceMcp::Writing.materials(found, to: to) ].join("\n\n---\n\n")
+        [ ProvenanceMcp::Writing.instructions(kind, language: language, stress: stress, to: to, background: ProvenanceMcp::Writing.background_for(kind)),
+          ProvenanceMcp::Writing.materials(found, to: to, kind: kind) ].join("\n\n---\n\n")
       end
     end
   end

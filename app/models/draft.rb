@@ -18,6 +18,9 @@ class Draft < ApplicationRecord
   belongs_to :llm_call, optional: true
   belongs_to :revises, class_name: "Draft", optional: true # the draft this one polishes
   belongs_to :contact, optional: true # the person an outreach note is addressed to (2e)
+  include ReadsBackground # 4c: the part of the background its kind may read
+
+  def background_part = ReadsBackground::PARTS[tailored_resume? ? "tailored_resume" : kind]
   has_many :revisions, class_name: "Draft", foreign_key: :revises_id, inverse_of: :revises, dependent: :nullify
 
   validates :kind, inclusion: { in: KINDS }

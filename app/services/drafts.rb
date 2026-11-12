@@ -125,8 +125,11 @@ module Drafts
   # What the operator's own Claude client wrote through MCP (2d), saved as `actor` under the credential of that one
   # call: a cover letter, an outreach note, or a tailored resume, read against the resume version the client saw. A
   # polished version revises the draft it came from, which stays. Returns the draft and what was saved, in words.
+  #
+  # Since 4c, a tailored resume read against the background version the client saw (`background_version`) may bring in a
+  # line of the background not on the resume: its change cites it (`background_lines`), flagged for the operator to confirm.
   def save!(application, kind:, language:, body:, resume_version:, subject: nil, lines_drawn_on: [], changes: [], gaps: [],
-            note: nil, revises: nil, contact: nil, reported_model: nil, actor: "agent:assistant")
+            note: nil, revises: nil, contact: nil, reported_model: nil, actor: "agent:assistant", background_version: nil)
     raise ArgumentError, "a draft is one of: #{Draft::KINDS.join(', ')}" unless Draft::KINDS.include?(kind)
     raise ArgumentError, "only an outreach note is addressed to someone" if contact && kind != "outreach"
 
@@ -141,8 +144,10 @@ module Drafts
     earlier = application.drafts.find_by(id: revises.to_s.strip) if revises.present?
     raise ArgumentError, "it revises no draft of this application (#{revises})" if revises.present? && !earlier
 
+    part = ReadsBackground::PARTS[kind]
+    background = WrittenFrom.background_read!(background_version, part, reread: "the application's materials")
     drew_on, dropped = WrittenFrom.drawn_on(resume, lines_drawn_on)
-    tailoring, dropped_too = WrittenFrom.with_lines(resume, changes, "change")
+    tailoring, dropped_too = WrittenFrom.with_lines(resume, changes, "change", background: background, part: part)
     subject = subject.to_s.strip.presence if kind == "outreach"
     draft = application.drafts.create!(
       kind: kind, language: language, subject: subject, body: body, written_subject: subject, written_body: body,
@@ -150,7 +155,7 @@ module Drafts
       gaps: WrittenFrom.gaps(gaps), notes: note.to_s.strip.presence, dropped_lines: dropped + dropped_too,
       resume: resume, resume_hash: resume.content_hash, role_description: description, description_hash: description.content_hash,
       written_by: actor, reported_model: WrittenFrom.reported(reported_model), revises: earlier, run_id: "mcp:#{Authority.credential&.id}",
-      contact: contact
+      contact: contact, background: background, background_hash: (background.hash_of(part) if background)
     )
     summary = saved_summary(draft)
     AuditEvent.record!(actor: actor, action: "create", target: draft, reasoning: "Saved through MCP: #{summary}",
@@ -159,7 +164,9 @@ module Drafts
   end
 
   def saved_summary(draft)
-    made = draft.tailored_resume? ? counted(draft.tailoring.size, "change") : "drawing on #{counted(draft.drew_on.size, 'line')} of the resume"
+    drawn = draft.from_background(draft.tailoring).size
+    flagged = " (#{drawn} drawn from your background, not on the resume, for you to confirm)" if drawn.positive?
+    made = draft.tailored_resume? ? "#{counted(draft.tailoring.size, 'change')}#{flagged}" : "drawing on #{counted(draft.drew_on.size, 'line')} of the resume"
     gaps = draft.gaps.empty? ? "no gaps" : "#{counted(draft.gaps.size, 'gap')} flagged"
     dropped = WrittenFrom.dropped(draft.dropped_lines)
     revised = "; it revises the #{draft.revises.label.downcase} of #{draft.revises.created_at.utc.to_date}" if draft.revises
@@ -209,7 +216,8 @@ module Drafts
   def facts(draft)
     { "kind" => draft.kind, "status" => draft.status, "language" => draft.language, "words" => draft.words,
       "content_hash" => draft.content_hash, "resume_hash" => draft.resume_hash, "description_hash" => draft.description_hash,
-      "written_by" => draft.written_by, "contact_id" => draft.contact_id }.compact
+      "written_by" => draft.written_by, "contact_id" => draft.contact_id, "background_hash" => draft.background_hash,
+      "from_background" => draft.from_background(draft.tailoring).size.nonzero? }.compact
   end
 
   def changed(before, after) = after.filter_map { |key, value| [ key, [ before[key], value ] ] unless before[key] == value }.to_h

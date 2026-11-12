@@ -53,7 +53,9 @@ module ProvenanceMcp
 
     # The rules and the shape of the answer for one kind of writing, in the operator's voice (they are the one asking);
     # an outreach note may be to one of the company's contacts (2e).
-    def instructions(kind, language: nil, stress: nil, to: nil)
+    # Since 4c, with the part of the operator's background that kind of writing may read (`background`, from
+    # background_for), its rules and how to save what is drawn from it.
+    def instructions(kind, language: nil, stress: nil, to: nil, background: nil)
       raise Refusal, "Writing is one of: #{KINDS.keys.join(', ')}." unless KINDS.key?(kind)
 
       language = language.to_s.strip.presence
@@ -66,9 +68,35 @@ module ProvenanceMcp
         ("It is for the person between the <contact> markers below." if to),
         ("Stress this, as long as the resume shows it: #{stress.strip}" if stress.to_s.strip.present?),
         rules.fetch("grounding"), rules.fetch(kind),
+        (rules.fetch("background_resume") if background && kind.in?(%w[resume_review tailored_resume])),
         (rules.fetch("style") if kind.in?(%w[cover_letter outreach_note])),
         AFTER.fetch(kind).strip,
+        (BACKGROUND_AFTER if background && kind.in?(%w[resume_review tailored_resume])),
         "Then wait for what I want changed, and keep every change to these rules." ].compact.join("\n\n")
+    end
+
+    # How what is drawn from the background is saved (4c): flagged by the background lines it cites.
+    BACKGROUND_AFTER = <<~TEXT.strip
+      Where you draw on my background not on the resume, give its version from the materials when you save it
+      (background_version), and cite its lines by their B numbers in background_lines on each strength, suggestion or
+      change drawn from it. Each is flagged "from your background, not on the resume" for me to confirm, and shown to me
+      that way.
+    TEXT
+
+    # The newest background and the part `kind` of writing may read (ReadsBackground::PARTS), as [background, part];
+    # nil when that kind reads none, or the part is empty.
+    def background_for(kind)
+      part = ReadsBackground::PARTS[kind] or return
+      background = SearchProfile.current&.backgrounds&.newest_first&.first
+      [ background, part ] if background&.text_of(part).present?
+    end
+
+    # One part of the background, its lines numbered as the whole's are, fenced as data with its version.
+    def background_part(background, part)
+      lines = background.lines_of(part).map { |number, line, _| "[B#{number}] #{line}" }
+      "#{Background::PARTS.dig(part, :label)}, the operator's own word (cite its lines by their B numbers; anything you draw " \
+        "from it is flagged for them to confirm):\n" +
+        fence("background", lines.join("\n"), part: part, version: background.version)
     end
 
     # How a role's fit is weighed and saved (2f step 3), in the operator's voice: the shared rules, then the answer's shape.
@@ -158,7 +186,7 @@ module ProvenanceMcp
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
     # the newest resume numbered by line, the profile, the notes, its contacts, the one it is to (when the writing is to
     # someone), and what is already written for it.
-    def materials(application, to: nil)
+    def materials(application, to: nil, kind: nil)
       role = application.posting
       description = role.role_descriptions.newest_first.first
       profile = SearchProfile.current
@@ -173,6 +201,7 @@ module ProvenanceMcp
         resume ? fence("resume", resume.numbered_lines.map { |number, line| "[#{number}] #{line}" }.join("\n"),
                        saved: resume.created_at.utc.to_date, lines: resume.numbered_lines.size, version: resume.version)
                : "The resume: none saved yet (it is pasted on the Profile page in the app).",
+        (background_part(*background_for(kind)) if background_for(kind)),
         (fence("profile", [ "Titles they search for: #{profile.titles.join(', ').presence || '(none)'}",
                             "Places they can work: #{profile.places.join(', ').presence || '(none)'}",
                             "Work modes: #{profile.work_modes.join(', ').presence || '(any)'}" ].join("\n")) if profile),

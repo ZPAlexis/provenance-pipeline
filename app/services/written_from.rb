@@ -43,8 +43,10 @@ module WrittenFrom
     [ cited.uniq { |point| point["line"] }, dropped ]
   end
 
-  # Points that each name lines: [{ key, "lines" => [{ "line", "text" }] }], a point with nothing said left out.
-  def with_lines(resume, items, key)
+  # Points that each name lines: [{ key, "lines" => [{ "line", "text" }] }], a point with nothing said left out. Since 4c a
+  # point may also name background lines (`background_lines`: B4, or 4), resolved only within `part` of the background
+  # version read: a point that names them is drawn from the background, to be confirmed by the operator.
+  def with_lines(resume, items, key, background: nil, part: nil)
     dropped = 0
     cited = Array(items).filter_map do |item|
       item = plain(item)
@@ -53,9 +55,24 @@ module WrittenFrom
 
       lines, missing = resume.cite(item["lines"])
       dropped += missing
-      { key => said, "lines" => lines }
+      from = Array(item["background_lines"])
+      next { key => said, "lines" => lines } if from.empty?
+      raise ArgumentError, "give the background version you read: its lines are cited against it" unless background && part
+
+      found, gone = background.cite(from, parts: [ part ])
+      dropped += gone
+      { key => said, "lines" => lines, "background_lines" => found }.reject { |name, value| name == "background_lines" && value.empty? }
     end
     [ cited, dropped ]
+  end
+
+  # The background version a piece of writing read (4c), when it says one, and the part its kind may use; nil when it
+  # names none. A version given for a kind that reads no part of it is refused.
+  def background_read!(background_version, part, reread:)
+    return if background_version.to_s.strip.empty?
+    raise ArgumentError, "this kind of writing reads no part of the background" unless part
+
+    background!(background_version, reread: reread)
   end
 
   def gaps(items)

@@ -39,6 +39,13 @@ A tailored resume is the person's resume rewritten for this role: reordered, tri
 - Keep the resume's own format: plain text or Markdown, as it came.
 - After it, list what changed and why (moved, cut, reworded), each naming the original lines by their numbers, then the gaps.
 
+## background_resume
+
+When the person's background not on the resume is given, it is their own word about experience, skills and context the resume compresses or leaves out, each line numbered B1, B2 and so on. It extends what may be said of them only as follows, and only for a resume review or a tailored resume.
+- A resume review may name a strength the background shows for what the role asks, or suggest adding a line from it to the resume. A tailored resume may bring a line from it in, in the resume's own style.
+- Each point, suggestion or change drawn from it names its background lines, so it is flagged "from your background, not on the resume" for the person to confirm before they use it.
+- Never present it as already on the resume, never claim more than its lines state, and never draw on it for anything else: a gap it doesn't cover stays a gap.
+
 ## fit
 
 A fit score weighs one role against the resume, so the person can see which roles to apply to first. It is advice for them, and claims nothing for them. Weigh the work and the level the role asks for; where the role is and how it is worked are weighed elsewhere.

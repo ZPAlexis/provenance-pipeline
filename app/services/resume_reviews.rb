@@ -97,21 +97,27 @@ module ResumeReviews
                     output_tokens: llm["output_tokens"], cost_usd: llm["cost_usd"], called_at: Time.current)
   end
 
+  #
+  # Since 4c, read against the background version the client saw (`background_version`), a strength or a suggestion may
+  # cite lines of the background not on the resume (`background_lines`): it is drawn from the background, and flagged for
+  # the operator to confirm.
   def save!(application, language:, resume_version:, strengths: [], gaps: [], suggestions: [], note: nil, reported_model: nil,
-            actor: "agent:assistant")
+            actor: "agent:assistant", background_version: nil)
     language = language.to_s.strip
     raise ArgumentError, "name the language it is written in, in a few words" if language.empty? || language.size > Drafts::MAX_LANGUAGE
 
     resume, description = WrittenFrom.sources!(application, resume_version)
-    strengths, dropped = WrittenFrom.with_lines(resume, strengths, "point")
-    suggestions, dropped_too = WrittenFrom.with_lines(resume, suggestions, "change")
+    part = ReadsBackground::PARTS.fetch("resume_review")
+    background = WrittenFrom.background_read!(background_version, part, reread: "the application's materials")
+    strengths, dropped = WrittenFrom.with_lines(resume, strengths, "point", background: background, part: part)
+    suggestions, dropped_too = WrittenFrom.with_lines(resume, suggestions, "change", background: background, part: part)
     raise ArgumentError, "a review says something: its strengths, gaps, or suggestions" if strengths.empty? && suggestions.empty? && Array(gaps).empty?
 
     review = application.resume_reviews.create!(
       language: language, strengths: strengths, gaps: WrittenFrom.gaps(gaps), suggestions: suggestions, note: note.to_s.strip.presence,
       dropped_lines: dropped + dropped_too, resume: resume, resume_hash: resume.content_hash, role_description: description,
       description_hash: description.content_hash, written_by: actor, reported_model: WrittenFrom.reported(reported_model),
-      run_id: "mcp:#{Authority.credential&.id}"
+      run_id: "mcp:#{Authority.credential&.id}", background: background, background_hash: background&.hash_of(part)
     )
     summary = summary(review)
     AuditEvent.record!(actor: actor, action: "create", target: review, reasoning: "Saved through MCP: #{summary}",
@@ -130,15 +136,18 @@ module ResumeReviews
 
   def summary(review)
     dropped = WrittenFrom.dropped(review.dropped_lines)
+    drawn = review.from_background(review.strengths + review.suggestions).size
+    flagged = "; #{drawn} drawn from your background, not on the resume, for you to confirm" if drawn.positive?
     "Resume review in #{review.language}: #{WrittenFrom.counted(review.strengths.size, 'strength')}, " \
-      "#{WrittenFrom.counted(review.gaps.size, 'gap')}, #{WrittenFrom.counted(review.suggestions.size, 'suggestion')}#{dropped}."
+      "#{WrittenFrom.counted(review.gaps.size, 'gap')}, #{WrittenFrom.counted(review.suggestions.size, 'suggestion')}#{flagged}#{dropped}."
   end
 
   # What a review's audit events say of it: its counts and hashes, never its text.
   def facts(review)
     { "language" => review.language, "strengths" => review.strengths.size, "gaps" => review.gaps.size,
       "suggestions" => review.suggestions.size, "resume_hash" => review.resume_hash, "description_hash" => review.description_hash,
-      "written_by" => review.written_by }
+      "written_by" => review.written_by, "from_background" => review.from_background(review.strengths + review.suggestions).size.nonzero?,
+      "background_hash" => review.background_hash }.compact
   end
 
   private_class_method :facts, :record, :record_call

@@ -10,6 +10,9 @@ class ResumeReview < ApplicationRecord
   belongs_to :resume, optional: true # nil once the resume is deleted; resume_hash still names it
   belongs_to :role_description, optional: true
   belongs_to :llm_call, optional: true
+  include ReadsBackground # 4c: background not on the resume, drawn on flagged
+
+  def background_part = ReadsBackground::PARTS.fetch("resume_review")
 
   validates :written_by, inclusion: { in: WRITERS.keys }
   validates :language, :resume_hash, :description_hash, presence: true

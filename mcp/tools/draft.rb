@@ -36,7 +36,11 @@ module ProvenanceMcp
 
         def rests_on(draft)
           lines = if draft.tailored_resume?
-            [ "Changes:", *draft.tailoring.map { |change| "- #{change['change']} [lines #{change['lines'].map { |line| line['line'] }.join(', ')}]" } ]
+            [ "Changes:", *draft.tailoring.map do |change|
+              drawn = Array(change["background_lines"]).map { |line| "B#{line['line']}" }
+              "- #{change['change']} [lines #{change['lines'].map { |line| line['line'] }.join(', ')}]" \
+                "#{" [from the background, not on the resume, to confirm: #{drawn.join(', ')}]" if drawn.any?}"
+            end ]
           else
             [ "Lines drawn on:", *draft.drew_on.map { |point| "- [#{point['line']}] #{point['text']} (#{point['used_for']})" } ]
           end
@@ -48,9 +52,11 @@ module ProvenanceMcp
         def changed_since(draft)
           resume = SearchProfile.current&.resumes&.newest_first&.first
           description = draft.application.posting.role_descriptions.newest_first.first
+          background = SearchProfile.current&.backgrounds&.newest_first&.first
           changed = [ ("the resume" if resume && resume.content_hash != draft.resume_hash),
-                      ("the role's description" if description && description.content_hash != draft.description_hash) ].compact
-          changed.any? ? "Changed since it was written: #{changed.to_sentence}." : "The resume and the description are as they were when it was written."
+                      ("the role's description" if description && description.content_hash != draft.description_hash),
+                      ("the background it read" if draft.background_stale_for(background)) ].compact
+          changed.any? ? "Changed since it was written: #{changed.to_sentence}." : "What it was written from is as it was when it was written."
         end
       end
     end

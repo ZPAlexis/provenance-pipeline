@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_11_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_12_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -225,8 +225,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_000002) do
     t.jsonb "tailoring", default: [], null: false
     t.uuid "revises_id"
     t.uuid "contact_id"
+    t.uuid "background_id"
+    t.string "background_hash"
     t.index ["application_id", "created_at"], name: "index_drafts_on_application_id_and_created_at"
     t.index ["application_id"], name: "index_drafts_on_application_id"
+    t.index ["background_id"], name: "index_drafts_on_background_id"
     t.index ["contact_id"], name: "index_drafts_on_contact_id"
     t.index ["llm_call_id"], name: "index_drafts_on_llm_call_id"
     t.index ["resume_id"], name: "index_drafts_on_resume_id"
@@ -368,8 +371,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_000002) do
     t.string "run_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.uuid "background_id"
+    t.string "background_hash"
     t.index ["application_id", "created_at"], name: "index_resume_reviews_on_application_id_and_created_at"
     t.index ["application_id"], name: "index_resume_reviews_on_application_id"
+    t.index ["background_id"], name: "index_resume_reviews_on_background_id"
     t.index ["llm_call_id"], name: "index_resume_reviews_on_llm_call_id"
     t.index ["resume_id"], name: "index_resume_reviews_on_resume_id"
     t.index ["role_description_id"], name: "index_resume_reviews_on_role_description_id"
@@ -454,6 +460,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_000002) do
   add_foreign_key "company_reviews", "companies", on_delete: :cascade
   add_foreign_key "contacts", "companies", on_delete: :cascade
   add_foreign_key "drafts", "applications", on_delete: :cascade
+  add_foreign_key "drafts", "backgrounds", on_delete: :nullify
   add_foreign_key "drafts", "contacts", on_delete: :nullify
   add_foreign_key "drafts", "drafts", column: "revises_id", on_delete: :nullify
   add_foreign_key "drafts", "llm_calls"
@@ -469,6 +476,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_000002) do
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify
   add_foreign_key "postings", "companies"
   add_foreign_key "resume_reviews", "applications", on_delete: :cascade
+  add_foreign_key "resume_reviews", "backgrounds", on_delete: :nullify
   add_foreign_key "resume_reviews", "llm_calls"
   add_foreign_key "resume_reviews", "resumes", on_delete: :nullify
   add_foreign_key "resume_reviews", "role_descriptions", on_delete: :nullify
