@@ -77,6 +77,23 @@ RSpec.describe ResumeReviews do
     expect(event.changes_made.to_json).not_to include("discovery", "Spanish")
   end
 
+  # 4c step 5: the reviewer reads the background not on the resume; what it draws from it stays flagged by its lines.
+  it "gives the reviewer the background not on the resume alone, and keeps the lines a point draws from it" do
+    ready
+    background = Backgrounds.keep!(profile, looking_for: "Not for reviews.", not_on_resume: "Spanish, conversational.")
+    line = { "line" => 2, "text" => "Spanish, conversational.", "part" => "not_on_resume" }
+
+    written, worker = write(reviewed("strengths" => [ { "point" => "Spanish", "lines" => [], "background_lines" => [ line ] },
+                                                     { "point" => "Discovery", "lines" => [], "background_lines" => [] } ]))
+
+    expect(worker.asked[:targets].sole[:not_on_resume]).to eq([ { line: 2, text: "Spanish, conversational.", part: "not_on_resume" } ])
+    expect(worker.asked[:targets].sole.to_json).not_to include("Not for reviews.")
+    expect(written.review.strengths).to eq([ { "point" => "Spanish", "lines" => [], "background_lines" => [ line ] },
+                                             { "point" => "Discovery", "lines" => [] } ])
+    expect(written.review).to have_attributes(background: background, background_hash: background.hash_of("not_on_resume"))
+    expect(written.summary).to include("1 drawn from your background, not on the resume, for you to confirm")
+  end
+
   it "writes in the language asked" do
     ready
     _, worker = write(reviewed("language" => "Portuguese"), language: " Portuguese ")

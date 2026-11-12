@@ -48,6 +48,8 @@ What is on record arrives between markers: the role, its description from the em
 
 {RULES["grounding"]}
 
+{RULES["background_letter"]}
+
 Rules:
 - Write in the language the request names. language: the language you wrote in, named in English ("English", "Portuguese").
 - {RULES["cover_letter"]} subject is null.
@@ -168,6 +170,7 @@ def build_draft_prompt(target: DraftTarget, lines: list[str]) -> str:
             block("profile", "\n".join(profile)),
             block("their_notes", target.notes),
             block("their_guidance", target.guidance),
+            *([block("what_they_are_looking_for", target.looking_for)] if target.looking_for else []),
             asked,
         ]
     )

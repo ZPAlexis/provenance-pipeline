@@ -90,10 +90,12 @@ module FitScores
     "weighing needs a resume, saved on the Profile page, first" unless SearchProfile.current&.resumes&.exists?
   end
 
-  def target(posting, resume:, description:, profile:)
+  # Since 4c with the operator's background, every part numbered as the app numbers it, for the Background fit.
+  def target(posting, resume:, description:, profile:, background: nil)
     { id: posting.id, label: "#{posting.company.name} / #{posting.role_title}", role_title: posting.role_title,
       company: posting.company.name, location: posting.location, description: description.text, resume: resume.text,
-      titles: profile.titles }
+      titles: profile.titles,
+      background: background ? background.numbered_lines.map { |number, line, part| { line: number, text: line, part: part } } : [] }
   end
 
   # Weighs each of `postings` against the newest resume as the fit scorer, from its newest description; a role with
@@ -105,6 +107,7 @@ module FitScores
 
     profile = SearchProfile.current
     resume = profile.resumes.newest_first.first
+    background = profile.backgrounds.newest_first.first
     descriptions = postings.index_with { |posting| posting.role_descriptions.newest_first.first }
     unweighed = postings.reject { |posting| descriptions[posting] }.map { |posting| [ posting, "no description on record" ] }
     ready = postings.select { |posting| descriptions[posting] }
@@ -113,7 +116,7 @@ module FitScores
     purpose = ready.one? ? "fit: #{ready.first.role_title} at #{ready.first.company.name}" : "fit: #{ready.size} roles"
     Authority.run(ACTOR, scopes: SCOPES, purpose: purpose, ttl: ready.one? ? Authority::ONE : Authority::BATCH, issued_by: issued_by) do
       run = begin
-        worker.run(ready.map { |posting| target(posting, resume:, description: descriptions[posting], profile:) }, command: "fit")
+        worker.run(ready.map { |posting| target(posting, resume:, description: descriptions[posting], profile:, background:) }, command: "fit")
       ensure
         Verifier::Worker.forget!(worker.run_dir) # its targets and results quote the resume; the record keeps what was written
       end
@@ -121,7 +124,7 @@ module FitScores
       scores, cost = [], 0.0
       run.results.each do |result|
         posting = by_id.delete(result["target_id"]) if result.is_a?(Hash)
-        score, spent, failure = record(result, posting, run, resume:, description: posting && descriptions[posting])
+        score, spent, failure = record(result, posting, run, resume:, description: posting && descriptions[posting], background:)
         cost += spent
         if score then scores << score
         elsif posting then unweighed << [ posting, failure ] # a result naming no role asked for is nobody's
@@ -134,7 +137,7 @@ module FitScores
 
   # One result through the contract, then kept: its LLM call whatever came of it, and the score. Returns the score (or
   # nil), what it cost, and why there is none.
-  def record(result, posting, run, resume:, description:)
+  def record(result, posting, run, resume:, description:, background: nil)
     errors = Verifier::ResultContract.fit_score_errors(result)
     errors << "not a role asked for" unless posting
     return [ nil, 0.0, "not recorded: #{errors.join('; ')}" ] if errors.any?
@@ -146,7 +149,8 @@ module FitScores
     score = posting.fit_scores.create!(
       score: result["score"], level: result["level"].presence, matches: result["matches"], gaps: result["gaps"], why: result["why"],
       dropped_lines: result["dropped_lines"], resume: resume, resume_hash: resume.content_hash, role_description: description,
-      description_hash: description.content_hash, written_by: ACTOR, llm_call: call, run_id: run.id
+      description_hash: description.content_hash, written_by: ACTOR, llm_call: call, run_id: run.id,
+      **recorded_background(result, background)
     )
     AuditEvent.record!(actor: ACTOR, action: "create", target: score, model_version: call&.model,
                        reasoning: "Weighed: #{said(score)}.", changes_made: facts(score).transform_values { |value| [ nil, value ] })
@@ -178,6 +182,15 @@ module FitScores
     AuditEvent.record!(actor: actor, action: "create", target: saved, reasoning: "Saved through MCP: #{said(saved)}.",
                        changes_made: facts(saved).transform_values { |value| [ nil, value ] })
     [ saved, "#{said(saved)}." ]
+  end
+
+  # The Background fit the fit scorer returned (4c), read against the background it was given: none without one.
+  def recorded_background(result, background)
+    return {} unless background && result["background_score"]
+
+    { background_score: result["background_score"], background_why: result["background_why"], covered: result["covered"],
+      preferences: result["preferences"], background_dropped_lines: result["background_dropped_lines"].to_i,
+      background: background, background_hash: background.content_hash }
   end
 
   # The Background fit's attributes (4c), from what the client gives: none when it gives none.
@@ -273,5 +286,5 @@ module FitScores
       "description_hash" => score.description_hash, "written_by" => score.written_by, **background.to_h }
   end
 
-  private_class_method :record, :record_call, :weighed, :facts, :background_reading, :background_said
+  private_class_method :record, :record_call, :weighed, :facts, :background_reading, :background_said, :recorded_background
 end

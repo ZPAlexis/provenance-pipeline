@@ -31,12 +31,15 @@ module ResumeReviews
     "reviewing needs #{needs.to_sentence} first" if needs.any?
   end
 
-  def target(application, language:, resume:, description:, profile:)
+  # Since 4c with the background not on the resume, its lines numbered as the app numbers the whole background.
+  def target(application, language:, resume:, description:, profile:, background: nil)
     role = application.posting
+    part = ReadsBackground::PARTS.fetch("resume_review")
     { id: application.id, label: "#{application.company.name} / #{role.role_title}", role_title: role.role_title,
       company: application.company.name, location: role.location, description: description.text, resume: resume.text,
       titles: profile.titles, places: profile.places, work_modes: profile.work_modes, notes: application.notes.presence,
-      language: language || "English" }
+      language: language || "English",
+      not_on_resume: background ? background.lines_of(part).map { |number, line, of| { line: number, text: line, part: of } } : [] }
   end
 
   # Writes a review of `application`'s role as the drafter, in `language` (English when none is asked).
@@ -49,19 +52,21 @@ module ResumeReviews
     profile = SearchProfile.current
     resume = profile.resumes.newest_first.first
     description = application.posting.role_descriptions.newest_first.first
+    background = profile.backgrounds.newest_first.first
+    background = nil unless background&.text_of(ReadsBackground::PARTS.fetch("resume_review")).present?
     Authority.run(Drafts::ACTOR, scopes: SCOPES, issued_by: issued_by,
                                  purpose: "review: resume against #{application.posting.role_title} at #{application.company.name}") do
       run = begin
-        worker.run([ target(application, language:, resume:, description:, profile:) ], command: "review")
+        worker.run([ target(application, language:, resume:, description:, profile:, background:) ], command: "review")
       ensure
         Verifier::Worker.forget!(worker.run_dir) # its targets and results quote the resume; the record keeps what was written
       end
-      record(application, run, resume:, description:)
+      record(application, run, resume:, description:, background:)
     end
   end
 
   # The run's one result through the contract, then kept: its LLM call whatever came of it, and the review.
-  def record(application, run, resume:, description:)
+  def record(application, run, resume:, description:, background: nil)
     result = run.results.first
     unless result
       return Written.new(application:, review: nil, cost_usd: 0.0, run_id: run.id,
@@ -78,10 +83,12 @@ module ResumeReviews
       return Written.new(application:, review: nil, cost_usd: cost, run_id: run.id, summary: "The AI could not write it (#{result['reason']}).")
     end
 
+    drawn = ->(items) { Array(items).map { |item| Array(item["background_lines"]).any? ? item : item.except("background_lines") } }
     review = application.resume_reviews.create!(
-      language: result["language"], strengths: result["strengths"], gaps: result["gaps"], suggestions: result["suggestions"],
+      language: result["language"], strengths: drawn.call(result["strengths"]), gaps: result["gaps"], suggestions: drawn.call(result["suggestions"]),
       note: result["note"], dropped_lines: result["dropped_lines"], resume: resume, resume_hash: resume.content_hash,
-      role_description: description, description_hash: description.content_hash, written_by: Drafts::ACTOR, llm_call: call, run_id: run.id
+      role_description: description, description_hash: description.content_hash, written_by: Drafts::ACTOR, llm_call: call, run_id: run.id,
+      background: background, background_hash: background&.hash_of(ReadsBackground::PARTS.fetch("resume_review"))
     )
     summary = summary(review)
     AuditEvent.record!(actor: Drafts::ACTOR, action: "create", target: review, model_version: call&.model, reasoning: "Reviewed: #{summary}",

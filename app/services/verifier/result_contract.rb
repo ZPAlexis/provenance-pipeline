@@ -212,7 +212,8 @@ module Verifier
       { "strengths" => "point", "suggestions" => "change" }.each do |list, said|
         result[list].each_with_index do |item, index|
           next if item.is_a?(Hash) && item[said].is_a?(String) && item["lines"].is_a?(Array) &&
-                  item["lines"].all? { |line| line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) }
+                  item["lines"].all? { |line| line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) } &&
+                  (item["background_lines"].nil? || background_lines?(item["background_lines"]))
 
           errors << "#{list.singularize} #{index + 1} must say its #{said} and its lines with their text"
         end
@@ -251,7 +252,34 @@ module Verifier
       gaps.each_with_index do |gap, index|
         errors << "gap #{index + 1} must say what the role asks and a note" unless gap.is_a?(Hash) && %w[asks note].all? { |key| gap[key].is_a?(String) }
       end
+      errors.concat(background_fit_errors(result))
+    end
+
+    # The Background fit beside the ATS fit (4c), when the fit scorer gives one: its score and why, the covered gaps and
+    # the preferences, each with the background lines it names.
+    def background_fit_errors(result)
+      return [] if result["background_score"].nil?
+
+      errors = []
+      errors << "background_score must be a whole number from 0 to 100" unless result["background_score"].is_a?(Integer) && result["background_score"].between?(0, 100)
+      errors << "background_why is missing" unless result["background_why"].is_a?(String) && result["background_why"].strip.present?
+      errors << "background_dropped_lines must be a count" unless count?(result["background_dropped_lines"] || 0)
+      { "covered" => %w[asks address_in], "preferences" => %w[preference verdict] }.each do |list, keys|
+        items = result[list]
+        next errors << "#{list} must be a list" unless items.is_a?(Array)
+
+        items.each_with_index do |item, index|
+          next if item.is_a?(Hash) && keys.all? { |key| item[key].is_a?(String) } && background_lines?(item["lines"])
+
+          errors << "#{list} #{index + 1} must say its #{keys.join(' and ')} and its background lines"
+        end
+      end
       errors
+    end
+
+    # Background lines, each with its number, text and part.
+    def background_lines?(lines)
+      lines.is_a?(Array) && lines.all? { |line| line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) && Background::PARTS.key?(line["part"]) }
     end
 
     RULED_OUT = %w[excluded level place work_mode].freeze

@@ -98,8 +98,8 @@
       <% end %>
     <% elsif background %>
       <p class="muted small">
-        Before your background: weighed from your resume alone. Ask your Claude client to weigh it again ("Weigh my roles",
-        before your background) for a Background fit beside this one.
+        Before your background: weighed from your resume alone. Weigh it again below, or ask your Claude client to ("Weigh my
+        roles", before your background), for a Background fit beside this one.
       </p>
     <% else %>
       <p class="muted small">Save your <%= link_to "background", profile_path(anchor: "background") %> on the Profile page for a Background fit beside this one.</p>
@@ -119,7 +119,7 @@
       <%= form.submit fit ? "Weigh it again" : "Weigh its fit", class: "btn small" %>
       <span class="muted small">
         Haiku 4.5 weighs it from <%= descriptions.empty? ? "its description (read first, free)" : "its description" %> and your resume,
-        claiming only what your resume shows: about <%= cost(estimate) %>.
+        claiming only what your resume shows<%= background ? ", then again with your background for the Background fit" : "" %>: about <%= cost(estimate) %>.
       </span>
     <% end %>
   <% end %>

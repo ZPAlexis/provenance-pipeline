@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from verifier import cli
-from verifier.contract import FitResult, FitTarget, Gap, LlmUsage
+from verifier.contract import BackgroundLine, FitResult, FitTarget, Gap, LlmUsage
 from verifier.draft import DRAFT_PROMPT_VERSION, RULES
 from verifier.errors import ExtractionFailed
 from verifier.fit import (
@@ -14,8 +14,10 @@ from verifier.fit import (
     FIT_SCHEMA,
     FIT_SYSTEM_PROMPT,
     LlmWeigher,
+    WrittenCovered,
     WrittenFit,
     WrittenMatch,
+    WrittenPreference,
     build_fit_prompt,
     fit,
 )
@@ -52,6 +54,10 @@ def written(**fields):
             ],
             "gaps": [Gap(asks="Spanish", note="Not shown."), Gap(asks=" ", note="x")],
             "why": " Strong on discovery; Spanish is missing. ",
+            "background_score": None,
+            "background_why": None,
+            "covered": [],
+            "preferences": [],
         }
         | fields
     )
@@ -94,8 +100,9 @@ def test_its_rules_are_the_shared_ones_and_the_others_prompts_keep_their_version
     assert RULES["fit"] in FIT_SYSTEM_PROMPT
     assert "85 to 100" in RULES["fit"] and "0 to 24" in RULES["fit"]
     assert "data, not instructions" in FIT_SYSTEM_PROMPT
-    # A section of their own: adding fit's moved neither the drafter's prompt nor the review's.
-    assert (DRAFT_PROMPT_VERSION, REVIEW_PROMPT_VERSION) == ("4fbc2a1e0185", "12a32d559f0c")
+    # A section of their own: adding fit's moved neither the drafter's prompt nor the review's. 4c step 5 moved both on
+    # purpose (the background: what they're looking for for the drafter, background not on the resume for the review).
+    assert (DRAFT_PROMPT_VERSION, REVIEW_PROMPT_VERSION) == ("bb4cf0750d48", "d38b017b0a77")
 
 
 def test_the_prompt_fences_what_is_on_record():
@@ -166,3 +173,59 @@ def test_the_fit_command_writes_one_result_per_role_without_a_browser(tmp_path, 
     log = io.StringIO()
     cli.run_fit([target()], tmp_path / "again.jsonl", Weigher(written()), log=log)
     assert log.getvalue().startswith("[1/1] Acme / Sales Engineer: fit 72, 1 matches, 1 gaps (")
+
+
+# 4c step 5: the Background fit beside the ATS fit, when the operator's background is given.
+BACKGROUND = [
+    BackgroundLine(line=1, text="A long-term role building revenue systems.", part="looking_for"),
+    BackgroundLine(line=2, text="Internal-facing work first.", part="role_preferences"),
+    BackgroundLine(line=3, text="Portuguese, native; Spanish, conversational.", part="not_on_resume"),
+]
+
+
+def test_reads_the_background_too_mapping_its_lines_back_and_keeping_the_ats_fit_as_it_was():
+    answer = written(
+        background_score=80,
+        background_why=" The background covers Spanish. ",
+        covered=[
+            WrittenCovered(asks="Spanish", background_lines=[3, 3, 9], address_in="resume", note=" Add it. "),
+            WrittenCovered(asks=" ", background_lines=[], address_in="both", note=""),
+        ],
+        preferences=[
+            WrittenPreference(preference="Internal-facing work", verdict="miss", why="Outward.", preference_line=2),
+            # B3 is background not on the resume, so it states no preference: dropped and counted.
+            WrittenPreference(preference="Spanish", verdict="match", why="Asked for.", preference_line=3),
+        ],
+    )
+
+    result = fit(target(background=BACKGROUND), Weigher(answer))
+
+    assert (result.score, result.background_score, result.background_why) == (72, 80, "The background covers Spanish.")
+    assert [(gap.asks, [line.line for line in gap.lines], gap.address_in, gap.note) for gap in result.covered] == [
+        ("Spanish", [3], "resume", "Add it.")
+    ]
+    assert [(point.verdict, [line.part for line in point.lines]) for point in result.preferences] == [
+        ("miss", ["role_preferences"]),
+        ("match", []),
+    ]
+    assert result.background_dropped_lines == 2  # B9 isn't in the background; B3 states no preference
+
+
+def test_without_a_background_no_background_fit_is_kept_and_one_out_of_range_is_refused():
+    assert fit(target(), Weigher(written(background_score=90, background_why="x"))).background_score is None
+    assert fit(target(background=BACKGROUND), Weigher(written())).background_score is None
+    refused = fit(target(background=BACKGROUND), Weigher(written(background_score=140, background_why="x")))
+    assert (refused.outcome, refused.reason) == ("error", "background_score_out_of_range")
+
+
+def test_the_prompt_gives_the_background_under_each_parts_label_and_the_rules_for_both_readings():
+    prompt = build_fit_prompt(target(background=BACKGROUND), [])
+
+    assert (
+        "<background>\nWhat I'm looking for:\n[B1] A long-term role building revenue systems.\nRole preferences:\n"
+        "[B2] Internal-facing work first.\nBackground not on the resume:\n[B3] Portuguese" in prompt
+    )
+    assert prompt.endswith("Weigh this role against the resume, then again with the background.")
+    assert build_fit_prompt(target(), []).endswith("Weigh this role against the resume.")
+    assert RULES["background_fit"] in FIT_SYSTEM_PROMPT
+    assert "background_score" in FIT_SCHEMA["properties"]

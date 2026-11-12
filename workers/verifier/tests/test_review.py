@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from verifier import cli
-from verifier.contract import Gap, LlmUsage, ReviewResult, ReviewTarget
+from verifier.contract import BackgroundLine, Gap, LlmUsage, ReviewResult, ReviewTarget
 from verifier.draft import RULES
 from verifier.errors import ExtractionFailed
 from verifier.review import (
@@ -46,11 +46,11 @@ def written(**fields):
     return WrittenReview(
         **{
             "language": "English",
-            "strengths": [WrittenPoint(point=" Discovery at volume ", lines=[3, 3, 9])],
+            "strengths": [WrittenPoint(point=" Discovery at volume ", lines=[3, 3, 9], background_lines=[])],
             "gaps": [Gap(asks="Spanish", note="Not shown.")],
             "suggestions": [
-                WrittenSuggestion(change="Lead with discovery", lines=[3, 1]),
-                WrittenSuggestion(change=" ", lines=[]),
+                WrittenSuggestion(change="Lead with discovery", lines=[3, 1], background_lines=[]),
+                WrittenSuggestion(change=" ", lines=[], background_lines=[]),
             ],
             "note": "A close fit.",
         }
@@ -165,3 +165,28 @@ def test_the_review_command_writes_one_result_per_target_without_a_browser(tmp_p
     assert log.getvalue().startswith(
         "[1/1] Acme / Sales Engineer: review in English, 1 strengths, 1 gaps, 1 suggestions ("
     )
+
+
+# 4c step 5: the background not on the resume, drawn on and flagged, its lines numbered as the app numbers the whole.
+NOT_ON_RESUME = [BackgroundLine(line=4, text="Spanish, conversational.", part="not_on_resume")]
+
+
+def test_maps_the_background_lines_a_strength_or_suggestion_draws_on_dropping_any_it_lacks():
+    answer = written(
+        strengths=[WrittenPoint(point="Spanish", lines=[], background_lines=[4, 1])],
+        suggestions=[WrittenSuggestion(change="Add Spanish to the resume", lines=[], background_lines=[4])],
+    )
+
+    result = review(target(not_on_resume=NOT_ON_RESUME), Reviewer(answer))
+
+    assert [(line.line, line.part) for line in result.strengths[0].background_lines] == [(4, "not_on_resume")]
+    assert result.suggestions[0].background_lines[0].text == "Spanish, conversational."
+    assert result.dropped_lines == 1  # B1 isn't a line of this part
+
+
+def test_the_prompt_gives_the_background_not_on_the_resume_and_its_rules():
+    prompt = build_review_prompt(target(not_on_resume=NOT_ON_RESUME), [])
+
+    assert "<background_not_on_the_resume>\n[B4] Spanish, conversational.\n</background_not_on_the_resume>" in prompt
+    assert RULES["background_resume"] in REVIEW_SYSTEM_PROMPT
+    assert "background_not_on_the_resume" not in build_review_prompt(target(), [])

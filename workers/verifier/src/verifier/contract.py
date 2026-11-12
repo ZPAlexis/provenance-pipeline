@@ -441,6 +441,8 @@ class DraftTarget(BaseModel):
     work_modes: list[str] = Field(default_factory=list)
     notes: str | None = None  # the operator's notes on the application
     guidance: str | None = None  # the operator's: anything to stress in this draft
+    # What they are looking for (4c): their own word on their motivation, for why they want the role; never a claim.
+    looking_for: str | None = None
     language: str | None = None  # None: the language the description is written in
     contact: DraftContact | None = None  # an outreach note's person, when one is named (2e)
 
@@ -496,6 +498,8 @@ class ReviewTarget(BaseModel):
     work_modes: list[str] = Field(default_factory=list)
     notes: str | None = None
     language: str = "English"  # the language to write the review in
+    # Their background not on the resume (4c), numbered as the app numbers the whole background: drawn on, flagged.
+    not_on_resume: list["BackgroundLine"] = Field(default_factory=list)
 
 
 class LineText(BaseModel):
@@ -503,14 +507,35 @@ class LineText(BaseModel):
     text: str  # the line itself, as the resume has it
 
 
+BackgroundPart = Literal["looking_for", "role_preferences", "not_on_resume"]
+
+
+class BackgroundLine(BaseModel):
+    """One line of the operator's background (4c), numbered across its parts as the app numbers it (B1, B2...)."""
+
+    line: int
+    text: str
+    part: BackgroundPart
+
+
+ReviewTarget.model_rebuild()  # it names BackgroundLine, defined after it
+
+
 class ReviewPoint(BaseModel):
     point: str  # what the role asks that the resume shows
     lines: list[LineText] = Field(default_factory=list)
 
 
+class ReviewStrength(ReviewPoint):
+    # A strength the background not on the resume shows (4c): its lines, flagged for the operator to confirm.
+    background_lines: list[BackgroundLine] = Field(default_factory=list)
+
+
 class ReviewSuggestion(BaseModel):
     change: str  # a change to the resume for this role
     lines: list[LineText] = Field(default_factory=list)
+    # A line from the background not on the resume to add (4c): flagged for the operator to confirm.
+    background_lines: list[BackgroundLine] = Field(default_factory=list)
 
 
 class ReviewResult(BaseModel):
@@ -526,7 +551,7 @@ class ReviewResult(BaseModel):
     outcome: Literal["ok", "error"] = "ok"
     reason: str | None = None
     language: str | None = None
-    strengths: list[ReviewPoint] = Field(default_factory=list)
+    strengths: list[ReviewStrength] = Field(default_factory=list)
     gaps: list[Gap] = Field(default_factory=list)
     suggestions: list[ReviewSuggestion] = Field(default_factory=list)
     note: str | None = None
@@ -546,6 +571,26 @@ class FitTarget(BaseModel):
     description: str
     resume: str
     titles: list[str] = Field(default_factory=list)  # the titles the person searches for: the field they work in
+    # Their background (4c), every part, numbered: for the Background fit beside the ATS fit. Empty: the ATS fit alone.
+    background: list[BackgroundLine] = Field(default_factory=list)
+
+
+class CoveredGap(BaseModel):
+    """A gap of the ATS reading that the background covers (4c), and where to address it."""
+
+    asks: str
+    lines: list[BackgroundLine] = Field(default_factory=list)
+    address_in: Literal["resume", "cover_letter", "both"]
+    note: str | None = None
+
+
+class PreferencePoint(BaseModel):
+    """How the role sits with one of the role preferences (4c): a match or a miss, with why."""
+
+    preference: str
+    verdict: Literal["match", "miss"]
+    why: str | None = None
+    lines: list[BackgroundLine] = Field(default_factory=list)
 
 
 class FitResult(BaseModel):
@@ -567,6 +612,12 @@ class FitResult(BaseModel):
     gaps: list[Gap] = Field(default_factory=list)
     why: str | None = None
     dropped_lines: int = 0  # line numbers it named that the resume doesn't have
+    # The Background fit (4c), when a background was given: its score and why, the gaps it covers, the preferences.
+    background_score: int | None = None
+    background_why: str | None = None
+    covered: list[CoveredGap] = Field(default_factory=list)
+    preferences: list[PreferencePoint] = Field(default_factory=list)
+    background_dropped_lines: int = 0  # background line numbers it named that the background doesn't have
     llm: LlmUsage | None = None
     duration_ms: int = 0
 

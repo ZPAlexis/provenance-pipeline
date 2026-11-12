@@ -41,6 +41,15 @@ RSpec.describe "A role's fit read two ways, on the pages", type: :request do
     expect(response.body).to include("Deal Desk Analyst").and(not_include("Customer Engineer"))
   end
 
+  # 4c step 5: the in-app fit scorer reads the background too, so the Roles page offers to weigh those roles again.
+  it "offers to weigh again, in the app, the roles weighed before the background, what it costs asked first" do
+    get roles_path
+    expect(response.body).to include("Weigh again 1 role weighed before your background", "the ATS fit and the Background fit")
+
+    expect { post fit_scores_path, params: { before_background: 1 } }.to have_enqueued_job(CheckNowJob)
+    expect(CheckRun.sole).to have_attributes(kind: "fit", request: include("posting_ids" => [ before.id ]))
+  end
+
   it "shows both readings on a role's page, the covered gaps and the preferences, and when the background changed since" do
     get role_path(weighed)
 

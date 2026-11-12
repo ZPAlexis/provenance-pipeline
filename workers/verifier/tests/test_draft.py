@@ -170,14 +170,16 @@ def test_the_rules_put_claiming_only_what_the_resume_shows_above_the_rest():
 
 # Its rules live in writing_rules.md, shared with the MCP server's prompts. Moving them there (2d) changed nothing
 # the model saw: c24d8ab8151c, the version the smoke drafts of 2026-10-19 ran on. Addressing an outreach note to
-# a contact (2e step 3) changed the outreach rule and the markers on purpose. A change to the rules changes it.
+# a contact (2e step 3) changed the outreach rule and the markers on purpose. A change to the rules changes it: what
+# the operator is looking for (4c step 5), as motivation, changed it on purpose.
 def test_the_prompt_is_built_from_the_shared_rules_and_keeps_its_version():
     rules = writing_rules()
 
     assert set(rules) >= {"grounding", "style", "cover_letter", "outreach_note", "resume_review", "tailored_resume"}
     assert rules["grounding"] in DRAFT_SYSTEM_PROMPT
     assert f"- {rules['cover_letter']} subject is null." in DRAFT_SYSTEM_PROMPT
-    assert DRAFT_PROMPT_VERSION == "4fbc2a1e0185"
+    assert rules["background_letter"] in DRAFT_SYSTEM_PROMPT
+    assert DRAFT_PROMPT_VERSION == "bb4cf0750d48"
 
 
 class FakeClient:
@@ -261,3 +263,12 @@ def test_progress_names_what_was_drafted_never_its_text(tmp_path):
         "[1/1] Acme / Sales Engineer: cover_letter in English, 13 words, 1 resume lines, 1 gaps ("
     )
     assert "discovery" not in log.getvalue()
+
+
+# 4c step 5: what the operator is looking for, given as motivation when saved; never a line drawn on.
+def test_the_prompt_gives_what_they_are_looking_for_when_saved_and_nothing_when_not():
+    prompt = build_draft_prompt(target(looking_for="A long-term role building revenue systems."), resume_lines(RESUME))
+
+    said = "<what_they_are_looking_for>\nA long-term role building revenue systems.\n</what_they_are_looking_for>"
+    assert said in prompt
+    assert "what_they_are_looking_for" not in build_draft_prompt(target(), resume_lines(RESUME))

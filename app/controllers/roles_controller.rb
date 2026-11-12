@@ -117,7 +117,10 @@ class RolesController < ApplicationController
     @roles = roles.select { |role| holds.call(role, @fit) } if @fit
     score = ->(role) { @sort == "fit" ? @fits[role.id]&.score&.score : @company_fits[role.company_id]&.score }
     @roles = @roles.sort_by.with_index { |role, index| [ -(score.call(role) || -1), index ] } if @sort
-    @unscored = FitScores.weighable(FitScores.unscored(FitScores.offered.includes(:company).to_a))
+    offered = FitScores.offered.includes(:company).to_a
+    @unscored = FitScores.weighable(FitScores.unscored(offered))
+    # Weighed before the background as it is now (4c): to weigh again, both readings, when asked.
+    @before_background_roles = @background ? FitScores.weighable(FitScores.before_background(offered)) : []
     # Any weighing under way (one at a time), or the last batch for an hour after it ends.
     @fit_run = CheckRun.where(kind: "fit").active.first || CheckRun.where(kind: "fit", posting_id: nil).newest_first.first
     @fit_run = nil unless @fit_run && (@fit_run.active? || @fit_run.finished_at&.after?(1.hour.ago))

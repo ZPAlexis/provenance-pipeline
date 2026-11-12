@@ -6,6 +6,10 @@ the shared ones (writing_rules.md: grounding, and the resume review's own), the 
 operator's own Claude client. The resume is numbered line by line, and each strength and suggestion names
 its lines by number: a number maps back to the exact line, and one the resume doesn't have is dropped and
 counted. Advice for the operator: it writes nothing to send, and claims nothing.
+
+Since 4c it also reads the operator's background not on the resume, when given (writing_rules.md: background_resume),
+its lines numbered as the app numbers the whole background: a strength or a suggestion drawn from it names those lines,
+and comes back flagged for the operator to confirm.
 """
 
 import time
@@ -15,7 +19,16 @@ import anthropic
 from pydantic import BaseModel, TypeAdapter
 
 from verifier.config import DRAFT_MAX_OUTPUT_TOKENS, DRAFT_MODEL
-from verifier.contract import Gap, LineText, LlmUsage, ReviewPoint, ReviewResult, ReviewSuggestion, ReviewTarget
+from verifier.contract import (
+    BackgroundLine,
+    Gap,
+    LineText,
+    LlmUsage,
+    ReviewResult,
+    ReviewStrength,
+    ReviewSuggestion,
+    ReviewTarget,
+)
 from verifier.draft import RULES, resume_lines
 from verifier.errors import ExtractionFailed
 from verifier.extract import _LlmCaller, prompt_version
@@ -28,22 +41,27 @@ What is on record arrives between markers: the role, its description from the em
 
 {RULES["resume_review"]}
 
+{RULES["background_resume"]}
+
 Fields:
 - language: the language you wrote in, named in English ("English", "Portuguese"). Write in the language the request names.
 - strengths: each with point (what the role asks that the resume shows) and lines (the numbers, from the brackets, of the resume lines that show it).
 - gaps: each with asks (what the role asks for) and note (what the resume shows instead, or that it shows nothing for it). Empty when there are none.
 - suggestions: each with change (what to change in the resume for this role) and lines (the numbers of the lines it touches; empty for an addition).
+- background_lines, on a strength or a suggestion drawn from the background not on the resume: its line numbers, from the brackets, without the B. Empty for one that isn't, and always empty when no background is given.
 - note: one or two plain sentences on how well the resume fits this role, and the one change that would help most."""
 
 
 class WrittenPoint(BaseModel):
     point: str
     lines: list[int]
+    background_lines: list[int]
 
 
 class WrittenSuggestion(BaseModel):
     change: str
     lines: list[int]
+    background_lines: list[int]
 
 
 class WrittenReview(BaseModel):
@@ -91,9 +109,29 @@ def review(target: ReviewTarget, reviewer: Reviewer) -> ReviewResult:
                 cited.append(LineText(line=number, text=lines[number - 1]))
         return cited
 
-    strengths = [ReviewPoint(point=s.point.strip(), lines=cite(s.lines)) for s in written.strengths if s.point.strip()]
+    by_number = {line.line: line for line in target.not_on_resume}
+
+    def cite_background(numbers: list[int]) -> list[BackgroundLine]:
+        nonlocal dropped
+        cited: list[BackgroundLine] = []
+        for number in numbers:
+            if number not in by_number:
+                dropped += 1
+            elif all(line.line != number for line in cited):
+                cited.append(by_number[number])
+        return cited
+
+    strengths = [
+        ReviewStrength(point=s.point.strip(), lines=cite(s.lines), background_lines=cite_background(s.background_lines))
+        for s in written.strengths
+        if s.point.strip()
+    ]
     suggestions = [
-        ReviewSuggestion(change=s.change.strip(), lines=cite(s.lines)) for s in written.suggestions if s.change.strip()
+        ReviewSuggestion(
+            change=s.change.strip(), lines=cite(s.lines), background_lines=cite_background(s.background_lines)
+        )
+        for s in written.suggestions
+        if s.change.strip()
     ]
     gaps = [Gap(asks=gap.asks.strip(), note=gap.note.strip()) for gap in written.gaps if gap.asks.strip()]
     if not (strengths or gaps or suggestions):
@@ -136,6 +174,16 @@ def build_review_prompt(target: ReviewTarget, lines: list[str]) -> str:
             block("resume", "\n".join(f"[{number}] {line}" for number, line in enumerate(lines, 1))),
             block("profile", "\n".join(profile)),
             block("their_notes", target.notes),
+            *(
+                [
+                    block(
+                        "background_not_on_the_resume",
+                        "\n".join(f"[B{line.line}] {line.text}" for line in target.not_on_resume),
+                    )
+                ]
+                if target.not_on_resume
+                else []
+            ),
             f"Review the resume against this role, in {target.language}.",
         ]
     )

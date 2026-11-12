@@ -10,6 +10,14 @@
                     title: "Weigh every watched company's latest list against your search profile. Costs nothing.",
                     data: { turbo_submits_with: "Weighing roles…" } %>
     <% end %>
+    <% if @tab != "dismissed" && @before_background_roles.any? && !@fit_run&.active? %>
+      <%= button_to "Weigh again #{pluralize(@before_background_roles.size, 'role')} weighed before your background", fit_scores_path,
+                    params: { before_background: 1 }, class: "btn",
+                    title: "Weigh each again, its ATS fit and its Background fit, with your background as it is now.",
+                    form: { data: { turbo_confirm: "Haiku 4.5 weighs #{pluralize(@before_background_roles.size, 'role')} again, the ATS fit and the " \
+                                                   "Background fit, one call each: about #{cost(FitScores.estimate * @before_background_roles.size)}. " \
+                                                   "It runs in the background. Weigh them?" } } %>
+    <% end %>
     <% if @tab != "dismissed" && @unscored.any? && !@fit_run&.active? %>
       <% to_read = FitScores.undescribed(@unscored).size %>
       <%= button_to "Weigh #{pluralize(@unscored.size, 'unscored role')}", fit_scores_path, class: "btn",

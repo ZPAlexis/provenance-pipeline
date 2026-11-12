@@ -62,7 +62,7 @@ RSpec.describe FitScores do
     expect(worker.asked[:command]).to eq("fit")
     expect(worker.asked[:targets].sole).to eq(id: role.id, label: "Acme / Sales Engineer", role_title: "Sales Engineer", company: "Acme",
                                               location: role.location, description: "Discovery. Spanish required.", resume: resume_text,
-                                              titles: [ "Sales Engineer" ])
+                                              titles: [ "Sales Engineer" ], background: [])
     expect(run_dir).not_to exist # its targets and results quoted the resume
     score = role.fit_scores.sole
     expect(score).to have_attributes(score: 72, level: "Mid-level; the resume shows eight years", written_by: "agent:fit_scorer",
@@ -78,6 +78,28 @@ RSpec.describe FitScores do
                                      reasoning: "Weighed: 72 for Sales Engineer at Acme (1 match, 1 gap).")
     expect(event.changes_made).to include("score" => [ nil, 72 ], "matches" => [ nil, 1 ], "gaps" => [ nil, 1 ])
     expect(event.changes_made.to_json).not_to include("discovery", "Spanish", "Jordan")
+  end
+
+  # 4c step 5: the in-app fit scorer reads the background too, and keeps the Background fit beside the ATS fit.
+  it "gives the fit scorer the background, numbered, and keeps the Background fit it returns against that version" do
+    keep_resume
+    describe_role
+    background = Backgrounds.keep!(profile, looking_for: "A long-term role.", not_on_resume: "Spanish, conversational.")
+    line = { "line" => 2, "text" => "Spanish, conversational.", "part" => "not_on_resume" }
+
+    _, worker = weigh(role, weighed("background_score" => 81, "background_why" => "The background covers Spanish.",
+                                    "covered" => [ { "asks" => "Spanish", "lines" => [ line ], "address_in" => "resume", "note" => "Add it." } ],
+                                    "preferences" => [], "background_dropped_lines" => 0))
+
+    expect(worker.asked[:targets].sole[:background]).to eq([ { line: 1, text: "A long-term role.", part: "looking_for" },
+                                                            { line: 2, text: "Spanish, conversational.", part: "not_on_resume" } ])
+    score = role.fit_scores.sole
+    expect(score).to have_attributes(score: 72, background_score: 81, background: background, background_hash: background.content_hash)
+    expect(score.covered.sole).to include("asks" => "Spanish", "lines" => [ line ])
+    expect(AuditEvent.find_by!(target: score).changes_made).to include("background_score" => [ nil, 81 ])
+
+    bad = weighed("background_score" => 140, "background_why" => "x", "covered" => [], "preferences" => [])
+    expect(Verifier::ResultContract.fit_score_errors(bad)).to include("background_score must be a whole number from 0 to 100")
   end
 
   it "weighs a batch in one run, leaving a role with no description unweighed, and says what came of each" do

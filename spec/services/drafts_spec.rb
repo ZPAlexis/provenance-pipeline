@@ -98,6 +98,18 @@ RSpec.describe Drafts do
       expect(event.changes_made.to_json).not_to include("discovery", "Alex")
     end
 
+    # 4c step 5: the drafter reads what the operator is looking for, as motivation; the draft records which version.
+    it "gives the drafter what the operator is looking for alone, and records the hash of what it read" do
+      background = Backgrounds.keep!(profile, looking_for: "A long-term role building revenue systems.", not_on_resume: "Not for letters.")
+
+      written, worker = write(drafted)
+
+      expect(worker.asked[:targets].sole[:looking_for]).to eq("A long-term role building revenue systems.")
+      expect(worker.asked[:targets].sole.to_json).not_to include("Not for letters.")
+      expect(written.draft).to have_attributes(background: background, background_hash: background.hash_of("looking_for"))
+      expect(written.summary).to include("it read what you're looking for, for motivation")
+    end
+
     it "asks for another language and anything to stress, as the operator says them" do
       _, worker = write(drafted("draft_kind" => "outreach", "language" => "Portuguese", "subject" => "Sales Engineer"),
                         kind: "outreach", language: " Portuguese ", guidance: "Stress the discovery work.")

@@ -1,10 +1,15 @@
 # Weighing roles' fit from the pages (Stage 2f): one role from its page, or every unscored role offered (tracked or
-# suggested, not known to be gone) that has a description or a page to read one from, from the Roles page. Runs in
-# the background, one weighing at a time, with what it could cost asked first on the page.
+# suggested, not known to be gone) that has a description or a page to read one from, from the Roles page. Since 4c,
+# also those weighed before the background as it is now, again (`before_background`). Runs in the background, one
+# weighing at a time, with what it could cost asked first on the page.
 class FitScoresController < ApplicationController
   def create
     role = Posting.includes(:company).find(params[:posting_id]) if params[:posting_id].present?
-    roles = role ? [ role ] : FitScores.weighable(FitScores.unscored(FitScores.offered.includes(:company).order(:created_at).to_a))
+    offered = -> { FitScores.offered.includes(:company).order(:created_at).to_a }
+    roles = if role then [ role ]
+    elsif params[:before_background] == "1" then FitScores.weighable(FitScores.before_background(offered.call))
+    else FitScores.weighable(FitScores.unscored(offered.call))
+    end
     back = role ? role_path(role, anchor: "fit") : roles_path(sort: "fit")
     if (why = refusal(role, roles))
       return redirect_to back, alert: "Not weighed: #{why}.", status: :see_other
@@ -17,7 +22,10 @@ class FitScoresController < ApplicationController
   private
 
   def refusal(role, roles)
-    return "every role offered has a current score, or no description to weigh" if role.nil? && roles.empty?
+    if role.nil? && roles.empty?
+      return params[:before_background] == "1" ? "every role weighed has a Background fit read against your background as it is" :
+                                                  "every role offered has a current score, or no description to weigh"
+    end
     return "#{role.role_title} has no description to weigh, nor a page of its own to read one from" if role && FitScores.weighable(roles).empty?
 
     FitScores.refusal(roles)
