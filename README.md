@@ -33,7 +33,7 @@ That produces the worst available failure mode: the agent *reaches* the page, so
 
 There's no pattern-match shortcut either. Measured across 20 resolved careers pages, roughly **70% were hosted on the company's own domain** rather than a recognizable ATS URL — and those frequently embed a client-side job board anyway. The vendor is often invisible from the URL while the rendering requirement stays identical.
 
-**So the verification worker needs a headless browser, not an HTTP client.**
+**So the verification worker needs a headless browser, not an HTTP client.** (A hosted board's public API is the exception: when the worker recognizes one, it reads the list there, exact and free; the browser is for everything else.)
 
 ## Sourcing: a watch list, not a search
 
@@ -191,12 +191,14 @@ drafts        application_id, kind (cover_letter | outreach |
 fit_scores    posting_id, score (0 to 100), level, matches (jsonb, each with
               the resume lines behind it), gaps, why, dropped_lines,
               resume_id, resume_hash, role_description_id, description_hash,
-              written_by, llm_call_id (every score kept, the newest shown;
-              audited by its score, counts and hashes, never the text);
+              written_by, reported_model, llm_call_id, run_id (every score
+              kept, the newest shown; audited by its score, counts and
+              hashes, never the text);
               since 4c `score` is the ATS fit, and beside it the Background
               fit: background_score, background_why, covered (the gaps the
               background covers, with its lines and where to address each),
-              preferences (match or miss), background_id, background_hash
+              preferences (match or miss), background_dropped_lines,
+              background_id, background_hash
 
 company_reviews  company_id, score (0 to 100), why, stage, size, business_model,
               industries, regions (in the preferences' own values, for the
@@ -210,7 +212,8 @@ company_reviews  company_id, score (0 to 100), why, stage, size, business_model,
 resume_reviews  application_id, language, strengths, gaps, suggestions
               (jsonb, each point with the resume lines behind it), note,
               dropped_lines, resume_id, resume_hash, role_description_id,
-              description_hash, written_by, reported_model (audited by its
+              description_hash, written_by, reported_model, llm_call_id,
+              run_id (audited by its
               counts and hashes, never the text); since 4c background_id
               and background_hash (the part it read), and a point drawn
               from the background carries its background_lines, flagged
@@ -223,7 +226,8 @@ page_checks   company_id, run_id, purpose (resolution | verification), step,
               complete (the worker's own answer: was the whole list read?),
               listings_incomplete, single_job_posting, many_employers,
               next_page_url, content_hash, reused_from_id, listings_read_at,
-              checked_at
+              http_status, explicit_no_openings (the page said it has none),
+              input_truncated, duration_ms, notes, checked_at
 
 review_items  kind, company_id, subject (polymorphic: the company or one role),
               status (open | done | left), evidence, evidence_key, proposal,
@@ -244,7 +248,8 @@ check_runs    kind (role | company | all | describe | draft | review | fit),
 
 llm_calls     page_check_id, run_id, purpose (extract | resolve | match | relate | draft |
               review | fit), model,
-              settings, prompt_version, input_tokens, output_tokens, cost_usd
+              settings, prompt_version, input_tokens, output_tokens, cost_usd,
+              called_at
 
 audit_events  actor, action, target (polymorphic), changes_made (jsonb),
               credential_id (the run's credential, for an agent's write),
@@ -262,7 +267,7 @@ Notes on a few choices:
 - **`llm_calls` answers "what did this cost, and what produced it"** without the run directory: one row per model call, with the model the API reports having served, its settings, and a `prompt_version` hash over the prompt, output schema, and limits.
 - **A repeat read is paid for only when the roles may have changed.** A page that links to exactly the role pages it did last time reuses that read's listings, and its check names the read it reused (`reused_from_id`); listings are read in full again once 14 days old (`listings_read_at`). A company whose free ATS board lists at least 90% of its page's roles has that board recorded beside the page (`board_*`, with the evidence) and read in its place for 30 days; the page stays the one on record.
 - **Only the operator tracks a company or a role,** by hand or through their own Claude client on their word (4a: the assistant's `watchlist:curate`, with their reason on the record); no agent does on its own judgment. A company can also be `suggested` (4b): proposed by the operator's own client (`companies:suggest`), with why in `proposal`, and not watched, checked, suggested from or reviewed until tracked. Tracking one reads the board it was proposed with at once, always free (the worker is started with no API key at all): kept as its careers page, by the verifier, only when the board's vendor records the same company or its page links home; held for the operator to confirm when nothing ties it to the company. Archiving one declines it, and it is never proposed again. Why it may fit is the operator's business: the audit log holds it by a hash alone. A company is `tracked` or `dismissed` (archived, 4a): it is watched only while tracked and its careers page is found, and archiving it archives its tracked and suggested roles too, each on the record with the operator's note; it is refused while an application there is open, and tracking the company again brings those roles back as they were. A posting is `suggested` (proposed by the suggester, with why in `fit`), `tracked` (on the operator's watch list), or `dismissed` (archived: never checked or suggested again); the suggester may suggest, never track. A suggestion the operator never acted on is withdrawn when it no longer fits the profile or its check found it gone: deleted, with its whole record kept in its last audit event. `job_url` is the role's own page at the employer, learned from the listing it matched, so the next check finds the role by its link before its title; `posting_url` stays where it was found.
-- **Whether a list was read whole is the worker's own answer,** kept on each verification run's first check (`complete`): a role missing from part of a list has not closed, so what changed and the replays of Test B read it rather than guess.
+- **Whether a list was read whole is the worker's own answer,** kept on each verification run's first check (`complete`): a role missing from part of a list has not closed, so what changed and the accuracy test's replays (`verifier:test_b`, see [Tests](#tests)) read it rather than guess.
 - **An application's history is its audit log.** Each stage change records the stage and the date it happened (the operator's, not when it was typed), so velocity and conversion are measured from the record, not a copy of it. Moved to the stage it is at, on another day, a stage is re-dated in place: its new date is recorded, and its timeline and its days in the stage go by it.
 - **A draft keeps what it was written from.** The resume and description versions it read are linked and hashed (a hash outlives a deleted resume), its LLM call names the model, settings, prompt version and cost, and the text as the drafter wrote it stays beside the operator's edits. Its audit events name its size and hash, never its text: a draft is the resume paraphrased.
 - **A contact is someone else's personal data.** Its name, email, link and notes are audited as hashes, never the values, so deleting a contact takes them off the record; its activities and outreach notes stay as they were written, naming no one.
@@ -279,7 +284,7 @@ A **check** is an observation at the employer's own careers page that produced a
 - **`roles_listed_count`** — roles visible on the page at that check, matched or not. This is the corroborating observable; `nil` means unknown, never a sentinel value.
 - **`work_mode`** — as observed at that check.
 
-Imported verdicts carry an operator-supplied check date. A bare date is day precision (stored at 12:00 UTC so the calendar day never shifts), and the posting's create event records where the date came from. The Stage 1.2 verifier becomes the main writer and records the exact time it looked. A verdict that changes is an audited update; a check that confirms the verdict only refreshes `last_checked_at` and what it observed, with the check's own record as its provenance (a role found at a new address is the exception: its `job_url` changes, audited); and a check that couldn't decide (it read only part of a list and found nothing) writes no verdict at all, so a role on page two is never marked closed.
+Imported verdicts carry an operator-supplied check date. A bare date is day precision (stored at 12:00 UTC so the calendar day never shifts), and the posting's create event records where the date came from. The verifier (1.2) is the main writer now, and records the exact time it looked. A verdict that changes is an audited update; a check that confirms the verdict only refreshes `last_checked_at` and what it observed, with the check's own record as its provenance (a role found at a new address is the exception: its `job_url` changes, audited); and a check that couldn't decide (it read only part of a list and found nothing) writes no verdict at all, so a role on page two is never marked closed.
 
 ## Build stages
 
@@ -289,7 +294,7 @@ Imported verdicts carry an operator-supplied check date. A bare date is day prec
 - **1.2 — Verification agent** ✅ (Playwright + LLM, Python worker; see [`workers/verifier`](workers/verifier)), in three slices:
   - **1.2a — Render and extract** ✅ read a careers page in a real browser and extract its listings; known job boards (Greenhouse, Lever, Ashby, Workday, Oracle Cloud) are read through their APIs instead.
   - **1.2b — Resolve careers pages** ✅ find each company's careers page from its domain, cheapest step first, with a confidence; low-confidence finds wait for a person. Measured by hiding the known pages of 71 labeled companies and finding them again: 87% found, none wrong at high or medium confidence.
-  - **1.2c — Match and verdict** ✅ read each watched page in full (pagination, "load more", ATS APIs), match every tracked posting against it, and record verdicts that follow the evidence. Measured against the research labels on fresh reads: 98% agreement, and no closed role reported open.
+  - **1.2c — Match and verdict** ✅ read each watched page in full (pagination, "load more", ATS APIs), match every tracked posting against it, and record verdicts that follow the evidence. Measured on fresh reads of 59 roles with research labels: 58 called right, 54 as labeled and 4 where hand checks showed the label wrong; the one miss was a live role left as couldn't confirm. No closed role was reported open, and every role it reported closed was (12 of 12).
   - **Cost pass** ✅ the LLM reads a page only when its role links changed (or every 14 days), and a company's own free ATS board is read in place of its page when it lists the same roles.
 - **1.3 — Scoped writes and provenance** ✅ a credential per agent run with exactly that run's scopes, checked at every write down to the attributes it sets; refused writes audited; every agent write names its credential; an Agents page and `agents:` commands. See [The permission model](#the-permission-model).
 - **1.4 — Monitoring on demand, and what changed** ✅ one role, one company, or everything, checked when the operator asks: "Check everything" on the dashboard shows its plan and ceiling and asks first, then runs in the background with its progress (137 companies in 47 minutes for $1.17, the first time). A what-changed view reports what each check of everything found: verdicts, suggestions made and withdrawn, careers pages, boards, new review questions, refused writes, and lists that changed a lot between whole reads (raised for review: often another page now). A schedule comes with Stage 4.
@@ -337,9 +342,11 @@ Its hosted form is proposed and paused (2026-11-02): one hosted app, for recruit
 - **Claude, through the Anthropic API** — Haiku 4.5 reads pages, decides near-miss matches, and weighs fit; Opus 5.5 writes drafts and resume reviews. The key stays outside the repo and reaches the worker process alone.
 - **MCP, through the Ruby SDK (gem `mcp`)** — the server the operator's own Claude client connects to
 - **fx** — database functions and triggers in migrations and `schema.rb`, so the audit log's append-only trigger is rebuilt wherever the schema loads (the test database, CI, a fresh setup)
-- **RSpec, Rubocop, Brakeman, bundler-audit**
+- **RSpec, RuboCop, Brakeman, bundler-audit**; ruff and pytest for the worker
 
 ## Setup
+
+It needs Ruby 3.4.8 and PostgreSQL 16; it was built in WSL (Ubuntu), with the Ruby from mise.
 
 ```bash
 bundle install
@@ -448,7 +455,7 @@ An application's page writes a cover letter or a short outreach note for it (the
 - **Never sent.** The operator edits it, approves it (an edit after that returns it to a draft), and copies it out; only the operator can edit or approve one.
 - **Written in the background**, one at a time per application, with what a draft costs on the record shown first (about 6 cents each so far). The run's targets and results quote the resume, so its files are removed as soon as its results are read; the record keeps what was written.
 
-**A resume review** weighs the resume against the role, for the operator to decide what to stress and what to add: strengths with the resume lines behind them, gaps, suggestions naming the lines they touch, and a note. The drafter writes one from the application's page (the worker's `review`, the same model and record, about 6 cents, in English unless another language is asked), under a credential holding `resume_reviews:write` alone; or the operator's own Claude client writes one through MCP and saves it back. Its rules are the shared ones. Advice only: it writes nothing to send and claims nothing.
+**A resume review** weighs the resume against the role, for the operator to decide what to stress and what to add: strengths with the resume lines behind them, gaps, suggestions naming the lines they touch, and a note. The drafter writes one from the application's page (the worker's `review`, the same model and record, about 5 cents, in English unless another language is asked), under a credential holding `resume_reviews:write` alone; or the operator's own Claude client writes one through MCP and saves it back. Its rules are the shared ones. Advice only: it writes nothing to send and claims nothing.
 
 ### Fit scores
 
@@ -508,8 +515,6 @@ What the agents can't settle goes to the operator as a question about one compan
 
 **A recommended decision** (2g): the operator's own Claude client, through MCP, may recommend one of an item's own actions, with the page or kind it needs, a confidence, what it checked, and why. It never decides one, and never recommends "still listed" or "no longer listed", which record what the operator saw themselves. On the Review page the recommendation sits on its item with **Accept**, named by what it does ("Accept: set this page", "Accept: leave it as is") and saying what follows, which carries it out as the operator's decision through the same path as any other, noting that they followed it; a line at the top of the page leads to the items that carry one; a check it recommends asks first, with its cost. What the operator then does is kept beside it, so agreement is measured per kind (agreed, differed, resolved by the record first, pending): the measure any later autonomy would be judged on. None is granted yet.
 
-The tests that decide whether a slice works run locally against the private target list: `verifier:test_a`, `verifier:test_resolution`, and `verifier:test_b` (`REPLAY=1` replays each company's latest verification run, whole, with the worker's own answer to whether it read the whole list, at no API cost (runs from 1.4 on); `FRESH=1` reads the pages now).
-
 ### Backups
 
 Every verifier batch that writes backs up first: `bin/rails db:backup` does the same by hand (checks started from the pages, at most once a day). Dumps go to `~/.local/share/provenance-pipeline/backups/` (owner-only), named with their UTC time. Each new dump prunes the folder to the 10 newest plus the newest of each week for a year. The test environment backs up into `tmp/backups/` instead, never beside the real dumps. To keep a copy on another disk as well, name a folder in `~/.config/provenance-pipeline/backup_mirror` (one line); each new dump is copied and pruned there the same way, and a failed copy is reported without stopping the batch.
@@ -523,6 +528,8 @@ psql -d provenance_pipeline_restore_check -c "select count(*) from postings"
 dropdb provenance_pipeline_restore_check
 ```
 
+### The pages
+
 Boot the server:
 
 ```bash
@@ -530,6 +537,12 @@ bin/rails server
 ```
 
 It serves the operator's pages at `http://localhost:3000`: the pipeline (applications by stage, each with a page to move it, log what happened and with whom, keep its contacts, write and approve its drafts, and read its timeline), a dashboard (where applications and the tracked roles stand, "Check everything" with its plan, ceiling and progress, recent checks and verdict changes, API credit spent), what changed since a check of everything, the audit log (every write on record, narrowed by who made it, the kind of record, the action, the days, one record or credential, and an attribute it changed), the analytics (the pipeline: how far applications get, how long they sit in each stage, how they end, what is open now; the watch: how long roles stay listed, answers week by week, how fresh they are; the agents: AI cost, agreement on the review queue, writes and refusals), the roles (tracked, suggested with why, archived, filtered by answer and by fit, sorted by fit, the unscored or those weighed before the background weighed from there), each role's history, its description, its fit (the ATS fit and the Background fit) and the checks behind it, the companies (tracked or archived, narrowed to those with no careers page yet, a page to confirm, no role tracked, or roles tracked none of which is still listed; each with its domain, careers page, roles and application, and a page of its own with its contacts), the search profile with a preview of what it would suggest, the company preferences, the operator's resume and their background in three parts, and the Review page: the questions waiting for the operator, by kind, each naming its company (its domain linked) and role and decided with a button; a check asked from one is followed on the item until it says whether it settled it; and the Agents page: each agent's scopes, the credentials its runs held, with what each wrote, and every refused write. From them the operator adds a company or a role by its link (a role also from its company's page), reading nothing unless they ask, confirms or sets a company's careers page, changes a role's own page, tracks or archives a role or a company with a note on the record (several at once from the lists; archiving a company archives its roles in play), finds suggestions, and checks a role or a company now: the check runs in the background, one at a time, and a check that could spend says its ceiling and asks first. It is local and single-user, with no login, so it is never deployed as it is.
+
+### Tests
+
+`bin/ci` runs everything the project is held to, locally: RuboCop, the gem and importmap audits, Brakeman, the privacy check, RSpec (`bundle exec rspec`), and the worker's lint and tests (`uv run ruff check .`, `uv run pytest`). GitHub's workflow runs the same on every push, the privacy check aside, which needs the record. No test calls the AI.
+
+The accuracy tests behind the measured figures (1.2b, 1.2c) run locally against the private target list, so they aren't part of CI: `verifier:test_resolution` (hide each labeled company's known careers page and find it again), `verifier:test_a` (can the renderer extract listings at all: every careers page with a recorded roles count read, its count within 25% or 3 of the recorded one), and `verifier:test_b` (verify the labeled roles end to end: `REPLAY=1` replays each company's latest verification run, whole, with the worker's own answer to whether it read the whole list, at no API cost (runs from 1.4 on); `FRESH=1` reads the pages now).
 
 ## Note on data
 

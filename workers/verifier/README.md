@@ -1,6 +1,6 @@
 # verifier
 
-The Python worker behind Stages 1.2, 1.5 and 2. It never touches the database: Rails writes a targets file, runs the worker, validates every result against a fixed contract, and records it through one audited write path, under a credential issued for that run with only the scopes it needs (Stage 1.3). One JSON result per target, appended as it goes, so a run that stops early keeps everything it finished.
+The Python worker behind Stages 1.2, 1.5 and 2, and parts of 4b (the free board read) and 4c (the background). It never touches the database: Rails writes a targets file, runs the worker, validates every result against a fixed contract, and records it through one audited write path, under a credential issued for that run with only the scopes it needs (Stage 1.3). One JSON result per target, appended as it goes, so a run that stops early keeps everything it finished.
 
 ```bash
 uv run verifier extract --targets targets.json --out results.jsonl   # read careers pages, list their roles
