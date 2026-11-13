@@ -27,7 +27,7 @@ group :development, :test do
   gem "brakeman", require: false
   gem "rubocop-rails-omakase", require: false
   # 8.x is the line that supports Rails 8 (6.1 targeted Rails 7.1).
-  gem "rspec-rails", "~> 8.0"
+  gem "rspec-rails", "~> 8.1"
   gem "factory_bot_rails"
   gem "faker"
 end
