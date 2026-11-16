@@ -18,7 +18,7 @@ uv run verifier review  --targets reviews.json --out results.jsonl   # review th
 uv run verifier fit     --targets roles.json --out results.jsonl     # weigh roles against the resume, 0 to 100 (one LLM call each)
 ```
 
-Every command takes `--model` (default `claude-haiku-4-5`; `claude-opus-5-5` for `draft` and `review`) and `--delay` (seconds between requests to one host, default 5). `verify`, `check`, and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards`, `suggest` and `describe` never call the LLM. The browser and the LLM client are imported only by the commands that use them: from a checkout under `/mnt` in WSL the LLM client alone takes about 15 seconds to import, and `suggest` starts in about one. In practice the worker is run from Rails (see the main README), which supplies the API credential to this process alone.
+Every command takes `--model` (default `claude-haiku-4-5`; `claude-opus-5-5` for `draft` and `review`) and `--delay` (seconds between requests to one host, default 5). `verify`, `check`, and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards`, `suggest` and `describe` never call the LLM. The browser and the LLM client are imported only by the commands that use them: from a checkout under `/mnt` in WSL the LLM client alone takes about 15 seconds to import, and `suggest` starts in about one. In practice the worker is run from Rails (see [Running it](../../docs/operating.md)), which supplies the API credential to this process alone.
 
 Exit codes: 0 finished; 2 bad input; 3 stopped, API credit exhausted; 4 stopped, credential missing or rejected; 5 stopped, the LLM service kept failing.
 
