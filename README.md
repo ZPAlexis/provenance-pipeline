@@ -113,7 +113,7 @@ Measured on the operator's real target list, which stays out of the repo; the te
 - **Recommendations against decisions (as of 2026-11-16):** the AI assistant made 11 recommendations, and 9 matched the operator's decision, measured per kind of decision. Of 89 questions, the operator decided 87 and 2 settled themselves. No kind has been granted autonomy.
 - **Cost (2026-10-14):** 137 companies checked in about 47 minutes for $1.17. Since the cost pass, a check pays the AI to read a page only when its role links changed or its last full read is more than 14 days old, and a free job board is read in its place when it lists the same roles. Checks run when the operator asks: there is no schedule yet.
 - **Traceability (as of 2026-11-16):** 1,840 recorded changes, in an audit log that is append-only in the database. None was refused in real use; refusals are proven in the tests.
-- **Prompts, before they ship:** the agents' prompts were smoke-tested against the API on made-up records. At 4c, that caught the fit scorer citing resume lines as background lines, fixed before it shipped.
+- **Prompts, before they ship:** the agents' prompts were smoke-tested against the API on made-up records. At 4c, that caught the fit scorer citing resume lines for role preferences only the background states, fixed before it shipped.
 
 ## How it works
 

@@ -50,7 +50,7 @@ bin/rails verifier:find_boards                   # free boards listing the same 
 bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's
 bin/rails "verifier:track[posting_id]"           # or verifier:dismiss (archive it): your watch list, with NOTE="why"
 bin/rails "verifier:dismiss_company[company_id]" # archive a company and its roles in play (NOTE=); verifier:track_company undoes it (ROLES=0 leaves its roles)
-bin/rails verifier:proposals                     # the companies your own Claude client proposed (4b): track one (verifier:track_company reads its board then, free) or decline it (verifier:dismiss_company)
+bin/rails verifier:proposals                     # the companies your own AI assistant proposed (4b): track one (verifier:track_company reads its board then, free) or decline it (verifier:dismiss_company)
 bin/rails companies:preferences                  # what you want of a company (4b); WANTS=, AVOIDS=, STAGES=, SIZES=, MODELS=, INDUSTRIES=, EXCLUDED= save them
 bin/rails companies:reviews                      # companies by their newest review, best first, stale ones marked (MIN=, LIMIT=); DUE=1 lists those due one
 bin/rails "companies:review[company id or name]" # one company's newest review in full: its points, facts with sources, concerns and questions
