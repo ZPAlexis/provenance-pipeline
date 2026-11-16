@@ -163,9 +163,12 @@ RSpec.describe ProvenanceMcp do
   end
 
   # The server as a client meets it: a process speaking the protocol over stdio, nothing else on stdout.
+  # Since mcp 1.10 the client starts the server with a clean environment (PATH, HOME, the gem paths, and what it is
+  # given), so the database's address is handed over where one is set, as GitHub's workflow sets it.
   it "answers over stdio, booting Rails while it already answers" do
     transport = MCP::Client::Stdio.new(command: "bundle", args: [ "exec", "ruby", Rails.root.join("mcp/server.rb").to_s ],
-                                       env: { "RAILS_ENV" => "test" }, read_timeout: 120)
+                                       env: { "RAILS_ENV" => "test", "DATABASE_URL" => ENV["DATABASE_URL"] }.compact,
+                                       read_timeout: 120)
     client = MCP::Client.new(transport: transport)
     begin
       client.connect(mode: :modern)
