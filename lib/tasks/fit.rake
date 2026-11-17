@@ -71,6 +71,9 @@ namespace :fit do
       puts "#{score.score.to_s.rjust(3)}  #{posting.id}  #{named.call(posting)} (#{posting.tracking}" \
            "#{', applied' if posting.application})#{"  stale: #{entry.stale.to_sentence} changed" if entry.stale?}" \
            "#{"  background fit #{score.background_score}#{' (background changed since)' if entry.background_stale}" if score.background_reading?}" \
+           "#{"  screen risk: #{score.screen_risks.size} must-have#{'s' unless score.screen_risks.one?} not on the resume" \
+              "#{", capped from #{score.score_before_cap}" if score.capped?}" if score.screen_risks.any?}" \
+           "#{'  before the screen check' unless score.screened?}" \
            "#{"  company fit #{company.score}#{' (stale)' if company.stale?}" if company}"
     end
   end
@@ -82,9 +85,21 @@ namespace :fit do
     score = posting.fit_scores.includes(:llm_call, :resume, :role_description).newest_first.first or
       abort "#{named.call(posting)} isn't weighed yet: fit:score[#{posting.id}]."
 
-    puts "#{named.call(posting)}: ATS fit #{score.score} of 100 (the resume alone)"
+    puts "#{named.call(posting)}: ATS fit #{score.score} of 100 (the resume alone)#{", capped from #{score.score_before_cap}" if score.capped?}"
     puts "  #{score.why}"
     puts "  Level: #{score.level}" if score.level
+    # Its must-haves, read one by one (4d): what a screener checks first.
+    puts "\nMust-haves"
+    if !score.screened?
+      puts "  not read: weighed before the screen check"
+    elsif score.must_haves.empty?
+      puts "  the role states none"
+    else
+      score.must_haves.each do |must|
+        cited = Array(must["lines"]).map { |line| line["line"] } + Array(must["background_lines"]).map { |line| "B#{line['line']}" }
+        puts "  - #{FitScore::SHOWN_IN.fetch(must['shown_in'])}: #{must['asks']}#{" [#{cited.join(', ')}]" if cited.any?}#{" (#{must['note']})" if must['note']}"
+      end
+    end
     puts "\nMatches"
     score.matches.each do |match|
       numbers = match["lines"].map { |line| line["line"] }
@@ -103,7 +118,8 @@ namespace :fit do
     puts "Stale: #{stale.to_sentence} changed since; fit:score[#{posting.id}] weighs it again." if stale.any?
     if score.background_reading?
       background = SearchProfile.current&.backgrounds&.newest_first&.first
-      puts "\nBackground fit: #{score.background_score} of 100 (with the background, version #{score.background_hash.delete_prefix('sha256:')[0, 12]})"
+      puts "\nBackground fit: #{score.background_score} of 100 (with the background, version #{score.background_hash.delete_prefix('sha256:')[0, 12]})" \
+           "#{", capped from #{score.background_score_before_cap}" if score.background_capped?}"
       puts "  #{score.background_why}"
       puts "  Gaps the background covers:", *score.covered.map { |gap|
         "  - #{gap['asks']}: in #{FitScore::ADDRESS_IN.fetch(gap['address_in'])}#{" (#{gap['note']})" if gap['note']}" \

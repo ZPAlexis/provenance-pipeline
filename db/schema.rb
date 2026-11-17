@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_12_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_17_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -262,6 +262,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_12_000001) do
     t.integer "background_dropped_lines", default: 0, null: false
     t.uuid "background_id"
     t.string "background_hash"
+    t.jsonb "must_haves"
+    t.integer "score_before_cap"
+    t.integer "background_score_before_cap"
     t.index ["background_id"], name: "index_fit_scores_on_background_id"
     t.index ["llm_call_id"], name: "index_fit_scores_on_llm_call_id"
     t.index ["posting_id", "created_at"], name: "index_fit_scores_on_posting_id_and_created_at"
@@ -269,7 +272,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_12_000001) do
     t.index ["resume_id"], name: "index_fit_scores_on_resume_id"
     t.index ["role_description_id"], name: "index_fit_scores_on_role_description_id"
     t.check_constraint "background_score IS NULL OR background_score >= 0 AND background_score <= 100", name: "fit_scores_background_score_range"
+    t.check_constraint "background_score_before_cap IS NULL OR background_score_before_cap >= 70 AND background_score_before_cap <= 100", name: "fit_scores_background_score_before_cap_range"
     t.check_constraint "score >= 0 AND score <= 100", name: "fit_scores_score_range"
+    t.check_constraint "score_before_cap IS NULL OR score_before_cap >= 70 AND score_before_cap <= 100", name: "fit_scores_score_before_cap_range"
   end
 
   create_table "llm_calls", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

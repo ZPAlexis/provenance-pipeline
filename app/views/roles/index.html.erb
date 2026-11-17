@@ -66,8 +66,10 @@
     <% end %>
     <% RolesController::FITS.each do |key, label| %>
       <% next if key == "before_background" && !@background && key != @fit %>
+      <% next if key == "before_screen" && @fit_counts.fetch(key, 0).zero? && key != @fit %>
       <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, fit: key, sort: @sort), class: [ "filter", ("current" if key == @fit) ],
-                  title: ("Weighed before your background as it is now: no Background fit read against it" if key == "before_background") do %>
+                  title: { "before_background" => "Weighed before your background as it is now: no Background fit read against it",
+                           "before_screen" => "Weighed before the screen check: their must-haves weren't read one by one" }[key] do %>
         <%= label %> <span class="count"><%= @fit_counts.fetch(key, 0) %></span>
       <% end %>
     <% end %>
@@ -92,7 +94,8 @@
   <% end %>
 <% elsif @fit %>
   <p class="empty">
-    No <%= @tab %> role listed here <%= @fit == "before_background" ? "was weighed before your background as it is now" : "is #{RolesController::FITS.fetch(@fit).downcase}" %>.
+    No <%= @tab %> role listed here <%= { "before_background" => "was weighed before your background as it is now",
+                                          "before_screen" => "was weighed before the screen check" }.fetch(@fit) { "is #{RolesController::FITS.fetch(@fit).downcase}" } %>.
   </p>
 <% elsif @q %>
   <p class="empty">No <%= @tab %> role<%= " #{answer_label(@answer).downcase}" if @answer %> matches “<%= @q %>”.</p>

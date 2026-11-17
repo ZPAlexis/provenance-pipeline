@@ -45,29 +45,39 @@ module ProvenanceMcp
     end
 
     # Weighing the roles already offered (tracked or suggested) that have no current score (2f step 3), or (4c) those
-    # weighed before the background as it is now.
+    # weighed before the background as it is now; or (4d) those weighed before the screen check.
     class WeighRoles < Prompt
       prompt_name "weigh_roles"
       title "Weigh my roles"
-      description "Your tracked and suggested roles with no current fit score, or those weighed before your background, " \
-                  "weighed against your resume (the ATS fit) and your background (the Background fit) from their " \
-                  "descriptions, a few at a time, each saved as it is weighed."
+      description "Your tracked and suggested roles with no current fit score, or those weighed before your background or " \
+                  "before the screen check, weighed against your resume (the ATS fit) and your background (the Background " \
+                  "fit) from their descriptions, their must-haves read one by one, a few at a time, each saved as it is weighed."
       arguments [ MCP::Prompt::Argument.new(name: "how_many", title: "How many",
                                             description: "Optional: how many roles to weigh this time (5 when left out)"),
                   MCP::Prompt::Argument.new(name: "before_background", title: "Before my background",
-                                            description: "Optional: yes to weigh again the roles weighed before your background") ]
+                                            description: "Optional: yes to weigh again the roles weighed before your background"),
+                  MCP::Prompt::Argument.new(name: "before_screen", title: "Before the screen check",
+                                            description: "Optional: yes to weigh again the roles whose must-haves weren't read") ]
+
+      YES = /\A(y|yes|true|1)\z/
 
       class << self
-        def compose(how_many: nil, before_background: nil, **)
+        def compose(how_many: nil, before_background: nil, before_screen: nil, **)
           count = how_many.to_s.strip.match?(/\A\d+\z/) ? how_many.to_i.clamp(1, 50) : 5
-          again = before_background.to_s.strip.downcase.match?(/\A(y|yes|true|1)\z/)
+          screen = before_screen.to_s.strip.downcase.match?(YES)
+          again = !screen && before_background.to_s.strip.downcase.match?(YES)
+          which = if screen then "weighed before the screen check, again"
+          elsif again then "weighed before my background as it is now, again"
+          else "that have no current fit score"
+          end
           <<~TEXT.strip
-            Weigh #{count} of my roles #{again ? 'weighed before my background as it is now, again' : 'that have no current fit score'}, against my resume and my background.
-            Call get_roles_to_weigh#{' with before_background' if again} (up to 10 at a time) and weigh each by the rules it gives, two
-            ways: the ATS fit from my resume alone, and the Background fit with my background too, saving both with
-            save_fit_score as you go. A role named there with no description read yet: read it with read_descriptions
-            first. Then give me what you weighed, best first by the ATS fit, with each score and why in a line, the
-            Background fit beside it, and its company's fit where the company is reviewed (separate scores, never merged).
+            Weigh #{count} of my roles #{which}, against my resume and my background.
+            Call get_roles_to_weigh#{' with before_screen' if screen}#{' with before_background' if again} (up to 10 at a time) and weigh each by the rules it gives, two
+            ways: the ATS fit from my resume alone, and the Background fit with my background too, reading its must-haves
+            one by one, and saving it all with save_fit_score as you go. A role named there with no description read yet:
+            read it with read_descriptions first. Then give me what you weighed, best first by the ATS fit, with each score
+            and why in a line, any must-have I'd likely be screened out on, the Background fit beside it,
+            and its company's fit where the company is reviewed (separate scores, never merged).
             Nothing here tracks a role: I track the ones I want, in the app or by asking you.
           TEXT
         end

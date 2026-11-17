@@ -65,6 +65,12 @@ module FitScores
     postings.select { |posting| (score = scores[posting.id]) && (!score.background_reading? || score.background_stale_for(background)) }
   end
 
+  # Those of `postings` weighed before the screen check (4d): a newest score whose must-haves weren't read.
+  def before_screen(postings)
+    scores = newest(postings.map(&:id))
+    postings.select { |posting| (score = scores[posting.id]) && !score.screened? }
+  end
+
   # Those of `postings` with no score yet, or whose newest is stale: the resume or the description changed since.
   def unscored(postings)
     scores = shown(postings)
@@ -164,8 +170,12 @@ module FitScores
   # Since 4c the score is the ATS fit, and `background` may carry the Background fit, read with the background version
   # the client saw: { version:, score:, why:, covered: [{ asks:, lines:, address_in:, note: }], preferences: [{ preference:,
   # verdict:, why:, lines: }] }, its lines (B4, or 4) resolved to the background's own.
+  #
+  # Since 4d `must_haves` reads each must-have the role states: [{ asks:, shown_in: "resume" | "background" | "none",
+  # lines: (resume lines), background_lines: (B4, or 4), note: }]; nil leaves the score unscreened. The cap is applied
+  # here, not left to the client (screened).
   def save!(posting, score:, why:, resume_version:, level: nil, matches: [], gaps: [], reported_model: nil, actor: "agent:assistant",
-            background: nil)
+            background: nil, must_haves: nil)
     raise ArgumentError, "a score is a whole number from 0 to 100" unless score.is_a?(Integer) && score.between?(0, 100)
     raise ArgumentError, "say why, in a sentence" if why.to_s.strip.empty?
 
@@ -173,11 +183,14 @@ module FitScores
     description = posting.role_descriptions.newest_first.first or
       raise ArgumentError, "#{posting.role_title}'s description isn't read yet: read_descriptions reads it, free"
     matches, dropped = WrittenFrom.with_lines(resume, matches, "point")
+    reading = background_reading(background)
+    musts, missing, missing_background = must_haves_read(must_haves, resume, reading[:background])
+    reading[:background_dropped_lines] += missing_background if reading.any?
     saved = posting.fit_scores.create!(
       score: score, level: level.to_s.strip.presence, matches: matches, gaps: WrittenFrom.gaps(gaps), why: why.to_s.strip,
-      dropped_lines: dropped, resume: resume, resume_hash: resume.content_hash, role_description: description,
+      dropped_lines: dropped + missing, resume: resume, resume_hash: resume.content_hash, role_description: description,
       description_hash: description.content_hash, written_by: actor, reported_model: WrittenFrom.reported(reported_model),
-      run_id: "mcp:#{Authority.credential&.id}", **background_reading(background)
+      run_id: "mcp:#{Authority.credential&.id}", **reading, **screened(musts, score, reading[:background_score])
     )
     AuditEvent.record!(actor: actor, action: "create", target: saved, reasoning: "Saved through MCP: #{said(saved)}.",
                        changes_made: facts(saved).transform_values { |value| [ nil, value ] })
@@ -230,6 +243,51 @@ module FitScores
       background_dropped_lines: dropped, background: background, background_hash: background.content_hash }
   end
 
+  # The must-haves as given (4d), each resolved to the lines that show it: [must-haves, resume lines dropped, background
+  # lines dropped]; nil when none were read. One said to be shown names the lines that show it there.
+  def must_haves_read(given, resume, background)
+    return [ nil, 0, 0 ] if given.nil?
+
+    dropped = { resume: 0, background: 0 }
+    musts = Array(given).filter_map do |item|
+      item = WrittenFrom.plain(item)
+      asks = item["asks"].to_s.strip
+      next if asks.empty?
+
+      where = item["shown_in"].to_s.strip
+      unless FitScore::SHOWN_IN.key?(where)
+        raise ArgumentError, "a must-have is shown on the resume, only in the background, or not at all: shown_in is resume, background or none"
+      end
+      raise ArgumentError, "\"#{asks}\" is shown only in the background, but no Background fit was given" if where == "background" && !background
+
+      lines, missing = where == "resume" ? resume.cite(item["lines"]) : [ [], 0 ]
+      found, gone = where == "background" ? background.cite(item["background_lines"]) : [ [], 0 ]
+      dropped[:resume] += missing
+      dropped[:background] += gone
+      raise ArgumentError, "\"#{asks}\" is shown on the resume: name the resume lines that show it" if where == "resume" && lines.empty?
+      raise ArgumentError, "\"#{asks}\" is shown in the background: name its background lines" if where == "background" && found.empty?
+
+      { "asks" => asks, "shown_in" => where, "lines" => lines, "background_lines" => found, "note" => item["note"].to_s.strip.presence }
+        .reject { |name, value| value.blank? && name != "lines" }
+    end
+    [ musts, dropped[:resume], dropped[:background] ]
+  end
+
+  # The must-haves read, and the caps they set (4d): a must-have not shown on the resume caps the ATS fit at
+  # FitScore::CAP, one shown nowhere the Background fit, each score as weighed kept beside its cap. None unread.
+  def screened(musts, score, background_score)
+    return {} if musts.nil?
+
+    off_resume = musts.any? { |must| must["shown_in"] != "resume" }
+    nowhere = musts.any? { |must| must["shown_in"] == "none" }
+    capped = {}
+    capped.merge!(score: FitScore::CAP, score_before_cap: score) if off_resume && score > FitScore::CAP
+    if nowhere && background_score && background_score > FitScore::CAP
+      capped.merge!(background_score: FitScore::CAP, background_score_before_cap: background_score)
+    end
+    { must_haves: musts, **capped }
+  end
+
   def record_call(llm, run)
     return unless llm
 
@@ -257,7 +315,21 @@ module FitScores
   def said(score)
     dropped = WrittenFrom.dropped(score.dropped_lines)
     "#{score.score} for #{score.posting.role_title} at #{score.posting.company.name} " \
-      "(#{WrittenFrom.counted(score.matches.size, 'match')}, #{WrittenFrom.counted(score.gaps.size, 'gap')})#{dropped}#{background_said(score)}"
+      "(#{WrittenFrom.counted(score.matches.size, 'match')}, #{WrittenFrom.counted(score.gaps.size, 'gap')})#{dropped}" \
+      "#{background_said(score)}#{screen_said(score)}"
+  end
+
+  # Its must-haves in a few words (4d): "; screen risk: 1 of 3 must-haves not on the resume, the ATS fit capped from 74".
+  def screen_said(score)
+    return "" unless score.screened?
+    return "; the role states no must-have" if score.must_haves.empty?
+
+    risks = score.screen_risks.size
+    return "; every must-have (#{score.must_haves.size}) on the resume" if risks.zero?
+
+    caps = [ ("the ATS fit capped from #{score.score_before_cap}" if score.capped?),
+             ("the Background fit capped from #{score.background_score_before_cap}" if score.background_capped?) ].compact
+    "; screen risk: #{risks} of #{WrittenFrom.counted(score.must_haves.size, 'must-have')} not on the resume#{", #{caps.join(', ')}" if caps.any?}"
   end
 
   def background_said(score)
@@ -282,9 +354,12 @@ module FitScores
   def facts(score)
     background = ({ "background_score" => score.background_score, "covered" => score.covered.size, "preferences" => score.preference_tally,
                     "background_hash" => score.background_hash } if score.background_reading?)
+    screen = ({ "must_haves" => score.must_have_tally, "score_before_cap" => score.score_before_cap,
+                "background_score_before_cap" => score.background_score_before_cap }.compact if score.screened?)
     { "score" => score.score, "matches" => score.matches.size, "gaps" => score.gaps.size, "resume_hash" => score.resume_hash,
-      "description_hash" => score.description_hash, "written_by" => score.written_by, **background.to_h }
+      "description_hash" => score.description_hash, "written_by" => score.written_by, **background.to_h, **screen.to_h }
   end
 
-  private_class_method :record, :record_call, :weighed, :facts, :background_reading, :background_said, :recorded_background
+  private_class_method :record, :record_call, :weighed, :facts, :background_reading, :background_said, :recorded_background,
+                       :must_haves_read, :screened, :screen_said
 end

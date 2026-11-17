@@ -89,8 +89,8 @@ bin/rails "drafts:approve[id]"                   # approve it as it stands; noth
 bin/rails "reviews:write[application_id]"         # a resume review by the drafter (LANGUAGE=); Opus 5.5, ~5 cents
 bin/rails fit:score                              # the unscored roles as a plan with its cost; GO=1 weighs them (LIMIT=)
 bin/rails "fit:score[posting_id]"                # how well one role fits the resume; Haiku 4.5, under a cent
-bin/rails fit:list                               # roles by fit, best first, stale scores marked (MIN=70, LIMIT=)
-bin/rails "fit:show[posting_id]"                 # its score, why, the level, matches by resume line, gaps
+bin/rails fit:list                               # roles by fit, best first, stale scores and screen risks marked (MIN=70, LIMIT=)
+bin/rails "fit:show[posting_id]"                 # its score, why, the level, its must-haves, matches by resume line, gaps
 bin/rails reviews:list                           # reviews, newest first, who wrote each and its cost (APPLICATION=)
 bin/rails "reviews:show[id]"                     # its strengths, gaps and suggestions with their lines, and its note
 ```

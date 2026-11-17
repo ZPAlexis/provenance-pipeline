@@ -19,11 +19,16 @@ module ApplicationHelper
     tag.span(score, class: [ "badge", "fit", ("live" if score >= 70), ("unsure" if score.between?(50, 69)) ], title: "Fit, out of 100")
   end
 
-  # A role's newest fit in a table cell: its badge, marked when the resume or its description changed since.
+  # A role's newest fit in a table cell: its badge, marked when the resume or its description changed since, and (4d)
+  # when a must-have isn't on the resume: a screen risk, saying what and whether it capped the score.
   def fit_cell(shown)
     return tag.span("—", class: "muted", title: "Not weighed yet") unless shown
 
-    safe_join([ fit_badge(shown.score.score),
+    score = shown.score
+    risks = score.screen_risks.map { |must| must["asks"] }
+    safe_join([ fit_badge(score.score),
+                (tag.span(" screen risk", class: "small warn",
+                          title: "Not on the resume: #{risks.to_sentence}#{". Capped from #{score.score_before_cap}" if score.capped?}") if risks.any?),
                 (tag.span(" stale", class: "muted small", title: "#{shown.stale.to_sentence.upcase_first} changed since") if shown.stale?) ])
   end
 

@@ -39,7 +39,7 @@ RSpec.describe "A role's fit read two ways, through MCP" do
                         covered: [ { asks: "Salesforce administration", lines: [ "B5", 99 ], address_in: "resume", note: "Add the process built." } ],
                         preferences: [ { preference: "Classic pre-sales demos fit less", verdict: "miss", why: "Weekly live demos.", lines: [ "B3" ] },
                                        { preference: "Internal-facing work", verdict: "match", lines: [ 2 ] } ],
-                        model: "claude-opus-5-5", **given)
+                        model: "claude-opus-5-5", must_haves: [], **given)
   end
 
   it "gives the background beside the resume, its lines numbered across its parts, with the rules for both readings" do
@@ -64,7 +64,7 @@ RSpec.describe "A role's fit read two ways, through MCP" do
 
     score = role.fit_scores.sole
     expect(text).to start_with("Saved: 58 for Customer Engineer at Acme (1 match, 1 gap); Background fit 74 (1 gap covered, preferences " \
-                               "1 met, 1 missed; 1 background line it named isn't in the background, left out).")
+                               "1 met, 1 missed; 1 background line it named isn't in the background, left out); the role states no must-have.")
     expect(score).to have_attributes(score: 58, background_score: 74, background: background, background_hash: background.content_hash,
                                      background_dropped_lines: 1)
     expect(score.covered).to eq([ { "asks" => "Salesforce administration", "address_in" => "resume", "note" => "Add the process built.",
@@ -77,7 +77,7 @@ RSpec.describe "A role's fit read two ways, through MCP" do
   end
 
   it "saves the ATS fit alone when no Background fit is given, and refuses a Background fit it can't place" do
-    expect(said(call(:SaveFitScore, role: role.id, resume_version: resume.version, score: 58, why: "x"))).to start_with("Saved: 58 for")
+    expect(said(call(:SaveFitScore, role: role.id, resume_version: resume.version, score: 58, why: "x", must_haves: []))).to start_with("Saved: 58 for")
     expect(role.fit_scores.sole.background_reading?).to be(false)
 
     expect(said(save(background_version: "0123456789ab"))).to start_with("Not saved: background version \"0123456789ab\" isn't on record")
@@ -94,7 +94,7 @@ RSpec.describe "A role's fit read two ways, through MCP" do
     other.role_descriptions.create!(text: text, content_hash: Resume.digest(text), read_via: "render", url: other.job_url, run_id: "r1",
                                     first_read_at: Time.utc(2026, 11, 10, 9), last_read_at: Time.utc(2026, 11, 10, 9))
     later { save }
-    later { call(:SaveFitScore, role: other.id, resume_version: resume.version, score: 66, why: "Weighed before the background.") }
+    later { call(:SaveFitScore, role: other.id, resume_version: resume.version, score: 66, why: "Weighed before the background.", must_haves: []) }
 
     expect(FitScores.before_background([ role, other ])).to eq([ other ])
     later { Backgrounds.keep!(profile, looking_for: "Something else now.") }

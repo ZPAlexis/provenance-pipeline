@@ -38,7 +38,9 @@ module ProvenanceMcp
     those still up), get_roles_to_weigh, save_fit_score; read_descriptions reads a description a role on record lacks.
     A role's fit is read two ways: the ATS fit, from the resume alone as a recruiter's system would read it, and, when
     the person's background is saved, the Background fit beside it, with the gaps the background covers; the
-    background never raises the ATS fit.
+    background never raises the ATS fit. Each role's must-haves are read one by one: one not shown on the resume caps
+    the ATS fit at 69, one shown nowhere the Background fit (the app applies the cap). Tell the person which must-haves
+    they would likely be screened out on.
     To recommend decisions on the review queue (what the app's agents couldn't settle), use the review_queue prompt:
     list_review_items, get_review_item, save_recommendation. Asked to review the queue without a kind or a number,
     show the counts by kind and ask which kind and how many before reading any item. A recommendation decides nothing:

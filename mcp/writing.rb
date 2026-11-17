@@ -112,17 +112,20 @@ module ProvenanceMcp
 
     # How a role's fit is weighed and saved (2f step 3), in the operator's voice: the shared rules, then the answer's shape.
     # Since 4c a role's fit is read two ways: the ATS fit (the resume alone) and, when a background is saved, the
-    # Background fit beside it.
+    # Background fit beside it. Since 4d each role's must-haves are read one by one, and one a screener wouldn't find on
+    # the resume caps the fit (the app applies it).
     def fit_instructions(background: nil)
       [ "Weigh how well each role below fits my resume, for me to rank roles by: advice, never a claim. Write in English.",
-        rules.fetch("grounding"), rules.fetch("fit"), (rules.fetch("background_fit") if background),
+        rules.fetch("grounding"), rules.fetch("fit"), (rules.fetch("background_fit") if background), rules.fetch("must_haves"),
         <<~TEXT.strip, (<<~TEXT.strip if background) ].compact.join("\n\n")
-          Weigh each role on its own. Its ATS fit comes from its description and my resume alone. Save each with
-          save_fit_score as you go: the role's id, the resume version from here, the score, the level, the matches with the
-          resume lines by their numbers, the gaps, why, and the model you are. Then give me the roles you weighed, best
-          first, each with its score and why in a line, and its company's fit beside it where the company is reviewed.
-          A role's company fit, when shown, is another score: its company against my company preferences. Never weigh it
-          into the role's fit, and never let it move the role's score.
+          Weigh each role on its own. Its ATS fit comes from its description and my resume alone.
+          Read its must-haves first, by the must_haves rules, with where I can work given below.
+          Save each with save_fit_score as you go: the role's id, the resume version from here, the score as you weigh it,
+          the level, the matches with the resume lines by their numbers, the gaps, the must-haves (each as the role states
+          it, shown_in resume, background or none, with its lines), why, and the model you are. Then give me the roles you
+          weighed, best first, each with its score and why in a line, any must-have I'd likely be screened out on,
+          and its company's fit beside it where the company is reviewed. A role's company fit, when shown, is another score:
+          its company against my company preferences. Never weigh it into the role's fit, and never let it move the role's score.
         TEXT
           My background is below, its lines numbered B1, B2 and so on. Read each role a second time with it, by the
           background_fit rules, and save that reading in the same save_fit_score call: the background version from here,

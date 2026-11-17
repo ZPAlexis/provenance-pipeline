@@ -4,9 +4,10 @@ class RolesController < ApplicationController
   # The answers a tab can be narrowed to, in the order the filters show them.
   ANSWERS = %w[verified_live not_found inaccessible pending].freeze
   # The fit a list can be narrowed to (2f): at least this score, or not weighed yet.
-  # Since 4c, by the ATS fit (the resume alone), or those weighed before the background as it is now.
+  # Since 4c, by the ATS fit (the resume alone), or those weighed before the background as it is now; since 4d, those
+  # weighed before the screen check (their must-haves unread).
   FITS = { "85" => "85 and up", "70" => "70 and up", "50" => "50 and up", "none" => "Not weighed",
-           "before_background" => "Before your background" }.freeze
+           "before_background" => "Before your background", "before_screen" => "Before the screen check" }.freeze
   # What a list can be sorted by, best first: the role's fit, or its company's (4b).
   SORTS = %w[fit company_fit].freeze
 
@@ -106,10 +107,12 @@ class RolesController < ApplicationController
     @sort = params[:sort] if SORTS.include?(params[:sort])
     @background = @profile&.backgrounds&.newest_first&.first
     before = FitScores.before_background(roles).to_set(&:id)
+    unscreened = @fits.select { |_, shown| !shown.score.screened? }.keys.to_set
     holds = lambda do |role, key|
       case key
       when "none" then !@fits[role.id]
       when "before_background" then before.include?(role.id)
+      when "before_screen" then unscreened.include?(role.id)
       else @fits[role.id] && @fits[role.id].score.score >= key.to_i
       end
     end

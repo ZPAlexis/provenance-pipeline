@@ -151,21 +151,22 @@ RSpec.describe "Finding and weighing roles through MCP" do
 
       text = said(call(:SaveFitScore, role: role.id, resume_version: resume.version, score: 81, level: "Mid-level, as the resume shows",
                                       matches: [ { point: "Discovery", lines: [ 3, 9 ] } ], gaps: [ { asks: "Spanish", note: "Not shown." } ],
-                                      why: "Discovery-led sales engineering under another name.", model: "claude-opus-5-5"))
+                                      why: "Discovery-led sales engineering under another name.", model: "claude-opus-5-5",
+                                      must_haves: []))
 
       score = role.fit_scores.sole
-      expect(text).to start_with("Saved: 81 for Customer Engineer at Acme (1 match, 1 gap); 1 line it named isn't in the resume, left out.")
+      expect(text).to start_with("Saved: 81 for Customer Engineer at Acme (1 match, 1 gap); 1 line it named isn't in the resume, left out; the role states no must-have.")
       expect(score).to have_attributes(written_by: "agent:assistant", reported_model: "claude-opus-5-5", resume: resume, dropped_lines: 1,
                                        matches: [ { "point" => "Discovery", "lines" => [ { "line" => 3, "text" => "- Ran discovery for 35 accounts a year." } ] } ])
       expect(AgentCredential.sole).to have_attributes(scopes: %w[fit:write], status: "revoked")
       expect(AuditEvent.find_by!(target: score)).to have_attributes(actor: "agent:assistant", reasoning: start_with("Saved through MCP: 81"))
 
-      expect(said(call(:SaveFitScore, role: role.id, resume_version: resume.version, score: 120, why: "x")))
+      expect(said(call(:SaveFitScore, role: role.id, resume_version: resume.version, score: 120, why: "x", must_haves: [])))
         .to eq("Not saved: a score is a whole number from 0 to 100.")
-      expect(said(call(:SaveFitScore, role: role.id, resume_version: "0123456789ab", score: 50, why: "x"))).to start_with("Not saved: resume version")
-      expect(said(call(:SaveFitScore, role: "nope", resume_version: resume.version, score: 50, why: "x"))).to start_with("No role \"nope\"")
+      expect(said(call(:SaveFitScore, role: role.id, resume_version: "0123456789ab", score: 50, why: "x", must_haves: []))).to start_with("Not saved: resume version")
+      expect(said(call(:SaveFitScore, role: "nope", resume_version: resume.version, score: 50, why: "x", must_haves: []))).to start_with("No role \"nope\"")
       unread = create(:posting, company: company, role_title: "Recruiter")
-      expect(said(call(:SaveFitScore, role: unread.id, resume_version: resume.version, score: 50, why: "x")))
+      expect(said(call(:SaveFitScore, role: unread.id, resume_version: resume.version, score: 50, why: "x", must_haves: [])))
         .to eq("Not saved: Recruiter's description isn't read yet: read_descriptions reads it, free.")
     end
   end

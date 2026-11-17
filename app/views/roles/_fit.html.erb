@@ -1,13 +1,42 @@
 <%# How well this role fits you (2f): its newest score, weighed from its description, and the ones before it. Read two
     ways since 4c: the ATS fit, your resume alone as a recruiter's screening system would read it, and the Background
-    fit beside it, read with your background too. Weighed only when you ask; what it costs is asked first. %>
+    fit beside it, read with your background too. Weighed only when you ask; what it costs is asked first. Screened since
+    4d: each must-have the role states, read one by one, above both readings; one not on your resume caps the ATS fit. %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
 <% background = SearchProfile.current&.backgrounds&.newest_first&.first %>
 <section class="check-now">
   <% if fit %>
     <% score = fit.score %>
+    <h3 id="screen-risk">Screen risk</h3>
+    <% if score.screened? %>
+      <% risks = score.screen_risks %>
+      <% if risks.any? %>
+        <p class="small warn">Likely screened out on: <%= risks.map { |must| must["asks"] }.to_sentence %>.</p>
+      <% elsif score.must_haves.any? %>
+        <p class="small">Every must-have the role states (<%= score.must_haves.size %>) is on your resume.</p>
+      <% else %>
+        <p class="muted small">The role states no must-have.</p>
+      <% end %>
+      <% if score.must_haves.any? %>
+        <ul class="small drew-on">
+          <% score.must_haves.each do |must| %>
+            <li><%= tag.span(FitScore::SHOWN_IN.fetch(must["shown_in"]), class: [ "badge", { "resume" => "live", "background" => "unsure", "none" => "gone" }[must["shown_in"]] ]) %>
+              <strong><%= must["asks"] %></strong><%= ": #{must['note']}" if must["note"] %>
+              <% Array(must["lines"]).each do |line| %><br><span class="muted">[<%= line["line"] %>] <%= line["text"] %></span><% end %>
+              <% Array(must["background_lines"]).each do |line| %><br><span class="muted">[B<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
+          <% end %>
+        </ul>
+      <% end %>
+      <p class="muted small">
+        What a recruiter, or their screening system, checks first: what the role states it requires.
+        One not on your resume caps the ATS fit at <%= FitScore::CAP %>; one shown nowhere caps the Background fit.
+      </p>
+    <% else %>
+      <p class="muted small">Weighed before the screen check: weigh it again to read its must-haves one by one.</p>
+    <% end %>
+
     <h3>ATS fit</h3>
-    <p class="fit-head"><%= fit_badge(score.score) %> <span class="muted small">of 100</span> <%= score.why %></p>
+    <p class="fit-head"><%= fit_badge(score.score) %> <span class="muted small">of 100<%= ", capped from #{score.score_before_cap}" if score.capped? %></span> <%= score.why %></p>
     <p class="muted small">Your resume alone, as a recruiter's screening system would read it.</p>
     <% if score.level %><p class="small"><span class="muted">Level:</span> <%= score.level %></p><% end %>
     <div class="fit-lists">
@@ -56,7 +85,7 @@
 
     <h3 id="background-fit">Background fit</h3>
     <% if score.background_reading? %>
-      <p class="fit-head"><%= fit_badge(score.background_score) %> <span class="muted small">of 100</span> <%= score.background_why %></p>
+      <p class="fit-head"><%= fit_badge(score.background_score) %> <span class="muted small">of 100<%= ", capped from #{score.background_score_before_cap}" if score.background_capped? %></span> <%= score.background_why %></p>
       <p class="muted small">With your background too: what you're looking for, your role preferences, and what isn't on your resume.</p>
       <div class="fit-lists">
         <div>

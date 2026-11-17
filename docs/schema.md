@@ -74,7 +74,11 @@ fit_scores    posting_id, score (0 to 100), level, matches (jsonb, each with
               fit: background_score, background_why, covered (the gaps the
               background covers, with its lines and where to address each),
               preferences (match or miss), background_dropped_lines,
-              background_id, background_hash
+              background_id, background_hash; since 4d must_haves (jsonb:
+              each must-have the role states, shown on the resume, only in the
+              background, or not shown, with its lines; null before the
+              check), score_before_cap and background_score_before_cap (the
+              score as weighed, when a must-have capped it at 69)
 
 company_reviews  company_id, score (0 to 100), why, stage, size, business_model,
               industries, regions (in the preferences' own values, for the

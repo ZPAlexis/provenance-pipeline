@@ -5,17 +5,23 @@ module ProvenanceMcp
     # newest description. Since 4c it is read two ways: the ATS fit (the resume alone, shown in the tables) and, read
     # against the background version the client saw, the Background fit beside it. It shows on the role's page and in the
     # Roles page's ATS fit column; nothing tracks the role.
+    # Since 4d with the role's must-haves, read one by one (required, an empty list when the role states none): one not
+    # shown on the resume caps the ATS fit at 69, one shown nowhere the Background fit, applied here.
     class SaveFitScore < SaveTool
       tool_name "save_fit_score"
       title "Save a fit score"
       description "Saves how well one role fits, as you weighed it by the rules from get_roles_to_weigh, read two ways. " \
                   "The ATS fit, from the resume alone: the score from 0 to 100, the level, the matches with the resume lines " \
-                  "by their numbers, the gaps, and why. When a background is saved, the Background fit too: its version, " \
-                  "score and why, the gaps the background covers (with its lines and where to address each), and the role " \
-                  "preferences the role touches (a match or a miss each). Give the versions from get_roles_to_weigh. It never " \
-                  "tracks the role."
+                  "by their numbers, the gaps, and why. The must-haves the role states, each shown on the resume (with its " \
+                  "lines), only in the background (with its background lines) or not at all: one not on the resume caps the " \
+                  "ATS fit at 69, one shown nowhere the Background fit, and the app applies the cap. When a background is " \
+                  "saved, the Background fit too: its version, score and why, the gaps the background covers (with its lines " \
+                  "and where to address each), and the role preferences the role touches (a match or a miss each). Give the " \
+                  "versions from get_roles_to_weigh. It never tracks the role."
       scopes "fit:write"
       LINES = { type: "array", items: { type: "string" }, description: "Background lines, as B4 (or 4)" }.freeze
+      # FitScore::SHOWN_IN's keys, as a literal: the tools load before Rails boots (a spec ties them).
+      SHOWN_IN = %w[resume background none].freeze
       input_schema(
         properties: {
           role: { type: "string", description: "The role's id" },
@@ -32,6 +38,14 @@ module ProvenanceMcp
             items: { type: "object", properties: { asks: { type: "string" }, note: { type: "string" } }, required: %w[asks note] }
           },
           why: { type: "string", description: "The one sentence that explains the ATS fit" },
+          must_haves: {
+            type: "array", description: "Each must-have the role states, by the must_haves rules (an empty list when it states none)",
+            items: { type: "object", properties: { asks: { type: "string", description: "What the role requires, as it says it" },
+                                                   shown_in: { type: "string", enum: SHOWN_IN },
+                                                   lines: { type: "array", items: { type: "integer" }, description: "Resume lines, when shown on the resume" },
+                                                   background_lines: LINES, note: { type: "string" } },
+                     required: %w[asks shown_in] }
+          },
           background_version: { type: "string", description: "The background's version, as get_roles_to_weigh gives it (the Background fit)" },
           background_score: { type: "integer", description: "The Background fit: from 0 to 100, from the resume and the background" },
           background_why: { type: "string", description: "The one sentence that explains the Background fit beside the ATS fit" },
@@ -49,19 +63,24 @@ module ProvenanceMcp
           },
           model: { type: "string", description: "The model you are, as you know it (recorded as reported)" }
         },
-        required: %w[role resume_version score why]
+        required: %w[role resume_version score why must_haves]
       )
 
       class << self
         def answer(role:, resume_version:, score:, why:, level: nil, matches: [], gaps: [], model: nil, background_version: nil,
-                   background_score: nil, background_why: nil, covered: [], preferences: [])
+                   background_score: nil, background_why: nil, covered: [], preferences: [], must_haves: nil)
           posting = Posting.includes(:company).find_by(id: role.to_s.strip) if role.to_s.strip.match?(Lookup::UUID)
           raise Refusal, "No role #{role.inspect}: get_roles_to_weigh gives each one's id." unless posting
+          if must_haves.nil?
+            raise Refusal, "Give must_haves: each must-have the role states, by the must_haves rules from get_roles_to_weigh (an " \
+                           "empty list when it states none)."
+          end
 
           background = { version: background_version, score: background_score, why: background_why, covered: covered, preferences: preferences }
           background = nil if background_version.blank? && background_score.nil? && background_why.blank?
           saved, summary = FitScores.save!(posting, score: score, why: why, resume_version: resume_version, level: level, matches: matches,
-                                                    gaps: gaps, reported_model: model, actor: ASSISTANT, background: background)
+                                                    gaps: gaps, reported_model: model, actor: ASSISTANT, background: background,
+                                                    must_haves: must_haves)
           ProvenanceMcp.text("Saved: #{summary}",
                              "It shows on the role's page in the app (/roles/#{posting.id}#fit) and in the Roles page's ATS fit " \
                              "column (score id #{saved.id}). It tracks nothing: the operator tracks or archives the role, or asks you to.")

@@ -36,7 +36,7 @@ RSpec.describe "Writing about an application through MCP" do
       rules = ProvenanceMcp::Writing.rules
 
       expect(rules.keys).to eq(%w[grounding style cover_letter outreach_note resume_review tailored_resume background_resume background_letter fit
-                                  background_fit company_fit])
+                                  background_fit must_haves company_fit])
       expect(rules["grounding"]).to start_with("Above every other rule: claim only what the resume shows.")
       expect(rules["grounding"]).to include("never add up years of experience", "never what its name suggests")
     end

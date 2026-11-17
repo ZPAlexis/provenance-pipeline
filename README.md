@@ -18,9 +18,13 @@ AI agents do the legwork: they check at each employer's own careers page whether
 
 **Why "provenance":** every change on record says where it came from: who made it, under which permission, and why.
 
-> **Status:** in use for my own job search, running locally. Next: a review of the pages, then a demo on made-up data. [Build history](docs/build-stages.md).
+> **Status:** in use for my own job search, running locally. Now: a screen-risk check on each role's must-haves, and portfolio links as extended background. Next: a review of the pages, then a demo on made-up data. [Build history](docs/build-stages.md).
 
-**Contents:** [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
+**Contents:** [Why I built it](#why-i-built-it) · [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
+
+## Why I built it
+
+> "A company I spoke with wanted to build its own CRM for AI agents to work from. From my Salesforce rollouts, I knew the hard part wouldn't be the build: it would be the governance over what agents are allowed to touch. So I built one, and I use it for my own job search."
 
 ## How it was built
 
@@ -188,7 +192,8 @@ Built in stages, each decided, built step by step, and recorded as built. [Every
 | 4a — Curating the watch list | Companies tracked or archived as roles are; the operator's AI assistant curates them through [MCP](docs/mcp.md), on their word | 2026-11-05 |
 | 4b — Finding companies | Company proposals and company reviews from the operator's AI assistant through [MCP](docs/mcp.md), against company preferences kept on the profile | 2026-11-10 |
 | 4c — Background, and fit read two ways | A background in three parts, each read only by what may use it; the ATS fit and the Background fit, through [MCP](docs/mcp.md) first, then in the app's own agents | 2026-11-12 |
-| Next | A review of the pages' experience, then a demo on made-up data | |
+| 4d — Screen risk, and your links | Each role's must-haves read one by one, a missing one capping the fit; the operator's portfolio links as extended background | under way |
+| Next | 4e, a review of the pages' experience; 4f, a demo on made-up data | |
 
 ## Stack
 

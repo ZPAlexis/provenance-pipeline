@@ -74,6 +74,15 @@ A role's fit is read two ways. The ATS fit is the resume alone, as a recruiter's
 - Preferences: how the role sits with each role preference it touches, a match or a miss, with why and its background lines. Leave out a preference the role says nothing about: unknown is never a match.
 - Why: one plain sentence that explains the Background score beside the ATS one.
 
+## must_haves
+
+Before the score, read the role's must-haves one by one: what a recruiter, or their screening system, checks first, and what turns an application down in seconds.
+- Must-haves: what the role states it requires, under headings such as minimum, required, requirements or must have, and any condition it states for applying: a degree, a certification, a number of years. What it calls a bonus, nice to have, preferred or a plus is not a must-have.
+- A minimum stated in years is a must-have, never "a level one step off": it is shown only when the resume's dated lines show that work for that long.
+- Where the person must be based or be allowed to work: the places and work modes given for the person answer it. List it as a must-have only when they don't meet it, and then as not shown.
+- Each must-have is shown on the resume, with the resume lines that show it; shown only in the background, with its background lines (only when a background is given); or not shown.
+- The cap: a must-have not shown on the resume caps the ATS fit at 69, however much else the resume shows, and one shown nowhere caps the Background fit at 69. The app applies the cap and keeps the score as weighed beside it: weigh the score by the fit rules, and let the cap fall where it does.
+
 ## company_fit
 
 A company review weighs one company against the person's company preferences (what they want and what they avoid, in their own words, and the stages, sizes, business models, industries and words to avoid they listed), and where it hires against the places they can work, so they can see which companies to watch first. It is advice for them, and claims nothing for them. Weigh only what you can source: a page you read, never a guess.
