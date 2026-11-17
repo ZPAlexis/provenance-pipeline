@@ -573,6 +573,9 @@ class FitTarget(BaseModel):
     titles: list[str] = Field(default_factory=list)  # the titles the person searches for: the field they work in
     # Their background (4c), every part, numbered: for the Background fit beside the ATS fit. Empty: the ATS fit alone.
     background: list[BackgroundLine] = Field(default_factory=list)
+    # Where they can work, and how (4d): what answers a role's stated condition of where to be based.
+    places: list[str] = Field(default_factory=list)
+    work_modes: list[str] = Field(default_factory=list)
 
 
 class CoveredGap(BaseModel):
@@ -591,6 +594,17 @@ class PreferencePoint(BaseModel):
     verdict: Literal["match", "miss"]
     why: str | None = None
     lines: list[BackgroundLine] = Field(default_factory=list)
+
+
+class MustHave(BaseModel):
+    """One must-have the role states (4d), read on its own: shown on the resume (with its lines), shown only in the
+    background (with its background lines), or not shown. One not on the resume caps the ATS fit, in the app."""
+
+    asks: str
+    shown_in: Literal["resume", "background", "none"]
+    lines: list[LineText] = Field(default_factory=list)
+    background_lines: list[BackgroundLine] = Field(default_factory=list)
+    note: str | None = None
 
 
 class FitResult(BaseModel):
@@ -618,6 +632,8 @@ class FitResult(BaseModel):
     covered: list[CoveredGap] = Field(default_factory=list)
     preferences: list[PreferencePoint] = Field(default_factory=list)
     background_dropped_lines: int = 0  # background line numbers it named that the background doesn't have
+    # The role's must-haves, read one by one (4d): None only from a worker before the screen check.
+    must_haves: list[MustHave] | None = None
     llm: LlmUsage | None = None
     duration_ms: int = 0
 

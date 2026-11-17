@@ -252,7 +252,22 @@ module Verifier
       gaps.each_with_index do |gap, index|
         errors << "gap #{index + 1} must say what the role asks and a note" unless gap.is_a?(Hash) && %w[asks note].all? { |key| gap[key].is_a?(String) }
       end
-      errors.concat(background_fit_errors(result))
+      errors.concat(background_fit_errors(result)).concat(must_have_errors(result["must_haves"]))
+    end
+
+    # The role's must-haves (4d), when read: each what it asks, where it is shown (resume, background or none), and the
+    # lines that show it there. None from a worker that read none.
+    def must_have_errors(musts)
+      return [] if musts.nil?
+      return [ "must_haves must be a list" ] unless musts.is_a?(Array)
+
+      musts.each_with_index.filter_map do |must, index|
+        next if must.is_a?(Hash) && must["asks"].is_a?(String) && must["asks"].strip.present? && FitScore::SHOWN_IN.key?(must["shown_in"]) &&
+                Array(must["lines"]).all? { |line| line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) } &&
+                background_lines?(Array(must["background_lines"])) && (must["note"].nil? || must["note"].is_a?(String))
+
+        "must-have #{index + 1} must say what the role asks, where it is shown (resume, background or none), and its lines"
+      end
     end
 
     # The Background fit beside the ATS fit (4c), when the fit scorer gives one: its score and why, the covered gaps and

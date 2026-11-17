@@ -347,6 +347,9 @@ def _describe(target: Target | ResolveTarget | OwnBoardTarget | BoardTarget | Su
         if result.outcome != "ok":
             return f"{target.label or target.id}: error, {result.reason} {timing}"
         weighed = f"fit {result.score}, {len(result.matches)} matches, {len(result.gaps)} gaps"
+        if result.must_haves:  # counts only, never what the role asks (4d)
+            off = sum(must.shown_in != "resume" for must in result.must_haves)
+            weighed += f", {off} of {len(result.must_haves)} must-haves not on the resume"
         return f"{target.label or target.id}: {weighed} {timing}"
     if isinstance(result, SuggestionResult):
         if result.outcome != "ok":

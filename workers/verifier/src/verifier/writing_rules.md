@@ -57,7 +57,7 @@ When what the person is looking for is given, it is their own word on their moti
 A fit score weighs one role against the resume, so the person can see which roles to apply to first. It is advice for them, and claims nothing for them. Weigh the work and the level the role asks for; where the role is and how it is worked are weighed elsewhere.
 - Score: a whole number from 0 to 100, by how much of what the role asks the resume shows, its must-haves weighing most:
   - 85 to 100: every must-have, at the level the role asks, and most of what it prefers.
-  - 70 to 84: the must-haves, with gaps only in what it prefers, or a level one step off.
+  - 70 to 84: the must-haves, with gaps only in what it prefers, or a level one step off in title or scope (a minimum stated in years is a must-have, never a level).
   - 50 to 69: a stretch: the core of the work, with one must-have missing or a level two steps off.
   - 25 to 49: some of the work, with several must-haves missing, or another field's role that overlaps.
   - 0 to 24: another field or level altogether.

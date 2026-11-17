@@ -62,7 +62,7 @@ RSpec.describe FitScores do
     expect(worker.asked[:command]).to eq("fit")
     expect(worker.asked[:targets].sole).to eq(id: role.id, label: "Acme / Sales Engineer", role_title: "Sales Engineer", company: "Acme",
                                               location: role.location, description: "Discovery. Spanish required.", resume: resume_text,
-                                              titles: [ "Sales Engineer" ], background: [])
+                                              titles: [ "Sales Engineer" ], background: [], places: [ "Brazil" ], work_modes: [])
     expect(run_dir).not_to exist # its targets and results quoted the resume
     score = role.fit_scores.sole
     expect(score).to have_attributes(score: 72, level: "Mid-level; the resume shows eight years", written_by: "agent:fit_scorer",
@@ -100,6 +100,29 @@ RSpec.describe FitScores do
 
     bad = weighed("background_score" => 140, "background_why" => "x", "covered" => [], "preferences" => [])
     expect(Verifier::ResultContract.fit_score_errors(bad)).to include("background_score must be a whole number from 0 to 100")
+  end
+
+  # 4d step 2: the in-app fit scorer reads the role's must-haves too, and the app caps the score as for a client's.
+  it "keeps the must-haves the fit scorer read, capping the ATS fit for one not on the resume" do
+    keep_resume
+    describe_role
+    line = { "line" => 3, "text" => "- Ran discovery for 35 accounts a year." }
+
+    weigh(role, weighed("score" => 78, "must_haves" => [ { "asks" => "Spanish", "shown_in" => "none", "lines" => [], "background_lines" => [],
+                                                           "note" => "Not shown." },
+                                                         { "asks" => "Discovery", "shown_in" => "resume", "lines" => [ line ],
+                                                           "background_lines" => [], "note" => nil } ]))
+
+    score = role.fit_scores.sole
+    expect(score).to have_attributes(score: 69, score_before_cap: 78, screened?: true)
+    expect(score.must_haves).to eq([ { "asks" => "Spanish", "shown_in" => "none", "lines" => [], "note" => "Not shown." },
+                                     { "asks" => "Discovery", "shown_in" => "resume", "lines" => [ line ] } ])
+    expect(AuditEvent.find_by!(target: score).changes_made).to include("score_before_cap" => [ nil, 78 ])
+    expect(score.posting.fit_scores.sole.screen_risks.sole["asks"]).to eq("Spanish")
+
+    bad = weighed("must_haves" => [ { "asks" => "Spanish", "shown_in" => "maybe", "lines" => [] } ])
+    expect(Verifier::ResultContract.fit_score_errors(bad))
+      .to include("must-have 1 must say what the role asks, where it is shown (resume, background or none), and its lines")
   end
 
   it "weighs a batch in one run, leaving a role with no description unweighed, and says what came of each" do

@@ -18,6 +18,14 @@
                                                    "Background fit, one call each: about #{cost(FitScores.estimate * @before_background_roles.size)}. " \
                                                    "It runs in the background. Weigh them?" } } %>
     <% end %>
+    <% if @tab != "dismissed" && @before_screen_roles.any? && !@fit_run&.active? %>
+      <%= button_to "Weigh again #{pluralize(@before_screen_roles.size, 'role')} weighed before the screen check", fit_scores_path,
+                    params: { before_screen: 1 }, class: "btn",
+                    title: "Weigh each again, its must-haves read one by one: one not on your resume caps the ATS fit.",
+                    form: { data: { turbo_confirm: "Haiku 4.5 weighs #{pluralize(@before_screen_roles.size, 'role')} again, its " \
+                                                   "must-haves read one by one, one call each: about " \
+                                                   "#{cost(FitScores.estimate * @before_screen_roles.size)}. It runs in the background. Weigh them?" } } %>
+    <% end %>
     <% if @tab != "dismissed" && @unscored.any? && !@fit_run&.active? %>
       <% to_read = FitScores.undescribed(@unscored).size %>
       <%= button_to "Weigh #{pluralize(@unscored.size, 'unscored role')}", fit_scores_path, class: "btn",

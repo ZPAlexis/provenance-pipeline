@@ -17,6 +17,7 @@ from verifier.fit import (
     WrittenCovered,
     WrittenFit,
     WrittenMatch,
+    WrittenMustHave,
     WrittenPreference,
     build_fit_prompt,
     fit,
@@ -38,6 +39,8 @@ def target(**fields):
             "description": "You will run discovery. Spanish required.",
             "resume": RESUME,
             "titles": ["Sales Engineer", "Solutions Engineer"],
+            "places": ["Brazil", "LATAM"],
+            "work_modes": ["remote"],
         }
         | fields
     )
@@ -46,6 +49,7 @@ def target(**fields):
 def written(**fields):
     return WrittenFit(
         **{
+            "must_haves": [],
             "score": 72,
             "level": "Mid-level asked; the resume shows eight years",
             "matches": [
@@ -229,3 +233,57 @@ def test_the_prompt_gives_the_background_under_each_parts_label_and_the_rules_fo
     assert build_fit_prompt(target(), []).endswith("Weigh this role against the resume.")
     assert RULES["background_fit"] in FIT_SYSTEM_PROMPT
     assert "background_score" in FIT_SCHEMA["properties"]
+
+
+# 4d step 2: the role's must-haves, read one by one before the score; the app caps the score, the worker never does.
+def test_reads_each_must_have_with_its_lines_and_one_whose_lines_dont_hold_up_as_not_shown():
+    def must(asks, shown_in, lines=(), background_lines=(), note=""):
+        return WrittenMustHave(
+            asks=asks, shown_in=shown_in, lines=list(lines), background_lines=list(background_lines), note=note
+        )
+
+    answer = written(
+        background_score=80,
+        background_why="The background covers Spanish.",
+        must_haves=[
+            must(" Discovery ", "resume", lines=[3, 9], note=" "),
+            must("Spanish", "background", background_lines=[3, 7], note="Conversational."),
+            must("5+ years of AI", "resume", lines=[9]),
+            must("A degree", "none", note="Not shown."),
+            must(" ", "none"),
+        ],
+    )
+
+    result = fit(target(background=BACKGROUND), Weigher(answer))
+
+    def read(m):
+        return (m.asks, m.shown_in, [line.line for line in m.lines], [line.line for line in m.background_lines], m.note)
+
+    assert [read(m) for m in result.must_haves] == [
+        ("Discovery", "resume", [3], [], None),
+        ("Spanish", "background", [], [3], "Conversational."),
+        ("5+ years of AI", "none", [], [], None),  # line 9 isn't in the resume: a screener wouldn't find it either
+        ("A degree", "none", [], [], "Not shown."),
+    ]
+    assert result.score == 72  # as weighed: the app caps it
+    assert (result.dropped_lines, result.background_dropped_lines) == (3, 1)
+
+
+def test_a_must_have_said_to_be_in_a_background_never_given_is_read_as_not_shown():
+    said = WrittenMustHave(asks="Spanish", shown_in="background", lines=[], background_lines=[1], note="")
+    answer = written(must_haves=[said])
+
+    result = fit(target(), Weigher(answer))
+
+    assert [(must.shown_in, must.background_lines) for must in result.must_haves] == [("none", [])]
+    assert result.background_score is None
+
+
+def test_the_prompt_says_where_they_can_work_and_the_rules_read_the_must_haves():
+    prompt = build_fit_prompt(target(), [])
+
+    assert "<where_they_can_work>\nPlaces: Brazil, LATAM\nHow: remote\n</where_they_can_work>" in prompt
+    assert "Places: (not said)\nHow: (not said)" in build_fit_prompt(target(places=[], work_modes=[]), [])
+    assert RULES["must_haves"] in FIT_SYSTEM_PROMPT
+    assert "a minimum stated in years is a must-have, never a level" in RULES["fit"]
+    assert "must_haves" in FIT_SCHEMA["properties"]

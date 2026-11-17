@@ -47,4 +47,13 @@ RSpec.describe "Screen risk, on the pages", type: :request do
     get roles_path(fit: "before_screen")
     expect(response.body).to include("Deal Desk Analyst").and(not_include("Senior AI Solutions Engineer"))
   end
+
+  # 4d step 2: the in-app fit scorer reads must-haves too, so the Roles page offers to weigh those roles again.
+  it "offers to weigh again, in the app, the roles weighed before the screen check, what it costs asked first" do
+    get roles_path
+    expect(response.body).to include("Weigh again 1 role weighed before the screen check", "its must-haves read one by one")
+
+    expect { post fit_scores_path, params: { before_screen: 1 } }.to have_enqueued_job(CheckNowJob)
+    expect(CheckRun.sole).to have_attributes(kind: "fit", request: include("posting_ids" => [ unscreened.id ]))
+  end
 end

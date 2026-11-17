@@ -96,12 +96,14 @@ module FitScores
     "weighing needs a resume, saved on the Profile page, first" unless SearchProfile.current&.resumes&.exists?
   end
 
-  # Since 4c with the operator's background, every part numbered as the app numbers it, for the Background fit.
+  # Since 4c with the operator's background, every part numbered as the app numbers it, for the Background fit; since 4d
+  # with where they can work and how, which answer a role's stated condition of where to be based.
   def target(posting, resume:, description:, profile:, background: nil)
     { id: posting.id, label: "#{posting.company.name} / #{posting.role_title}", role_title: posting.role_title,
       company: posting.company.name, location: posting.location, description: description.text, resume: resume.text,
       titles: profile.titles,
-      background: background ? background.numbered_lines.map { |number, line, part| { line: number, text: line, part: part } } : [] }
+      background: background ? background.numbered_lines.map { |number, line, part| { line: number, text: line, part: part } } : [],
+      places: profile.places, work_modes: profile.work_modes }
   end
 
   # Weighs each of `postings` against the newest resume as the fit scorer, from its newest description; a role with
@@ -152,11 +154,12 @@ module FitScores
     cost = call ? call.cost_usd.to_f : 0.0
     return [ nil, cost, "the AI could not weigh it (#{result['reason']})" ] unless result["outcome"] == "ok"
 
+    reading = recorded_background(result, background)
     score = posting.fit_scores.create!(
       score: result["score"], level: result["level"].presence, matches: result["matches"], gaps: result["gaps"], why: result["why"],
       dropped_lines: result["dropped_lines"], resume: resume, resume_hash: resume.content_hash, role_description: description,
-      description_hash: description.content_hash, written_by: ACTOR, llm_call: call, run_id: run.id,
-      **recorded_background(result, background)
+      description_hash: description.content_hash, written_by: ACTOR, llm_call: call, run_id: run.id, **reading,
+      **screened(recorded_musts(result["must_haves"]), result["score"], reading[:background_score])
     )
     AuditEvent.record!(actor: ACTOR, action: "create", target: score, model_version: call&.model,
                        reasoning: "Weighed: #{said(score)}.", changes_made: facts(score).transform_values { |value| [ nil, value ] })
@@ -241,6 +244,17 @@ module FitScores
     end
     { background_score: score, background_why: given["why"].to_s.strip, covered: covered, preferences: preferences,
       background_dropped_lines: dropped, background: background, background_hash: background.content_hash }
+  end
+
+  # The must-haves the fit scorer read (4d), kept in the shape a client's are: nil from a result that read none.
+  def recorded_musts(given)
+    return if given.nil?
+
+    given.map do |must|
+      { "asks" => must["asks"], "shown_in" => must["shown_in"], "lines" => Array(must["lines"]),
+        "background_lines" => Array(must["background_lines"]), "note" => must["note"].presence }
+        .reject { |name, value| value.blank? && name != "lines" }
+    end
   end
 
   # The must-haves as given (4d), each resolved to the lines that show it: [must-haves, resume lines dropped, background
@@ -361,5 +375,5 @@ module FitScores
   end
 
   private_class_method :record, :record_call, :weighed, :facts, :background_reading, :background_said, :recorded_background,
-                       :must_haves_read, :screened, :screen_said
+                       :must_haves_read, :screened, :screen_said, :recorded_musts
 end

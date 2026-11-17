@@ -124,6 +124,9 @@ class RolesController < ApplicationController
     @unscored = FitScores.weighable(FitScores.unscored(offered))
     # Weighed before the background as it is now (4c): to weigh again, both readings, when asked.
     @before_background_roles = @background ? FitScores.weighable(FitScores.before_background(offered)) : []
+    # Weighed before the screen check (4d): to weigh again, its must-haves read, when asked. Those already offered again
+    # for the background are left to that button.
+    @before_screen_roles = FitScores.weighable(FitScores.before_screen(offered)) - @before_background_roles
     # Any weighing under way (one at a time), or the last batch for an hour after it ends.
     @fit_run = CheckRun.where(kind: "fit").active.first || CheckRun.where(kind: "fit", posting_id: nil).newest_first.first
     @fit_run = nil unless @fit_run && (@fit_run.active? || @fit_run.finished_at&.after?(1.hour.ago))
