@@ -547,7 +547,8 @@ class LineText(BaseModel):
     text: str  # the line itself, as the resume has it
 
 
-BackgroundPart = Literal["looking_for", "role_preferences", "not_on_resume"]
+# Since 4d a reading may also carry the lines of the operator's links that apply to the role ("links").
+BackgroundPart = Literal["looking_for", "role_preferences", "not_on_resume", "links"]
 
 
 class BackgroundLine(BaseModel):
@@ -556,6 +557,7 @@ class BackgroundLine(BaseModel):
     line: int
     text: str
     part: BackgroundPart
+    source: str | None = None  # for a line of the links (4d): the page it is from
 
 
 ReviewTarget.model_rebuild()  # it names BackgroundLine, defined after it

@@ -39,15 +39,21 @@ module ApplicationsHelper
     days.zero? ? "since today" : "for #{pluralize(days, 'day')}"
   end
 
-  # A point, suggestion or change drawn from the background not on the resume (4c): flagged for the operator to confirm,
-  # with the background lines it rests on. Nothing for one that cites none.
+  # A point, suggestion or change drawn from the background not on the resume (4c), or (4d) from the operator's links:
+  # flagged for the operator to confirm, with the lines it rests on. Nothing for one that cites none.
   def from_background(item)
     lines = Array(item["background_lines"])
     return if lines.empty?
 
+    from = lines.map { |line| line["part"] == Background::LINKS ? "your links" : "your background" }.uniq.join(" and ")
     tag.div(class: "small") do
-      safe_join([ tag.span("from your background, not on the resume: confirm it", class: "badge unsure"),
-                  *lines.map { |line| safe_join([ tag.br, tag.span("[B#{line['line']}] #{line['text']}", class: "muted") ]) } ])
+      safe_join([ tag.span("from #{from}, not on the resume: confirm it", class: "badge unsure"),
+                  *lines.map { |line| safe_join([ tag.br, tag.span(background_line(line), class: "muted") ]) } ])
     end
+  end
+
+  # A background line as the pages show it: "[B4] text", and (4d) the page a line of the links is from.
+  def background_line(line)
+    "[B#{line['line']}] #{line['text']}#{" (your links: #{line['source']})" if line['part'] == Background::LINKS}"
   end
 end

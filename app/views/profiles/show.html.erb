@@ -167,6 +167,12 @@
   not on the resume" above. What each read found is kept here, version by version, in this database only; the record of
   each save names each link by a hash.
 </p>
+<p class="muted small">
+  With a background saved above, each role is read with the lines of these pages that share the most of its description's
+  words, as your background is: by the Background fit (never the ATS fit, and never as a role preference), and by resume reviews
+  and tailored resumes, where each point drawn on them is flagged "from your links" for you to confirm. Cover letters and
+  outreach notes never read them.
+</p>
 <% if @profile.persisted? %>
   <% if @links_error %><p class="small warn" role="alert"><%= @links_error %></p><% end %>
   <% rows = @links_given || @links.map { |link| { "label" => link.label, "url" => link.url } } %>
@@ -205,6 +211,12 @@
         </ul>
       </details>
     <% end %>
+  <% end %>
+  <% if @links.any? %>
+    <p class="muted small">
+      The app reads your links only when you save them or click "Read them again", never on its own. If you update your
+      website or GitHub, click "Read them again" before weighing a role or reviewing your resume for one again.
+    </p>
   <% end %>
 <% else %>
   <p class="muted small">Save the profile above first: the links are kept with it.</p>

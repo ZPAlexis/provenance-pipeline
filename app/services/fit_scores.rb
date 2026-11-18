@@ -97,14 +97,16 @@ module FitScores
   end
 
   # Since 4c with the operator's background, every part numbered as the app numbers it, for the Background fit; since 4d
-  # with where they can work and how, which answer a role's stated condition of where to be based.
+  # with where they can work and how, which answer a role's stated condition of where to be based, and the lines of
+  # their links that apply to the role, numbered on after the background's (each with the page it is from).
   def target(posting, resume:, description:, profile:, background: nil)
     { id: posting.id, label: "#{posting.company.name} / #{posting.role_title}", role_title: posting.role_title,
       company: posting.company.name, location: posting.location, description: description.text, resume: resume.text,
       titles: profile.titles,
-      background: background ? background.numbered_lines.map { |number, line, part| { line: number, text: line, part: part } } : [],
+      background: background ? background.numbered_lines.map { |number, line, part, source| { line: number, text: line, part: part, source: source }.compact } : [],
       places: profile.places, work_modes: profile.work_modes }
   end
+
 
   # Weighs each of `postings` against the newest resume as the fit scorer, from its newest description; a role with
   # no description on record is left unweighed, and says so.
@@ -121,10 +123,13 @@ module FitScores
     ready = postings.select { |posting| descriptions[posting] }
     return weighed([], unweighed, 0.0, nil, nil) if ready.empty?
 
+    readings = ready.index_with { |posting| ProfileLinks.reading(background, profile, descriptions[posting]) }
+
     purpose = ready.one? ? "fit: #{ready.first.role_title} at #{ready.first.company.name}" : "fit: #{ready.size} roles"
     Authority.run(ACTOR, scopes: SCOPES, purpose: purpose, ttl: ready.one? ? Authority::ONE : Authority::BATCH, issued_by: issued_by) do
       run = begin
-        worker.run(ready.map { |posting| target(posting, resume:, description: descriptions[posting], profile:, background:) }, command: "fit")
+        worker.run(ready.map { |posting| target(posting, resume:, description: descriptions[posting], profile:, background: readings[posting]) },
+                   command: "fit")
       ensure
         Verifier::Worker.forget!(worker.run_dir) # its targets and results quote the resume; the record keeps what was written
       end
@@ -132,7 +137,8 @@ module FitScores
       scores, cost = [], 0.0
       run.results.each do |result|
         posting = by_id.delete(result["target_id"]) if result.is_a?(Hash)
-        score, spent, failure = record(result, posting, run, resume:, description: posting && descriptions[posting], background:)
+        score, spent, failure = record(result, posting, run, resume:, description: posting && descriptions[posting],
+                                                         background: posting && readings[posting])
         cost += spent
         if score then scores << score
         elsif posting then unweighed << [ posting, failure ] # a result naming no role asked for is nobody's
@@ -186,7 +192,7 @@ module FitScores
     description = posting.role_descriptions.newest_first.first or
       raise ArgumentError, "#{posting.role_title}'s description isn't read yet: read_descriptions reads it, free"
     matches, dropped = WrittenFrom.with_lines(resume, matches, "point")
-    reading = background_reading(background)
+    reading = background_reading(background, description)
     musts, missing, missing_background = must_haves_read(must_haves, resume, reading[:background])
     reading[:background_dropped_lines] += missing_background if reading.any?
     saved = posting.fit_scores.create!(
@@ -209,8 +215,9 @@ module FitScores
       background: background, background_hash: background.content_hash }
   end
 
-  # The Background fit's attributes (4c), from what the client gives: none when it gives none.
-  def background_reading(given)
+  # The Background fit's attributes (4c), from what the client gives: none when it gives none. Since 4d its lines may be
+  # the links' lines that apply to the role (`links_version`), read back for the role's newest description.
+  def background_reading(given, description)
     given = WrittenFrom.plain(given)
     return {} if given.values.all?(&:blank?)
 
@@ -218,10 +225,11 @@ module FitScores
     raise ArgumentError, "a Background fit is a whole number from 0 to 100" unless score.is_a?(Integer) && score.between?(0, 100)
     raise ArgumentError, "say why the Background fit is what it is, in a sentence" if given["why"].to_s.strip.empty?
 
-    background = WrittenFrom.background!(given["version"], reread: "the roles to weigh")
+    background = WrittenFrom.with_links!(WrittenFrom.background!(given["version"], reread: "the roles to weigh"), given["links_version"],
+                                         description, reread: "the roles to weigh")
     dropped = 0
-    cite = lambda do |numbers|
-      lines, missing = background.cite(numbers)
+    cite = lambda do |numbers, parts = background.citable|
+      lines, missing = background.cite(numbers, parts: parts)
       dropped += missing
       lines
     end
@@ -240,7 +248,7 @@ module FitScores
       raise ArgumentError, "a preference is a match or a miss" unless FitScore::PREFERENCE_VERDICTS.include?(item["verdict"].to_s.strip)
 
       { "preference" => item["preference"].to_s.strip, "verdict" => item["verdict"].to_s.strip, "why" => item["why"].to_s.strip.presence,
-        "lines" => cite.call(item["lines"]) }.compact
+        "lines" => cite.call(item["lines"], Background::PARTS.keys) }.compact # a preference is the operator's, never a page's
     end
     { background_score: score, background_why: given["why"].to_s.strip, covered: covered, preferences: preferences,
       background_dropped_lines: dropped, background: background, background_hash: background.content_hash }
@@ -275,7 +283,7 @@ module FitScores
       raise ArgumentError, "\"#{asks}\" is shown only in the background, but no Background fit was given" if where == "background" && !background
 
       lines, missing = where == "resume" ? resume.cite(item["lines"]) : [ [], 0 ]
-      found, gone = where == "background" ? background.cite(item["background_lines"]) : [ [], 0 ]
+      found, gone = where == "background" ? background.cite(item["background_lines"], parts: background.citable) : [ [], 0 ]
       dropped[:resume] += missing
       dropped[:background] += gone
       raise ArgumentError, "\"#{asks}\" is shown on the resume: name the resume lines that show it" if where == "resume" && lines.empty?

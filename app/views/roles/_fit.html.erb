@@ -23,7 +23,7 @@
             <li><%= tag.span(FitScore::SHOWN_IN.fetch(must["shown_in"]), class: [ "badge", { "resume" => "live", "background" => "unsure", "none" => "gone" }[must["shown_in"]] ]) %>
               <strong><%= must["asks"] %></strong><%= ": #{must['note']}" if must["note"] %>
               <% Array(must["lines"]).each do |line| %><br><span class="muted">[<%= line["line"] %>] <%= line["text"] %></span><% end %>
-              <% Array(must["background_lines"]).each do |line| %><br><span class="muted">[B<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
+              <% Array(must["background_lines"]).each do |line| %><br><span class="muted"><%= background_line(line) %></span><% end %></li>
           <% end %>
         </ul>
       <% end %>
@@ -94,7 +94,7 @@
             <ul class="small drew-on">
               <% score.covered.each do |gap| %>
                 <li><strong><%= gap["asks"] %></strong>: address it in <%= FitScore::ADDRESS_IN.fetch(gap["address_in"], gap["address_in"]) %><%= ". #{gap['note']}" if gap["note"] %>
-                  <% gap["lines"].each do |line| %><br><span class="muted">[B<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
+                  <% gap["lines"].each do |line| %><br><span class="muted"><%= background_line(line) %></span><% end %></li>
               <% end %>
             </ul>
           <% else %>

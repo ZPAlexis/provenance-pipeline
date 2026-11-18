@@ -317,9 +317,12 @@ module Verifier
       errors
     end
 
-    # Background lines, each with its number, text and part.
+    # Background lines, each with its number, text and part; since 4d a line of the operator's links, with its page.
     def background_lines?(lines)
-      lines.is_a?(Array) && lines.all? { |line| line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) && Background::PARTS.key?(line["part"]) }
+      lines.is_a?(Array) && lines.all? do |line|
+        line.is_a?(Hash) && count?(line["line"]) && line["text"].is_a?(String) &&
+          (Background::PARTS.key?(line["part"]) || line["part"] == Background::LINKS) && (line["source"].nil? || line["source"].is_a?(String))
+      end
     end
 
     RULED_OUT = %w[excluded level place work_mode].freeze

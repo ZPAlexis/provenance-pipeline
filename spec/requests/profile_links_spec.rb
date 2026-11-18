@@ -32,7 +32,8 @@ RSpec.describe "Your links, on the Profile page", type: :request do
 
     get profile_path
     expect(response.body).to include("Your links", "<strong>Website</strong>", "jordan.example", "1 page, 1 left unread, read",
-                                     "1 page, 4 words", ">Home</a>", "LinkedIn isn't read")
+                                     "1 page, 4 words", ">Home</a>", "LinkedIn isn't read",
+                                     "click \"Read them again\" before weighing a role or reviewing your resume for one again")
 
     expect { post read_links_profile_path }.to have_enqueued_job(CheckNowJob)
     expect(CheckRun.sole.kind).to eq("links")

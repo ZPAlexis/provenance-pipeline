@@ -33,6 +33,7 @@ module ProvenanceMcp
           },
           note: { type: "string", description: "How well the resume fits the role, and the one change that would help most" },
           background_version: { type: "string", description: "The background's version, as get_application_materials gives it, when you drew on it" },
+          links_version: { type: "string", description: "The links' version for this role, as the tool that gave them says it, when you cite a line of the operator's links" },
           model: { type: "string", description: "The model you are, as you know it (recorded as reported)" }
         },
         required: %w[application resume_version language]
@@ -40,11 +41,11 @@ module ProvenanceMcp
 
       class << self
         def answer(application:, resume_version:, language:, strengths: [], gaps: [], suggestions: [], note: nil, model: nil,
-                   background_version: nil)
+                   background_version: nil, links_version: nil)
           found = Lookup.application(application)
           review, summary = ResumeReviews.save!(found, language: language, resume_version: resume_version, strengths: strengths, gaps: gaps,
                                                        suggestions: suggestions, note: note, reported_model: model, actor: ASSISTANT,
-                                                       background_version: background_version)
+                                                       background_version: background_version, links_version: links_version)
           ProvenanceMcp.text("Saved for #{Writing.label(found)}: #{summary}",
                              "Review id #{review.id}, on the application's page in the app (/applications/#{found.id}#reviews).")
         end

@@ -32,6 +32,7 @@ from verifier.contract import (
 from verifier.draft import RULES, resume_lines
 from verifier.errors import ExtractionFailed
 from verifier.extract import _LlmCaller, prompt_version
+from verifier.fit import background_block
 
 REVIEW_SYSTEM_PROMPT = f"""You review one person's resume against a role they are applying to, so they can decide what to stress and what to add. You write nothing for them to send.
 
@@ -178,7 +179,7 @@ def build_review_prompt(target: ReviewTarget, lines: list[str]) -> str:
                 [
                     block(
                         "background_not_on_the_resume",
-                        "\n".join(f"[B{line.line}] {line.text}" for line in target.not_on_resume),
+                        background_block(target.not_on_resume),
                     )
                 ]
                 if target.not_on_resume

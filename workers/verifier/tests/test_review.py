@@ -187,6 +187,16 @@ def test_maps_the_background_lines_a_strength_or_suggestion_draws_on_dropping_an
 def test_the_prompt_gives_the_background_not_on_the_resume_and_its_rules():
     prompt = build_review_prompt(target(not_on_resume=NOT_ON_RESUME), [])
 
-    assert "<background_not_on_the_resume>\n[B4] Spanish, conversational.\n</background_not_on_the_resume>" in prompt
+    assert (
+        "<background_not_on_the_resume>\nBackground not on the resume:\n[B4] Spanish, conversational.\n"
+        "</background_not_on_the_resume>" in prompt
+    )
+    linked = [
+        *NOT_ON_RESUME,
+        BackgroundLine(line=9, text="Project Alpha: an audit log.", part="links", source="Project Alpha"),
+    ]
+    with_links = build_review_prompt(target(not_on_resume=linked), [])
+    assert "What their own links show that applies to this role:\nFrom Project Alpha:\n[B9] Project Alpha" in with_links
+    assert "Lines from their own links that apply to the role" in RULES["background_resume"]
     assert RULES["background_resume"] in REVIEW_SYSTEM_PROMPT
     assert "background_not_on_the_resume" not in build_review_prompt(target(), [])

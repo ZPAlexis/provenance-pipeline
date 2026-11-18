@@ -137,7 +137,8 @@ module Drafts
   # A cover letter or an outreach note reads only what the operator is looking for, for motivation: it records the
   # version read, and a background line cited anywhere in it is refused, since every claim in it traces to the resume.
   def save!(application, kind:, language:, body:, resume_version:, subject: nil, lines_drawn_on: [], changes: [], gaps: [],
-            note: nil, revises: nil, contact: nil, reported_model: nil, actor: "agent:assistant", background_version: nil)
+            note: nil, revises: nil, contact: nil, reported_model: nil, actor: "agent:assistant", background_version: nil,
+            links_version: nil)
     raise ArgumentError, "a draft is one of: #{Draft::KINDS.join(', ')}" unless Draft::KINDS.include?(kind)
     raise ArgumentError, "only an outreach note is addressed to someone" if contact && kind != "outreach"
 
@@ -158,6 +159,10 @@ module Drafts
                            "is their motivation, never a claim, and every claim traces to a line of the resume"
     end
     background = WrittenFrom.background_read!(background_version, part, reread: "the application's materials")
+    # A tailored resume may bring in a line of the operator's links (4d); a letter or a note never reads them.
+    unless ReadsBackground::MOTIVATION_ONLY.include?(kind)
+      background = WrittenFrom.with_links!(background, links_version, description, reread: "the application's materials")
+    end
     drew_on, dropped = WrittenFrom.drawn_on(resume, lines_drawn_on)
     tailoring, dropped_too = WrittenFrom.with_lines(resume, changes, "change", background: background, part: part)
     subject = subject.to_s.strip.presence if kind == "outreach"
@@ -176,8 +181,7 @@ module Drafts
   end
 
   def saved_summary(draft)
-    drawn = draft.from_background(draft.tailoring).size
-    flagged = " (#{drawn} drawn from your background, not on the resume, for you to confirm)" if drawn.positive?
+    flagged = WrittenFrom.flagged(draft.from_background(draft.tailoring)).then { |said| " (#{said})" if said }
     made = draft.tailored_resume? ? "#{counted(draft.tailoring.size, 'change')}#{flagged}" : "drawing on #{counted(draft.drew_on.size, 'line')} of the resume"
     gaps = draft.gaps.empty? ? "no gaps" : "#{counted(draft.gaps.size, 'gap')} flagged"
     dropped = WrittenFrom.dropped(draft.dropped_lines)

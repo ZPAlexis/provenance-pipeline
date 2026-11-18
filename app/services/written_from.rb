@@ -31,6 +31,19 @@ module WrittenFrom
       raise ArgumentError, "background version #{background_version.inspect} isn't on record: read #{reread} again, and cite its lines as they are now"
   end
 
+  # The background read with the lines of the operator's links that applied to the role (4d), when the client says it
+  # cited them (`links_version`): worked out again for the role's description, and refused when the links' lines are no
+  # longer the ones it read. The background as it is when it gives none.
+  def with_links!(background, links_version, description, reread:)
+    return background if links_version.to_s.strip.empty? || background.nil?
+
+    reading = ProfileLinks.reading(background, SearchProfile.current, description)
+    return reading if reading.links_version == links_version.to_s.strip.downcase
+
+    raise ArgumentError, "links version #{links_version.inspect} isn't the one on record for this role (the links were read " \
+                         "again, or the role's description changed): read #{reread} again, and cite their lines as they are now"
+  end
+
   # A letter's or a note's lines drawn on: [{ "line", "text", "used_for" }], as the in-app drafter keeps them.
   def drawn_on(resume, items)
     dropped = 0
@@ -59,7 +72,7 @@ module WrittenFrom
       next { key => said, "lines" => lines } if from.empty?
       raise ArgumentError, "give the background version you read: its lines are cited against it" unless background && part
 
-      found, gone = background.cite(from, parts: [ part ])
+      found, gone = background.cite(from, parts: background.citable(part))
       dropped += gone
       { key => said, "lines" => lines, "background_lines" => found }.reject { |name, value| name == "background_lines" && value.empty? }
     end
@@ -94,6 +107,15 @@ module WrittenFrom
   def plain(item) = item.respond_to?(:to_h) ? item.to_h.transform_keys(&:to_s) : {}
 
   def counted(count, what) = "#{count} #{what.pluralize(count)}"
+
+  # What a summary says of the points drawn from the background: how many, and from where ("your background", "your
+  # links" since 4d, or both); nothing when there are none.
+  def flagged(items)
+    return if items.empty?
+
+    from = items.flat_map { |item| Array(item["background_lines"]) }.map { |line| line["part"] == Background::LINKS }.uniq.sort_by { |links| links ? 1 : 0 }
+    "#{items.size} drawn from #{from.map { |links| links ? 'your links' : 'your background' }.join(' and ')}, not on the resume, for you to confirm"
+  end
 
   # What a summary says of the lines a writer named that the resume doesn't have; nothing when there are none.
   def dropped(count)

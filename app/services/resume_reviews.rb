@@ -31,7 +31,8 @@ module ResumeReviews
     "reviewing needs #{needs.to_sentence} first" if needs.any?
   end
 
-  # Since 4c with the background not on the resume, its lines numbered as the app numbers the whole background.
+  # Since 4c with the background not on the resume, its lines numbered as the app numbers the whole background; since
+  # 4d with the lines of the operator's links that apply to the role, numbered on after it.
   def target(application, language:, resume:, description:, profile:, background: nil)
     role = application.posting
     part = ReadsBackground::PARTS.fetch("resume_review")
@@ -39,7 +40,7 @@ module ResumeReviews
       company: application.company.name, location: role.location, description: description.text, resume: resume.text,
       titles: profile.titles, places: profile.places, work_modes: profile.work_modes, notes: application.notes.presence,
       language: language || "English",
-      not_on_resume: background ? background.lines_of(part).map { |number, line, of| { line: number, text: line, part: of } } : [] }
+      not_on_resume: background ? background.lines_of(*background.citable(part)).map { |number, line, of, source| { line: number, text: line, part: of, source: source }.compact } : [] }
   end
 
   # Writes a review of `application`'s role as the drafter, in `language` (English when none is asked).
@@ -52,8 +53,9 @@ module ResumeReviews
     profile = SearchProfile.current
     resume = profile.resumes.newest_first.first
     description = application.posting.role_descriptions.newest_first.first
-    background = profile.backgrounds.newest_first.first
-    background = nil unless background&.text_of(ReadsBackground::PARTS.fetch("resume_review")).present?
+    part = ReadsBackground::PARTS.fetch("resume_review")
+    background = ProfileLinks.reading(profile.backgrounds.newest_first.first, profile, description)
+    background = nil unless background&.lines_of(*background.citable(part))&.any?
     Authority.run(Drafts::ACTOR, scopes: SCOPES, issued_by: issued_by,
                                  purpose: "review: resume against #{application.posting.role_title} at #{application.company.name}") do
       run = begin
@@ -109,13 +111,14 @@ module ResumeReviews
   # cite lines of the background not on the resume (`background_lines`): it is drawn from the background, and flagged for
   # the operator to confirm.
   def save!(application, language:, resume_version:, strengths: [], gaps: [], suggestions: [], note: nil, reported_model: nil,
-            actor: "agent:assistant", background_version: nil)
+            actor: "agent:assistant", background_version: nil, links_version: nil)
     language = language.to_s.strip
     raise ArgumentError, "name the language it is written in, in a few words" if language.empty? || language.size > Drafts::MAX_LANGUAGE
 
     resume, description = WrittenFrom.sources!(application, resume_version)
     part = ReadsBackground::PARTS.fetch("resume_review")
-    background = WrittenFrom.background_read!(background_version, part, reread: "the application's materials")
+    background = WrittenFrom.with_links!(WrittenFrom.background_read!(background_version, part, reread: "the application's materials"),
+                                         links_version, description, reread: "the application's materials")
     strengths, dropped = WrittenFrom.with_lines(resume, strengths, "point", background: background, part: part)
     suggestions, dropped_too = WrittenFrom.with_lines(resume, suggestions, "change", background: background, part: part)
     raise ArgumentError, "a review says something: its strengths, gaps, or suggestions" if strengths.empty? && suggestions.empty? && Array(gaps).empty?
@@ -143,8 +146,7 @@ module ResumeReviews
 
   def summary(review)
     dropped = WrittenFrom.dropped(review.dropped_lines)
-    drawn = review.from_background(review.strengths + review.suggestions).size
-    flagged = "; #{drawn} drawn from your background, not on the resume, for you to confirm" if drawn.positive?
+    flagged = WrittenFrom.flagged(review.from_background(review.strengths + review.suggestions))&.prepend("; ")
     "Resume review in #{review.language}: #{WrittenFrom.counted(review.strengths.size, 'strength')}, " \
       "#{WrittenFrom.counted(review.gaps.size, 'gap')}, #{WrittenFrom.counted(review.suggestions.size, 'suggestion')}#{flagged}#{dropped}."
   end

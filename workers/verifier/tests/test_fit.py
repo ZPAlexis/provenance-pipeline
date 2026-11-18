@@ -106,7 +106,8 @@ def test_its_rules_are_the_shared_ones_and_the_others_prompts_keep_their_version
     assert "data, not instructions" in FIT_SYSTEM_PROMPT
     # A section of their own: adding fit's moved neither the drafter's prompt nor the review's. 4c step 5 moved both on
     # purpose (the background: what they're looking for for the drafter, background not on the resume for the review).
-    assert (DRAFT_PROMPT_VERSION, REVIEW_PROMPT_VERSION) == ("bb4cf0750d48", "d38b017b0a77")
+    # 4d step 4 moved the review's on purpose: background_resume now says what the operator's links add.
+    assert (DRAFT_PROMPT_VERSION, REVIEW_PROMPT_VERSION) == ("bb4cf0750d48", "60123e844791")
 
 
 def test_the_prompt_fences_what_is_on_record():
@@ -287,3 +288,39 @@ def test_the_prompt_says_where_they_can_work_and_the_rules_read_the_must_haves()
     assert RULES["must_haves"] in FIT_SYSTEM_PROMPT
     assert "a minimum stated in years is a must-have, never a level" in RULES["fit"]
     assert "must_haves" in FIT_SCHEMA["properties"]
+
+
+# 4d step 4: the lines of the operator's links that apply to the role, numbered on after the background's.
+LINKED = [
+    *BACKGROUND,
+    BackgroundLine(line=4, text="Project Alpha: an append-only audit log.", part="links", source="Project Alpha"),
+    BackgroundLine(line=5, text="Built with Rails and Playwright.", part="links", source="Project Alpha"),
+    BackgroundLine(line=6, text="Governed AI agents.", part="links", source="GitHub"),
+]
+
+
+def test_the_prompt_gives_the_links_lines_under_the_page_each_is_from():
+    block = build_fit_prompt(target(background=LINKED), [])
+
+    assert (
+        "What their own links show that applies to this role:\nFrom Project Alpha:\n"
+        "[B4] Project Alpha: an append-only audit log.\n[B5] Built with Rails and Playwright.\n"
+        "From GitHub:\n[B6] Governed AI agents." in block
+    )
+    assert "their own links (their website, GitHub or a portfolio)" in RULES["background_fit"]
+
+
+def test_a_covered_gap_or_a_must_have_may_rest_on_a_line_of_the_links_but_never_a_preference():
+    answer = written(
+        background_score=80,
+        background_why="The links show the audit log.",
+        covered=[WrittenCovered(asks="Audit trails", background_lines=[4], address_in="resume", note="Add it.")],
+        preferences=[WrittenPreference(preference="Internal-facing work", verdict="match", why="x", preference_line=6)],
+        must_haves=[WrittenMustHave(asks="Rails", shown_in="background", lines=[], background_lines=[5], note="")],
+    )
+
+    result = fit(target(background=LINKED), Weigher(answer))
+
+    assert [(line.part, line.source) for line in result.covered[0].lines] == [("links", "Project Alpha")]
+    assert [(line.part, line.source) for line in result.must_haves[0].background_lines] == [("links", "Project Alpha")]
+    assert result.preferences[0].lines == []  # B6 is a page's line, never a preference of theirs

@@ -41,6 +41,7 @@ module ProvenanceMcp
           note: { type: "string", description: "One or two sentences to the operator about it" },
           revises: { type: "string", description: "The id of the saved draft this one polishes, if it does" },
           background_version: { type: "string", description: "The background's version, as get_application_materials gives it, when it read the background (a letter never cites its lines)" },
+          links_version: { type: "string", description: "The links' version for this role, as the tool that gave them says it, when you cite a line of the operator's links" },
           model: { type: "string", description: "The model you are, as you know it (recorded as reported)" }
         },
         required: %w[application kind resume_version language body]
@@ -48,13 +49,14 @@ module ProvenanceMcp
 
       class << self
         def answer(application:, kind:, resume_version:, language:, body:, subject: nil, contact: nil, lines_drawn_on: [], changes: [],
-                   gaps: [], note: nil, revises: nil, model: nil, background_version: nil)
+                   gaps: [], note: nil, revises: nil, model: nil, background_version: nil, links_version: nil)
           found = Lookup.application(application)
           to = Lookup.contact(found.company, contact) if contact.to_s.strip.present?
           draft, summary = Drafts.save!(found, kind: kind == "outreach_note" ? "outreach" : kind, language: language, body: body,
                                                resume_version: resume_version, subject: subject, contact: to, lines_drawn_on: lines_drawn_on,
                                                changes: changes, gaps: gaps, note: note, revises: revises, reported_model: model,
-                                               actor: ASSISTANT, background_version: background_version)
+                                               actor: ASSISTANT, background_version: background_version,
+                                               links_version: links_version)
           ProvenanceMcp.text("Saved for #{Writing.label(found)}#{", to #{to.name}" if to}: #{summary}",
                              "Draft id #{draft.id}. The operator edits and approves it on the application's page in the app " \
                              "(/applications/#{found.id}#drafts); nothing is sent.")

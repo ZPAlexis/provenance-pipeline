@@ -17,7 +17,64 @@ module ProfileLinks
     def cost_usd = 0.0
   end
 
+  # What applies to one role, at most (4d step 4): every page's lines together, a page's, and a line's.
+  BUDGET = 6_000
+  PAGE_BUDGET = 2_000
+  LINE_CHARS = 400
+  # The role's words a line shares, at least, to apply to it: a description has hundreds, so one alone is chance.
+  MIN_SHARED = 2
+  # Words too common to say a page and a role are about the same thing.
+  COMMON = %w[about also and been being both from have here into just like make many more most much must only other our
+              over some such than that their them then there these they this those very what when where which while will
+              with work would year your role team experience].to_set.freeze
+
   module_function
+
+  # What the operator's links show that applies to the role `description` describes: of every line of the links'
+  # newest reads, those sharing the most of the description's words (MIN_SHARED at least), within BUDGET characters
+  # (PAGE_BUDGET a page, LINE_CHARS a line); the page with the best line first, each page's lines in its own order.
+  # [{ "url", "title", "lines" }], none when nothing applies. The same pages and description always give the same
+  # lines, so what a client cites can be read back. (A rehearsal on the operator's own links, 2026-11-18: lines picked
+  # by the page in page order gave five roles the same three pages; ranked by line, each role its own.)
+  def applicable(profile, description)
+    terms = words(description)
+    return [] if terms.empty? || profile.nil?
+
+    ranked = profile.profile_links.to_a.flat_map(&:pages).flat_map do |page|
+      Resume.lines_of(page.text).each_with_index.filter_map do |line, index|
+        shared = words(line).intersection(terms).size
+        [ -shared, page.url, index, page, line.truncate(LINE_CHARS) ] if shared >= MIN_SHARED
+      end
+    end
+    left, used = BUDGET, Hash.new(0)
+    kept = ranked.sort_by { |rank| rank.first(3) }.select do |_, url, _, _, line|
+      next false if line.size > left || used[url] + line.size > PAGE_BUDGET
+
+      used[url] += line.size
+      left -= line.size
+    end
+    kept.group_by { |rank| rank[3] }.map do |page, lines|
+      { "url" => page.url, "title" => page.title, "lines" => lines.sort_by { |rank| rank[2] }.map(&:last) }
+    end
+  end
+
+  # The background as one role is read with it (4d): with the lines of the operator's links that apply to the role
+  # described, when they have links; the background as it is otherwise (or nil, with none saved).
+  def reading(background, profile, description)
+    return background unless background && description && profile&.profile_links&.any?
+
+    background.with_links(applicable(profile, description.text))
+  end
+
+  # A text's words that can say what it is about: four letters or more, a plural read as its singular ("agents" as
+  # "agent"), the common ones left out.
+  def words(text)
+    text.to_s.downcase.scan(/[[:alnum:]][[:alnum:]+#]*/).filter_map do |word|
+      next if word.size < 4
+
+      word.size > 4 && word.end_with?("s") && !word.end_with?("ss") ? word.chop : word
+    end.to_set - COMMON
+  end
 
   # Keeps `given` ([{ label:, url: }], in order; an empty row is left out) as the profile's links: a new address added,
   # one gone removed (its pages with it), a label or order changed kept; each audited as the operator's. An address with

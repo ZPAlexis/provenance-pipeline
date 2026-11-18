@@ -47,6 +47,7 @@ module ProvenanceMcp
                      required: %w[asks shown_in] }
           },
           background_version: { type: "string", description: "The background's version, as get_roles_to_weigh gives it (the Background fit)" },
+          links_version: { type: "string", description: "The links' version for this role, as the tool that gave them says it, when you cite a line of the operator's links" },
           background_score: { type: "integer", description: "The Background fit: from 0 to 100, from the resume and the background" },
           background_why: { type: "string", description: "The one sentence that explains the Background fit beside the ATS fit" },
           covered: {
@@ -68,7 +69,7 @@ module ProvenanceMcp
 
       class << self
         def answer(role:, resume_version:, score:, why:, level: nil, matches: [], gaps: [], model: nil, background_version: nil,
-                   background_score: nil, background_why: nil, covered: [], preferences: [], must_haves: nil)
+                   background_score: nil, background_why: nil, covered: [], preferences: [], must_haves: nil, links_version: nil)
           posting = Posting.includes(:company).find_by(id: role.to_s.strip) if role.to_s.strip.match?(Lookup::UUID)
           raise Refusal, "No role #{role.inspect}: get_roles_to_weigh gives each one's id." unless posting
           if must_haves.nil?
@@ -76,7 +77,8 @@ module ProvenanceMcp
                            "empty list when it states none)."
           end
 
-          background = { version: background_version, score: background_score, why: background_why, covered: covered, preferences: preferences }
+          background = { version: background_version, score: background_score, why: background_why, covered: covered, preferences: preferences,
+                         links_version: links_version }
           background = nil if background_version.blank? && background_score.nil? && background_why.blank?
           saved, summary = FitScores.save!(posting, score: score, why: why, resume_version: resume_version, level: level, matches: matches,
                                                     gaps: gaps, reported_model: model, actor: ASSISTANT, background: background,

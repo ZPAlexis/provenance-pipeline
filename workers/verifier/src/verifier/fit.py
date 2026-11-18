@@ -247,18 +247,27 @@ PART_LABELS = {
     "looking_for": "What I'm looking for",
     "role_preferences": "Role preferences",
     "not_on_resume": "Background not on the resume",
+    "links": "What their own links show that applies to this role",
 }
 # The parts a preference is stated in: a line from elsewhere (background not on the resume) is no preference.
 PREFERENCE_PARTS = ("role_preferences", "looking_for")
 
 
 def background_block(lines: list[BackgroundLine]) -> str:
-    """The background as the prompt gives it: each part under its label, each line with its B number."""
+    """The background as the prompt gives it: each part under its label, each line with its B number; the links' lines
+    (4d) under the page each is from."""
     said: list[str] = []
     for part, label in PART_LABELS.items():
         mine = [line for line in lines if line.part == part]
-        if mine:
-            said += [f"{label}:", *(f"[B{line.line}] {line.text}" for line in mine)]
+        if not mine:
+            continue
+        said.append(f"{label}:")
+        source = None
+        for line in mine:
+            if part == "links" and line.source != source:
+                source = line.source
+                said.append(f"From {source}:")
+            said.append(f"[B{line.line}] {line.text}")
     return "\n".join(said)
 
 

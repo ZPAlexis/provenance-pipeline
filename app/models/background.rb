@@ -60,23 +60,54 @@ class Background < ApplicationRecord
   def version = content_hash.delete_prefix("sha256:")[0, 12]
 
   # Every part's non-blank lines, numbered from 1 across the parts in order, each with its part: [[number, line, part]].
-  # A number names the same line for every reader, whichever parts it is given.
+  # A number names the same line for every reader, whichever parts it is given. Since 4d, a reading for one role may
+  # carry the lines of the operator's links that apply to it (with_links): numbered on after the parts, as part LINKS,
+  # each with the page it is from: [number, line, LINKS, source].
   def numbered_lines
     number = 0
-    PARTS.keys.flat_map { |part| Resume.lines_of(text_of(part)).map { |line| [ number += 1, line, part ] } }
+    parts = PARTS.keys.flat_map { |part| Resume.lines_of(text_of(part)).map { |line| [ number += 1, line, part ] } }
+    parts + link_excerpts.flat_map { |page| page["lines"].map { |line| [ number += 1, line, LINKS, page["title"].presence || page["url"] ] } }
   end
 
   # The numbered lines of the parts given.
   def lines_of(*parts) = numbered_lines.select { |_, _, part| parts.map(&:to_s).include?(part) }
 
-  # The lines `numbers` name among `parts`, with their text and part, in the order given and once each; and how many
-  # name no line there.
+  # The lines `numbers` name among `parts`, with their text and part (and, for a line of the links, the page it is
+  # from), in the order given and once each; and how many name no line there.
   def cite(numbers, parts: PARTS.keys)
-    lines = lines_of(*parts).to_h { |number, line, part| [ number, [ line, part ] ] }
+    lines = lines_of(*parts).to_h { |number, line, part, source| [ number, { "text" => line, "part" => part, "source" => source }.compact ] }
     named = Array(numbers).map { |number| Integer(number.to_s.delete_prefix("B"), exception: false) }
-    cited = named.uniq.filter_map { |number| { "line" => number, "text" => lines[number][0], "part" => lines[number][1] } if lines.key?(number) }
+    cited = named.uniq.filter_map { |number| { "line" => number, **lines[number] } if lines.key?(number) }
     [ cited, named.count { |number| !lines.key?(number) } ]
   end
+
+  # What the operator's links show that applies to one role (4d), as a part a reading may cite after its own.
+  LINKS = "links".freeze
+
+  # The pages and lines of the links read with this version for one role ([{ "url", "title", "lines" }]): set for one
+  # reading by with_links, never kept.
+  attr_writer :link_excerpts
+
+  def link_excerpts = @link_excerpts || []
+
+  # This version, read for one role with the lines of the operator's links that apply to it: a separate instance, so
+  # each role's reading numbers its own.
+  def with_links(excerpts)
+    return self if excerpts.blank?
+
+    self.class.find(id).tap { |reading| reading.link_excerpts = excerpts }
+  end
+
+  # The parts a reader of `part` may cite: since 4d with the links' lines too, when read with them (never for what the
+  # operator is looking for, which is cited by no reader).
+  def citable(*parts)
+    parts = PARTS.keys if parts.empty?
+    link_excerpts.any? && parts.map(&:to_s) != [ "looking_for" ] ? [ *parts, LINKS ] : parts
+  end
+
+  # A short name for the links' lines read with this version (4d), what a client gives back with what it cites from
+  # them; nil when there are none.
+  def links_version = (Resume.digest(link_excerpts.to_json).delete_prefix("sha256:")[0, 12] if link_excerpts.any?)
 
   private
 

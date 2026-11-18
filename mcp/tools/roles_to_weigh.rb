@@ -49,7 +49,7 @@ module ProvenanceMcp
             (background ? Writing.background(background) : "No background is saved: weigh the ATS fit alone."),
             "Titles they search for: #{profile.titles.join(', ').presence || '(none)'}",
             "Where they can work: #{profile.places.join(', ').presence || '(not said)'}; how: #{profile.work_modes.join(', ').presence || '(not said)'}",
-            *asked.map { |posting, description| role(posting, description, reviews[posting.company_id]) },
+            *asked.map { |posting, description| role(posting, description, reviews[posting.company_id], profile, background) },
             ("No description read yet (read_descriptions reads them, free): #{unread.map { |posting| "#{posting.role_title} at #{posting.company.name} (#{posting.id})" }.join('; ')}" if unread.any?),
             ("#{waiting} more #{WAITING.fetch(due)} #{waiting == 1 ? 'role waits' : 'roles wait'} after these." if waiting.positive?),
             limit: 150_000
@@ -87,10 +87,13 @@ module ProvenanceMcp
         end
 
         # The role, and its company's fit beside it (4b step 5) when the company is reviewed: never weighed into the role's.
-        def role(posting, description, review)
-          "Role id #{posting.id}: #{posting.role_title} at #{posting.company.name}#{", #{posting.location}" if posting.location} " \
-            "(#{posting.tracking}#{"; #{Writing.company_fit(review)}, a separate score: never weigh it in" if review}).\n" +
-            Writing.fence("role_description", description.text, read: description.first_read_at.utc.to_date, words: description.words)
+        # Since 4d with the lines of the operator's links that apply to it, numbered on after the background's.
+        def role(posting, description, review, profile, background)
+          said = "Role id #{posting.id}: #{posting.role_title} at #{posting.company.name}#{", #{posting.location}" if posting.location} " \
+                 "(#{posting.tracking}#{"; #{Writing.company_fit(review)}, a separate score: never weigh it in" if review}).\n" +
+                 Writing.fence("role_description", description.text, read: description.first_read_at.utc.to_date, words: description.words)
+          links = Writing.links(ProfileLinks.reading(background, profile, description))
+          links ? "#{said}\n#{links}" : said
         end
       end
     end

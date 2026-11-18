@@ -82,7 +82,8 @@ module ProvenanceMcp
       Where you draw on my background not on the resume, give its version from the materials when you save it
       (background_version), and cite its lines by their B numbers in background_lines on each strength, suggestion or
       change drawn from it. Each is flagged "from your background, not on the resume" for me to confirm, and shown to me
-      that way.
+      that way. Lines from my own links, numbered on after my background's, are cited the same way, with their links
+      version (links_version), and flagged "from your links".
     TEXT
 
     # How a letter or a note that read what the operator is looking for is saved (4c): the version, never a cited line.
@@ -110,6 +111,19 @@ module ProvenanceMcp
         fence("background", lines.join("\n"), part: part, version: background.version)
     end
 
+    # The lines of the operator's links that apply to one role (4d), numbered on after the background's, each under the
+    # page it is from, fenced as data with their version; nothing when none apply.
+    def links(reading)
+      return unless reading&.links_version
+
+      lines = reading.lines_of(Background::LINKS).chunk { |_, _, _, source| source }.flat_map do |source, numbered|
+        [ "#{source}:", *numbered.map { |number, line, _| "[B#{number}] #{line}" } ]
+      end
+      "What the operator's own links (their website, GitHub or portfolio) show that applies to this role, their own " \
+        "published word, numbered on after their background's: cite these as background lines, and give links_version " \
+        "with them:\n" + fence("links", lines.join("\n"), version: reading.links_version)
+    end
+
     # How a role's fit is weighed and saved (2f step 3), in the operator's voice: the shared rules, then the answer's shape.
     # Since 4c a role's fit is read two ways: the ATS fit (the resume alone) and, when a background is saved, the
     # Background fit beside it. Since 4d each role's must-haves are read one by one, and one a screener wouldn't find on
@@ -132,6 +146,8 @@ module ProvenanceMcp
           the Background fit's score and why, the covered gaps (each with what the role asks, the background lines by
           number, where to address it: resume, cover_letter or both, and a note), and the preferences the role touches (each
           a match or a miss, with why and its lines). In my summary, give the ATS fit first, the Background fit beside it.
+          A role may carry lines from my own links, numbered on after my background's: cite them as background lines in
+          its covered gaps and must-haves (never its preferences, which are mine), and give that role's links_version.
         TEXT
     end
 
@@ -195,7 +211,7 @@ module ProvenanceMcp
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out. Every tool keeps
     # its own framing (counts, ids, what to do next) outside them, and puts what came from the record or a page read
     # (names, titles, places, notes, bodies, reasoning) inside.
-    FENCES = %w[role_description resume background profile notes contacts contact review evidence record draft].freeze
+    FENCES = %w[role_description resume background links profile notes contacts contact review evidence record draft].freeze
 
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
     # the newest resume numbered by line, the profile, the notes, its contacts, the one it is to (when the writing is to
@@ -216,6 +232,7 @@ module ProvenanceMcp
                        saved: resume.created_at.utc.to_date, lines: resume.numbered_lines.size, version: resume.version)
                : "The resume: none saved yet (it is pasted on the Profile page in the app).",
         (background_part(*background_for(kind)) if background_for(kind)),
+        (links(ProfileLinks.reading(background_for(kind).first, profile, description)) if background_for(kind) && kind.in?(%w[resume_review tailored_resume])),
         (fence("profile", [ "Titles they search for: #{profile.titles.join(', ').presence || '(none)'}",
                             "Places they can work: #{profile.places.join(', ').presence || '(none)'}",
                             "Work modes: #{profile.work_modes.join(', ').presence || '(any)'}" ].join("\n")) if profile),
