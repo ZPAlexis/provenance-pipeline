@@ -72,13 +72,18 @@ module Authority
       ]
     },
     "evidence:write" => {
-      about: "Page checks, LLM calls, and roles' descriptions: what was read, how, and what it cost.",
+      about: "Page checks, LLM calls, roles' descriptions, and (4d) the pages the operator's own links show: what was " \
+             "read, how, and what it cost.",
       rules: [
         Rule.new(model: "PageCheck", actions: %i[create]),
         Rule.new(model: "PageCheck", actions: %i[update], attributes: %w[matches complete]),
         Rule.new(model: "LlmCall", actions: %i[create]),
         Rule.new(model: "RoleDescription", actions: %i[create]),
-        Rule.new(model: "RoleDescription", actions: %i[update], attributes: %w[last_read_at])
+        Rule.new(model: "RoleDescription", actions: %i[update], attributes: %w[last_read_at]),
+        Rule.new(model: "LinkPage", actions: %i[create]),
+        Rule.new(model: "LinkPage", actions: %i[update], attributes: %w[last_read_at]),
+        # What a read of a link found, never the link itself: its label and address are the operator's alone.
+        Rule.new(model: "ProfileLink", actions: %i[update], attributes: %w[read_at read_outcome read_reason read_skipped])
       ]
     },
     "postings:suggest" => {
@@ -244,7 +249,7 @@ module Authority
   HUMAN_ONLY = [
     "Start an application, or move one between stages", "Edit or approve a draft", "Decide a review item",
     "Edit the search profile (its company preferences aside, which the operator's own client may save on their word), the resume, " \
-    "or the background information",
+    "or the background information and its links",
     "Ask for a check that writes a verdict or spends API credit", "Name a company or set its kind",
     "Delete a contact", "Issue or revoke a credential"
   ].freeze

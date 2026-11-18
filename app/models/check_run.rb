@@ -1,7 +1,7 @@
 # A check the operator asked for from the pages, run in the background (CheckNowJob):
 # one role, one company, everything (1.4), a role's description read (2b), a
 # draft written for its application (2c), a resume review written for it (2d), or
-# the fit of one role or many weighed against the resume (2f).
+# the fit of one role or many weighed against the resume (2f), or the operator's own links read (4d).
 # The page polls it until it is done.
 # Evidence and changes are recorded as for any check, under run_id; this row is the
 # request and its outcome.
@@ -9,7 +9,7 @@ class CheckRun < ApplicationRecord
   belongs_to :company, optional: true # none for everything
   belongs_to :posting, optional: true
 
-  KINDS = %w[role company all describe draft review fit].freeze
+  KINDS = %w[role company all describe draft review fit links].freeze
   STATUSES = %w[queued running done failed].freeze
   ACTIVE = %w[queued running].freeze
   # Longer than any check takes (a ten-page list read by the LLM, or a 2,000-role
@@ -29,7 +29,7 @@ class CheckRun < ApplicationRecord
   validates :status, inclusion: { in: STATUSES }
   validates :requested_by, presence: true
   validates :posting, presence: true, if: -> { kind.in?(%w[role describe draft review]) }
-  validates :company, presence: true, unless: -> { kind == "all" || (kind == "fit" && posting.nil?) }
+  validates :company, presence: true, unless: -> { kind.in?(%w[all links]) || (kind == "fit" && posting.nil?) }
 
   # Queued or running, and still within its time. A run past it will never finish (cut_off).
   scope :active, -> { where(status: ACTIVE).where.not(BEFORE_CUTOFF, cutoffs) }
@@ -88,6 +88,13 @@ class CheckRun < ApplicationRecord
     where(kind: "describe", posting: posting).active.first || create!(
       kind: "describe", company: posting.company, posting: posting, requested_by: requested_by, ceiling_usd: 0
     ).tap { |run| CheckNowJob.perform_later(run) }
+  end
+
+  # The operator's own links read (4d), or the read already under way: free, so no ceiling.
+  def self.start_links!(requested_by: AuditEvent::OPERATOR)
+    abandon_stale!
+    where(kind: "links").active.first ||
+      create!(kind: "links", requested_by: requested_by, ceiling_usd: 0).tap { |run| CheckNowJob.perform_later(run) }
   end
 
   # A draft for `application` (2c), or the one already being written: one at a time per

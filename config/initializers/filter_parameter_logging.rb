@@ -23,3 +23,6 @@ Rails.application.config.filter_parameters += [ /\Acompany_(wants|avoids|exclude
 
 # The operator's background beyond the resume (4c), its three parts.
 Rails.application.config.filter_parameters += [ /\A(looking_for|role_preferences|not_on_resume)\z/ ]
+
+# The operator's own links (4d): their website, GitHub and other portfolios name them.
+Rails.application.config.filter_parameters += [ /\Alinks\z/ ]

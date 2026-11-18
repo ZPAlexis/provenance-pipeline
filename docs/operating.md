@@ -62,6 +62,7 @@ bin/rails "verifier:hand_check[posting_id]"      # record a check you made yours
 REASON="why" bin/rails "verifier:undo_verdict[posting_id]"  # undo the verifier's latest verdict on a role, restoring what it replaced
 REASON="why" bin/rails "postings:move[posting_id,Company Name,domain.com]"  # move a role to the company really hiring (one an aggregator listed)
 bin/rails verifier:backfill_job_urls             # each role's own page, from the listing it already matched (no API cost)
+bin/rails profile:links                          # your own links (4d) and what each read found; READ=1 reads them now, free
 bin/rails verifier:forget_private_runs           # remove run folders that quote the resume, left from before (PREVIEW=1 lists)
 bin/rails privacy:names                          # no company on the record named in the repo or an unpushed commit (local CI runs it)
 bin/rails review:sync                            # bring the review queue in line with the record (no API cost)

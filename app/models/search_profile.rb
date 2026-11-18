@@ -30,6 +30,8 @@ class SearchProfile < ApplicationRecord
   has_many :resumes, dependent: nil # the key cascades
   # Their background beyond the resume, in three parts, version by version (4c): kept through Backgrounds, never in the repo.
   has_many :backgrounds, dependent: nil # the key cascades
+  # The operator's own links (4d): their website, GitHub or another portfolio, read free as extended background.
+  has_many :profile_links, -> { in_order }, dependent: nil # the key cascades
 
   validates :name, presence: true
   validates :titles, presence: { message: "need at least one: a role fits when its title holds every word of one" }

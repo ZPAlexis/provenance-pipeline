@@ -64,6 +64,20 @@ RSpec.describe CheckNowJob do
     expect(described.reload).to have_attributes(status: "done", answer: "read", summary: /480 words/, cost_usd: 0)
   end
 
+  # 4d step 3: the operator's own links, read free.
+  it "reads the operator's links for a links run, free, and says what it found" do
+    profile = SearchProfile.create!(titles: [ "Solutions Engineer" ])
+    link = ProfileLinks.keep!(profile, [ { label: "Website", url: "https://jordan.example" } ]).sole
+    links = create(:check_run, kind: "links", company: nil)
+    link.read_outcome = "ok"
+    allow(ProfileLinks).to receive(:read!).and_return(ProfileLinks::Read.new(links: [ link ], summary: "Website: 3 pages", run_id: "r1"))
+
+    described_class.perform_now(links)
+
+    expect(ProfileLinks).to have_received(:read!).with([ link ], issued_by: "human:operator")
+    expect(links.reload).to have_attributes(status: "done", answer: "read", summary: "Website: 3 pages", cost_usd: 0, run_id: "r1")
+  end
+
   it "writes a resume review for a review run, in the language asked, and keeps what it cost" do
     application = create(:application, posting: create(:posting, company: company))
     asked = create(:check_run, kind: "review", company: company, posting: application.posting, request: { "language" => "Portuguese" })

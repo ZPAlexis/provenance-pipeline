@@ -6,6 +6,35 @@ class ProfilesController < ApplicationController
     @profile = SearchProfile.current || SearchProfile.new(work_modes: SearchProfile::WORK_MODES)
     @resumes = @profile.persisted? ? @profile.resumes.newest_first.to_a : []
     @backgrounds = @profile.persisted? ? @profile.backgrounds.newest_first.to_a : []
+    # The operator's own links (4d), and their newest read: under way, or the last one.
+    @links = @profile.persisted? ? @profile.profile_links.includes(:link_pages).to_a : []
+    @links_run = CheckRun.where(kind: "links").newest_first.first
+  end
+
+  # The operator's own links (4d): kept as given (at most five, never LinkedIn), each audited, then read in the
+  # background, free. A refused save shows the page again with what was typed.
+  def links
+    profile = SearchProfile.current or return redirect_to(profile_path(anchor: "links"), status: :see_other,
+                                                                                           alert: "Save the profile first: the links are kept with it.")
+    kept = ProfileLinks.keep!(profile, links_given)
+    CheckRun.start_links! if kept.any?
+    redirect_to profile_path(anchor: "links"), status: :see_other,
+                                               notice: kept.any? ? "Links saved: reading them now, free." : "Links removed."
+  rescue ArgumentError => e
+    show
+    @links_given = links_given
+    @links_error = "Not saved: #{e.message}."
+    render :show, status: :unprocessable_content
+  end
+
+  # Reads the links again, free (4d).
+  def read_links
+    if SearchProfile.current&.profile_links&.any?
+      CheckRun.start_links!
+      redirect_to profile_path(anchor: "links"), status: :see_other
+    else
+      redirect_to profile_path(anchor: "links"), alert: "There is no link to read: add one first.", status: :see_other
+    end
   end
 
   # The background beyond the resume (4c), in its three parts: a new version when any part changed, audited by each
@@ -101,6 +130,11 @@ class ProfilesController < ApplicationController
   end
 
   private
+
+  # The link rows as typed ([{ "label", "url" }]), the empty ones included.
+  def links_given
+    Array(params.fetch(:links, [])).map { |row| row.respond_to?(:permit) ? row.permit(:label, :url).to_h : {} }
+  end
 
   def editing
     (SearchProfile.current || SearchProfile.new).tap { |profile| profile.assign_attributes(profile_params) }

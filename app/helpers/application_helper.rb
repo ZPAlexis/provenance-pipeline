@@ -35,7 +35,7 @@ module ApplicationHelper
   # A finished check run's answer: the role's verdict, or that a company was checked.
   def run_answer(run)
     return tag.span(run.answer == "weighed" ? "Weighed" : "Not weighed", class: [ "badge", run.answer == "weighed" ? "live" : "unsure" ]) if run.kind == "fit"
-    return tag.span(run.answer == "read" ? "Read" : "Not read", class: [ "badge", run.answer == "read" ? "live" : "unsure" ]) if run.kind == "describe"
+    return tag.span(run.answer == "read" ? "Read" : "Not read", class: [ "badge", run.answer == "read" ? "live" : "unsure" ]) if run.kind.in?(%w[describe links])
     return tag.span(run.answer == "drafted" ? "Drafted" : "Not drafted", class: [ "badge", run.answer == "drafted" ? "live" : "unsure" ]) if run.kind == "draft"
     return tag.span(run.answer == "reviewed" ? "Reviewed" : "Not reviewed", class: [ "badge", run.answer == "reviewed" ? "live" : "unsure" ]) if run.kind == "review"
     return tag.span("Checked", class: "badge live") if run.kind != "role"

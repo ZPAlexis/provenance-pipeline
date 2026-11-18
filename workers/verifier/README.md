@@ -16,6 +16,7 @@ uv run verifier related --targets profile.json --out results.jsonl   # propose t
 uv run verifier draft   --targets drafts.json --out results.jsonl    # write a cover letter or outreach note (one LLM call, never sent)
 uv run verifier review  --targets reviews.json --out results.jsonl   # review the resume against a role (one LLM call)
 uv run verifier fit     --targets roles.json --out results.jsonl     # weigh roles against the resume, 0 to 100 (one LLM call each)
+uv run verifier portfolio --targets links.json --out results.jsonl  # read the operator's own links (no LLM)
 ```
 
 Every command takes `--model` (default `claude-haiku-4-5`; `claude-opus-5-5` for `draft` and `review`) and `--delay` (seconds between requests to one host, default 5). `verify`, `check`, and `match` take `--no-llm` to leave near-miss matches undecided, so a replay costs nothing; `boards`, `suggest` and `describe` never call the LLM. The browser and the LLM client are imported only by the commands that use them: from a checkout under `/mnt` in WSL the LLM client alone takes about 15 seconds to import, and `suggest` starts in about one. In practice the worker is run from Rails (see [Running it](../../docs/operating.md)), which supplies the API credential to this process alone.
@@ -90,6 +91,10 @@ A role added without a title (`title_from_page`) is named by what the check read
 5. **Work mode**: as the listing states it, or as its location says ("Remote").
 
 What a role does not state is never held against it: it fits, with a note (`place_not_stated`, `work_mode_not_stated`, `level_not_stated`), noted only where the profile narrows. Every role holding a profile title comes back with its reasoning, fitting or ruled out; the rest are only counted. A fitting role that is already on record names the posting it is (`on_record`), matched by `match.Matcher` exactly as verification matches, without the LLM; `listed` says where every posting on record was found in the read.
+
+## Reading the operator's links
+
+`portfolio` (4d) takes one of the operator's own links per target: their website, their GitHub, or another portfolio. It never calls the LLM, and Rails starts it with no API key at all. A GitHub link is read through GitHub's public REST API, as the boards' job APIs are: the profile (its name, its bio and its README) and, for an account, each public repo of its own (forks and the profile's own repo left out, the 12 most recently pushed), each with what it says of itself and its README; a repo link is that repo alone. Any other site is rendered, robots.txt honored, with the pages its sitemap lists (named in its robots.txt, or at `/sitemap.xml`; an index read one level, read as text for each `<loc>`, never parsed as XML), then those it links to on the same site, one level deep, the usual delay between requests to the host (a site whose pages are reached only by script is read through its sitemap, or not at all): never a file, an email address, another site, or a page already read under another address, and within 15 pages and 150,000 characters (20,000 a page), the rest counted as left unread. Where the address names a language (`/en`, `/pt-br`), only the pages under it are followed. Each page's main text is kept with a hash, as a description's is. Progress output counts pages and characters, never what they say.
 
 ## Reading a role's description
 

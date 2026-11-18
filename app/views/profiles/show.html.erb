@@ -157,6 +157,59 @@
   <p class="muted small">Save the profile above first: the background is kept with it.</p>
 <% end %>
 
+<h2 id="links">Your links</h2>
+<p class="muted small">
+  Your website, your GitHub, or any other portfolio (a blog, Behance), at most <%= ProfileLink::MAX %>. The app reads each
+  one, free and never by the AI: a GitHub account through GitHub's public API (your profile and your own repos' READMEs),
+  any other site with the pages its sitemap lists and those it links to on the same site, one level deep, robots.txt
+  honored. A site whose pages are reached only by script needs a sitemap.xml to be read whole. For a site in several
+  languages, give the address of yours (yoursite.com/en). LinkedIn isn't read: what matters from it belongs in "Background
+  not on the resume" above. What each read found is kept here, version by version, in this database only; the record of
+  each save names each link by a hash.
+</p>
+<% if @profile.persisted? %>
+  <% if @links_error %><p class="small warn" role="alert"><%= @links_error %></p><% end %>
+  <% rows = @links_given || @links.map { |link| { "label" => link.label, "url" => link.url } } %>
+  <%= form_with url: links_profile_path, method: :patch, id: "links-form", class: "profile-form" do %>
+    <% ProfileLink::MAX.times do |index| %>
+      <% row = rows[index] || {} %>
+      <div class="field link-row">
+        <%= label_tag "links_#{index}_label", "Link #{index + 1}", class: "visually-hidden" %>
+        <%= text_field_tag "links[][label]", row["label"], id: "links_#{index}_label", placeholder: "Label (Website, GitHub…)", size: 18 %>
+        <%= url_field_tag "links[][url]", row["url"], id: "links_#{index}_url", placeholder: "https://…", size: 48,
+                                                       "aria-label": "Link #{index + 1}'s address" %>
+      </div>
+    <% end %>
+  <% end %>
+  <div class="button-row">
+    <button type="submit" form="links-form" class="btn primary small">Save links</button>
+    <% if @links.any? && !@links_run&.active? %>
+      <%= button_to "Read them again", read_links_profile_path, class: "btn small", title: "Free: never the AI" %>
+    <% end %>
+  </div>
+  <%= render "check_runs/run", run: @links_run, poll: false if @links_run %>
+  <% @links.each do |link| %>
+    <% pages = link.pages %>
+    <p class="small">
+      <strong><%= link.label %></strong> <span class="muted"><%= link.host %></span>:
+      <%= link.read_at ? "#{ProfileLinks.state(link)}, read #{ago(link.read_at)}" : "not read yet" %>.
+    </p>
+    <% if pages.any? %>
+      <details class="description">
+        <summary class="muted small"><%= pluralize(pages.size, "page") %>, <%= number_with_delimiter(pages.sum(&:words)) %> words</summary>
+        <ul class="small">
+          <% pages.each do |page| %>
+            <li><%= link_to (page.title.presence || page.url), page.url, rel: "noopener", target: "_blank" %>
+              <span class="muted">(<%= number_with_delimiter(page.words) %> words<%= ", read since #{page.first_read_at.to_date}" if page.first_read_at.to_date != link.read_at.to_date %>)</span></li>
+          <% end %>
+        </ul>
+      </details>
+    <% end %>
+  <% end %>
+<% else %>
+  <p class="muted small">Save the profile above first: the links are kept with it.</p>
+<% end %>
+
 <%= turbo_frame_tag "profile-preview" do %>
   <p class="muted">
     Preview weighs the profile above, saved or not, against every watched company's roles as its page last listed them.

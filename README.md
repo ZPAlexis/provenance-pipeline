@@ -69,14 +69,14 @@ The job search is the test bed; the patterns are the ones a RevOps or GTM team b
 
 | Agent | May write | Never |
 |---|---|---|
-| Verifier | A company's careers page, how it was found and its free board (`companies:enrich`); verdicts on roles (`postings:verify`); the evidence: page checks, LLM calls, descriptions (`evidence:write`) | Track or archive a role or a company, name a company or set its kind, decide a review item |
+| Verifier | A company's careers page, how it was found and its free board (`companies:enrich`); verdicts on roles (`postings:verify`); the evidence: page checks, LLM calls, descriptions, and the pages the operator's links show (`evidence:write`) | Track or archive a role or a company, name a company or set its kind, decide a review item |
 | Suggester | Roles proposed at companies the operator tracks, while they are still suggestions (`postings:suggest`) | Track or archive anything, or touch a role the operator decided on |
 | Clay importer | The seed data (`companies:import`, `postings:import`) | Set tracking or a company's proposal, or rename a company on record |
 | Review queue (a system grant) | Raise, restate and close what resolved (`review:keep`) | Decide an item |
 | Draft agent | A new draft or resume review as it wrote it (`drafts:write`, `resume_reviews:write`, one per run) | Edit or approve a draft, delete a review, send anything |
 | Fit scorer | A role's fit score (`fit:write`): each role scored 0 to 100 against the resume, with its matches by line, its gaps and why, by the [`fit` rules](workers/verifier/src/verifier/writing_rules.md#fit), and the Background fit beside it, by [`background_fit`](workers/verifier/src/verifier/writing_rules.md#background_fit); and the LLM call that weighed it | Touch a role, change a score, send anything |
 | AI assistant (the operator's own, Claude or another, through MCP) | Only the scopes of the save tool it calls, a credential per call: drafts and reviews, contacts and activities, role and company proposals, fit scores and company reviews, recommendations on the review queue; and, on the operator's word with their reason, the watch list and the company preferences | Change the watch list on its own judgment; set a verdict, or a company's name, careers page or kind; decide a review item; edit, approve or delete what it saved; move a stage; send anything |
-| **No agent** | Starting an application or moving it between stages; editing or approving a draft; deciding a review item; editing the search profile, the resume or the background (the company preferences aside, on the operator's word); naming a company; deleting a contact; issuing or revoking a credential; asking for a check that writes a verdict or spends API credit | **Human-only by design** |
+| **No agent** | Starting an application or moving it between stages; editing or approving a draft; deciding a review item; editing the search profile, the resume, or the background and its links (the company preferences aside, on the operator's word); naming a company; deleting a contact; issuing or revoking a credential; asking for a check that writes a verdict or spends API credit | **Human-only by design** |
 
 The last row is the point: the most consequential write is withheld from every agent. It is the code's own list (`Authority::HUMAN_ONLY`), shown on the Agents page.
 

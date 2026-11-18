@@ -29,6 +29,9 @@ review   reviews the resume against an application's role, from the same record:
          one ReviewResult per target, one LLM call each, with the draft's model.
 fit      weighs each role against the resume, from its description and the
          resume: one FitResult per role, one LLM call each, with the default model.
+portfolio reads each of the operator's own links (4d): a GitHub account or repo
+         through its public API, any other site rendered with its same-site pages
+         one level deep. One PortfolioResult per link; never calls the LLM.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -69,6 +72,8 @@ from verifier.contract import (
     MatchTarget,
     OwnBoardTarget,
     PageResult,
+    PortfolioResult,
+    PortfolioTarget,
     RelatedResult,
     RelateTarget,
     ResolutionResult,
@@ -106,9 +111,19 @@ _NO_PAGES = (
     DraftResult,
     ReviewResult,
     FitResult,
+    PortfolioResult,
 )
 _OWN_CALL = (MatchResult, RelatedResult, DraftResult, ReviewResult, FitResult)
-_OWN_REASON = (MatchResult, VerificationResult, RelatedResult, DescriptionResult, DraftResult, ReviewResult, FitResult)
+_OWN_REASON = (
+    MatchResult,
+    VerificationResult,
+    RelatedResult,
+    DescriptionResult,
+    DraftResult,
+    ReviewResult,
+    FitResult,
+    PortfolioResult,
+)
 
 Result = (
     PageResult
@@ -122,6 +137,7 @@ Result = (
     | DraftResult
     | ReviewResult
     | FitResult
+    | PortfolioResult
 )
 
 
@@ -274,6 +290,15 @@ def run_fit(targets: list[FitTarget], out_path: Path, weigher, log=sys.stderr) -
     return _run(targets, out_path, lambda target: fit(target, weigher), failed, log)
 
 
+def run_portfolio(targets: list[PortfolioTarget], out_path: Path, services: Services, log=sys.stderr) -> RunSummary:
+    from verifier.portfolio import read_link
+
+    def failed(target: PortfolioTarget, reason: str) -> PortfolioResult:
+        return PortfolioResult(target_id=target.id, url=target.url, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: read_link(target, services), failed, log)
+
+
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
     summary = RunSummary()
     outage_streak = 0
@@ -329,6 +354,11 @@ def _describe(target: Target | ResolveTarget | OwnBoardTarget | BoardTarget | Su
     if isinstance(result, RelatedResult):
         found = f"{len(result.proposals)} titles proposed" if result.outcome == "ok" else f"error, {result.reason}"
         return f"{target.id}: {found} {timing}"
+    if isinstance(result, PortfolioResult):  # counts only: the pages are the operator's own
+        read = f"{len(result.pages)} pages, {sum(len(page.text) for page in result.pages)} characters"
+        read += f", {result.skipped} left unread" if result.skipped else ""
+        said = read if result.outcome == "ok" else result.reason
+        return f"{target.label or target.id}: {result.outcome}, {said} {timing}"
     if isinstance(result, DescriptionResult):
         read = f"{len(result.text or '')} characters via {result.read_via}" if result.outcome == "ok" else result.reason
         return f"{target.label or target.id}: {result.outcome}, {read} {timing}"
@@ -411,6 +441,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("draft", parents=[common], help="write cover letters and outreach notes; never sends them")
     commands.add_parser("review", parents=[common], help="review the resume against an application's role")
     commands.add_parser("fit", parents=[common], help="weigh roles against the resume, from their descriptions")
+    commands.add_parser("portfolio", parents=[common], help="read the operator's own links; never calls the LLM")
     args = parser.parse_args(argv)
     llm_model = args.model or (DRAFT_MODEL if args.command in ("draft", "review") else DEFAULT_MODEL)
 
@@ -427,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
         "draft": DraftTarget,
         "review": ReviewTarget,
         "fit": FitTarget,
+        "portfolio": PortfolioTarget,
     }.get(args.command, Target)
     try:
         payload = json.loads(args.targets.read_text(encoding="utf-8"))
@@ -515,6 +547,8 @@ def main(argv: list[str] | None = None) -> int:
                 summary = run_boards(targets, args.out, ServicesReader(services))
             elif args.command == "describe":
                 summary = run_describe(targets, args.out, services)
+            elif args.command == "portfolio":
+                summary = run_portfolio(targets, args.out, services)
             elif args.command in ("verify", "check"):
                 matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=llm_model))
                 run_command = run_verify if args.command == "verify" else run_check

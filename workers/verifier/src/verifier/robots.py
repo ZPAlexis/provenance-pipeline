@@ -40,6 +40,12 @@ class RobotsPolicy:
 
         return None if rules.can_fetch(self._agent, url) else "robots_disallowed"
 
+    def sitemaps(self, url: str) -> list[str]:
+        """The sitemaps the robots.txt of `url`'s site names, once it has loaded (none otherwise)."""
+        parts = urlsplit(url)
+        rules = self._rules.get(f"{parts.scheme}://{parts.netloc}")
+        return list(rules.site_maps() or []) if rules else []
+
     def _load(self, origin: str) -> RobotFileParser | None:
         """The origin's rules, or None when robots.txt could not be reached, even on a retry."""
         for attempt in range(2):

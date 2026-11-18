@@ -389,6 +389,46 @@ class DescribeTarget(BaseModel):
     label: str | None = None
 
 
+class PortfolioTarget(BaseModel):
+    """One of the operator's own links (4d): their website, GitHub, or another portfolio, read for what it shows."""
+
+    id: str  # the link's id
+    url: str
+    label: str | None = None
+
+
+class PortfolioPage(BaseModel):
+    """One page a link showed: the link's own page, a page it links to on the same site, or a repo's README."""
+
+    url: str
+    title: str | None = None
+    text: str
+    content_hash: str  # sha256 of the whitespace-normalized text
+    read_via: Literal["render", "github_api"]
+
+
+class PortfolioResult(BaseModel):
+    """What one of the operator's links shows (4d), read free and never by the LLM.
+
+    ok           read: `pages` holds each page, the link's own first
+    gone         the site or the account isn't there (HTTP 404)
+    blocked      robots.txt keeps us off the link's own page
+    inaccessible the site refused or failed us (a bot challenge, an error, a rate limit)
+    error        our own failure
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["portfolio"] = "portfolio"
+    target_id: str
+    url: str
+    outcome: Literal["ok", "gone", "blocked", "inaccessible", "error"]
+    reason: str | None = None
+    pages: list[PortfolioPage] = Field(default_factory=list)
+    skipped: int = 0  # pages on the same site left unread: past the caps, refused by robots.txt, or failing
+    checked_at: str | None = None
+    duration_ms: int = 0
+
+
 class DescriptionResult(BaseModel):
     """A role's description, as its own page states it (Stage 2b). Never read by the LLM.
 

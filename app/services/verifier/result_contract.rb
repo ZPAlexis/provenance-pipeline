@@ -139,6 +139,31 @@ module Verifier
       errors
     end
 
+    # What one of the operator's links showed (4d): each page's address, text, hash and how it was read.
+    def portfolio_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be portfolio" unless result["kind"] == "portfolio"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "unknown outcome #{result['outcome'].inspect}" unless ProfileLink::OUTCOMES.include?(result["outcome"])
+      return errors unless result["outcome"] == "ok"
+
+      errors << "checked_at must be an ISO 8601 time" unless iso8601?(result["checked_at"])
+      errors << "skipped must be a count" unless count?(result["skipped"] || 0)
+      pages = result["pages"]
+      return errors << "pages must be a list" unless pages.is_a?(Array)
+
+      pages.each_with_index do |page, index|
+        next if page.is_a?(Hash) && web_url?(page["url"]) && page["text"].is_a?(String) && page["text"].strip.present? &&
+                page["content_hash"].to_s.match?(/\Asha256:\h{64}\z/) && %w[render github_api].include?(page["read_via"]) &&
+                (page["title"].nil? || page["title"].is_a?(String))
+
+        errors << "page #{index + 1} must say its address, its text, its hash and how it was read"
+      end
+      errors
+    end
+
     # Titles the LLM proposed for a profile, each with its language and why.
     def related_errors(result)
       return [ "not an object" ] unless result.is_a?(Hash)

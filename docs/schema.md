@@ -52,6 +52,18 @@ backgrounds   search_profile_id, looking_for, role_preferences,
               each part read only by what may use it; audited by each part's
               size and hash, never the text)
 
+profile_links search_profile_id, label, url, position, read_at, read_outcome
+              (ok | gone | blocked | inaccessible | error), read_reason,
+              read_skipped (4d: the operator's own website, GitHub or other
+              portfolio, at most 5, never LinkedIn; the operator's alone to
+              edit, audited by the label's and address's hashes; the verifier
+              records only what a read found)
+
+link_pages    profile_link_id, url, title, text, content_hash, read_via
+              (render | github_api), run_id, first_read_at, last_read_at
+              (4d: each page a link showed, one row per distinct text, read
+              free and never by the LLM; a read's pages share its read_at)
+
 drafts        application_id, kind (cover_letter | outreach |
               tailored_resume), status (draft | approved), language,
               asked_language, guidance, subject, body (as it stands),

@@ -272,6 +272,11 @@ details.facts-more > summary { cursor: pointer; }
 .profile-form .field { margin: 0 0 16px; padding: 0; border: none; min-width: 0; }
 .profile-form label, .profile-form legend { font-weight: 600; padding: 0; }
 .profile-form .hint { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+/* The operator's links (4d): a label and an address on one row. */
+.profile-form .link-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.profile-form .link-row input[type="url"] { flex: 1 1 280px; }
+/* Read by screen readers, not shown. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .profile-form textarea {
   display: block;
   width: 100%;

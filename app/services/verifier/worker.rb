@@ -15,10 +15,10 @@ module Verifier
 
     RESULT_SCHEMA_VERSION = 2
 
-    COMMANDS = %w[extract resolve own_board match verify check boards suggest related describe draft review fit].freeze
-    # The commands whose targets and results quote the resume (2c, 2d, 2f): a run's files are removed as soon as its
-    # results are read, since the record keeps what was written from them.
-    PRIVATE = %w[draft review fit].freeze
+    COMMANDS = %w[extract resolve own_board match verify check boards suggest related describe draft review fit portfolio].freeze
+    # The commands whose targets and results quote the resume (2c, 2d, 2f), or the operator's own pages (4d): a run's
+    # files are removed as soon as its results are read, since the record keeps what was written from them.
+    PRIVATE = %w[draft review fit portfolio].freeze
 
     # Exit codes from workers/verifier/src/verifier/cli.py for a run that
     # stopped early on purpose, keeping every result it finished.
@@ -90,6 +90,7 @@ module Verifier
     # draft: targets from Drafts.target, one DraftResult each: one LLM call, nothing fetched, nothing sent.
     # review: targets from ResumeReviews.target, one ReviewResult each: one LLM call, nothing fetched.
     # fit: targets from FitScores.target, one FitResult each: one LLM call, nothing fetched.
+    # portfolio: the operator's links ({ id:, url:, label: }), one PortfolioResult each; never calls the LLM (4d).
     def run(targets, command: "extract", flags: [])
       raise ArgumentError, "unknown worker command #{command.inspect}" unless COMMANDS.include?(command)
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_17_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_17_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -277,6 +277,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_000001) do
     t.check_constraint "score_before_cap IS NULL OR score_before_cap >= 70 AND score_before_cap <= 100", name: "fit_scores_score_before_cap_range"
   end
 
+  create_table "link_pages", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "profile_link_id", null: false
+    t.string "url", null: false
+    t.string "title"
+    t.text "text", null: false
+    t.string "content_hash", null: false
+    t.string "read_via", null: false
+    t.string "run_id", null: false
+    t.datetime "first_read_at", null: false
+    t.datetime "last_read_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["profile_link_id", "url", "last_read_at"], name: "index_link_pages_on_profile_link_id_and_url_and_last_read_at"
+    t.index ["profile_link_id"], name: "index_link_pages_on_profile_link_id"
+  end
+
   create_table "llm_calls", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "page_check_id"
     t.string "run_id", null: false
@@ -356,6 +372,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_000001) do
     t.index ["source_slice"], name: "index_postings_on_source_slice"
     t.index ["tracking"], name: "index_postings_on_tracking"
     t.index ["verification_state"], name: "index_postings_on_verification_state"
+  end
+
+  create_table "profile_links", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "search_profile_id", null: false
+    t.string "label", null: false
+    t.string "url", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "read_at"
+    t.string "read_outcome"
+    t.string "read_reason"
+    t.integer "read_skipped", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["search_profile_id", "url"], name: "index_profile_links_on_search_profile_id_and_url", unique: true
+    t.index ["search_profile_id"], name: "index_profile_links_on_search_profile_id"
   end
 
   create_table "resume_reviews", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -476,10 +507,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_000001) do
   add_foreign_key "fit_scores", "postings", on_delete: :cascade
   add_foreign_key "fit_scores", "resumes", on_delete: :nullify
   add_foreign_key "fit_scores", "role_descriptions", on_delete: :nullify
+  add_foreign_key "link_pages", "profile_links", on_delete: :cascade
   add_foreign_key "llm_calls", "page_checks"
   add_foreign_key "page_checks", "companies"
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify
   add_foreign_key "postings", "companies"
+  add_foreign_key "profile_links", "search_profiles", on_delete: :cascade
   add_foreign_key "resume_reviews", "applications", on_delete: :cascade
   add_foreign_key "resume_reviews", "backgrounds", on_delete: :nullify
   add_foreign_key "resume_reviews", "llm_calls"
