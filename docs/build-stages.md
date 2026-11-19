@@ -2,7 +2,7 @@
 
 [← README](../README.md)
 
-The entries name the operator's AI assistant as it was used then: Claude, through Claude Desktop. Any MCP client should work; only Claude Desktop has been tested.
+The entries name the operator's AI assistant as it was used then: Claude, through Claude Desktop. Any MCP client should work; only Claude Desktop has been tested so far.
 
 **Stage 1 — Job Finder** ✅ A thin vertical slice through the whole stack rather than a horizontal layer, so something useful ships before the CRUD work and the governance model is proven on real data early.
 
@@ -52,4 +52,4 @@ The entries name the operator's AI assistant as it was used then: Claude, throug
 **Next, not yet built:**
 
 - **4e, a review of the pages' experience** (scoped 2026-11-11, from the operator's own use): tabs inside the detail pages (Profile, a company, a role, an application) that load at once and switch instantly; a one-row toolbar on the list pages; explanations folded behind "How this works"; and the record's own pages (the audit log, the analytics, what changed, the agents) given an organized place in the navigation, easy to reach.
-- **4f, a demo on made-up data:** a dataset of made-up companies, roles and records (Acme, Contoso), never the real target list, for the screenshots and a short recording in the README and on the portfolio page. How the demo is shared is decided when it is built.
+- **4f, a demo on made-up data:** a dataset of made-up companies, roles and records (Acme, Contoso), never the real target list, for the screenshots and a short recording in the README and on the portfolio page, and a version of the app that's easier for someone to run locally (the operator, 2026-11-19). How both are built, and how the demo is shared, is scoped and decided when 4f starts.

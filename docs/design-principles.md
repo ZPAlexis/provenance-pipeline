@@ -16,7 +16,7 @@ A carefully specified output contract does **not** guarantee the agent can disti
 In practice the free-text evidence field was read every time to interpret the enum. A structured verdict is a lossy compression of a judgment — `audit_events.reasoning` is where the fidelity lives.
 
 **3. Gate expensive operations behind cheap ones.**
-Deterministic checks first (does the URL resolve? has the page changed?), model calls only on what survives. In prototyping, the AI research step cost ~25x the standard enrichment columns combined. Where a step must cost nothing, it is free by construction: reading the board a proposed company named, when the operator tracks it, runs the worker with no API key at all, so no step of it can reach the AI.
+The checks run as a waterfall: deterministic ones first (does the URL resolve? has the page changed?), model calls only on what survives. In prototyping, the AI research step cost ~25x the standard enrichment columns combined. Where a step must cost nothing, it is free by construction: reading the board a proposed company named, when the operator tracks it, runs the worker with no API key at all, so no step of it can reach the AI.
 
 Three more came out of building it against real pages and real agents:
 

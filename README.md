@@ -18,17 +18,19 @@ AI agents do the legwork: they check at each employer's own careers page whether
 
 **Why "provenance":** every change on record says where it came from: who made it, under which permission, and why.
 
-> **Status:** in use for my own job search, running locally. Next: a review of the pages, then a demo on made-up data. [Build history](docs/build-stages.md).
+> **Status:** in use for my own job search, running locally. Next: a review of the pages, then a demo on made-up data, with a version of the app that's easier to run locally. [Build history](docs/build-stages.md).
 
 **Contents:** [Why I built it](#why-i-built-it) · [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
 
 ## Why I built it
 
-> "A company I spoke with wanted to build its own CRM for AI agents to work from. From my Salesforce rollouts, I knew the hard part wouldn't be the build: it would be the governance over what agents are allowed to touch. So I built one, and I use it for my own job search."
+> "A company I spoke with wanted to build its own CRM for AI agents to work from. From my Salesforce rollouts, I knew the hard part wouldn't be the build: it would be the governance over what agents are allowed to touch."
+
+So I built one, and I use it for my own job search.
 
 ## How it was built
 
-> "I set the scope, the architecture and every design decision. AI wrote most of the code under my direction and review, and I verified it: tests on every step, rehearsals on my real data, and accuracy measured against labelled data, with every disagreement checked by hand. I built the first MCP server and client myself, from raw JSON-RPC, and the production server grew from them."
+> "I set the scope, the architecture and every design decision. Claude Code wrote most of the code under my direction and review, and I verified it: tests on every step, rehearsals on my real data, and accuracy measured against labelled data, with every disagreement checked by hand. I built the first MCP server and client myself, from raw JSON-RPC, and the production server grew from them."
 
 ## At a glance
 
@@ -36,7 +38,7 @@ AI agents do the legwork: they check at each employer's own careers page whether
 |---|---|
 | **Agents** | 6 agents, plus the review queue's system grant: 17 permission types in all, and 8 decisions only the operator can make |
 | **AI** | Claude through the Anthropic API: Haiku 4.5 reads pages, settles near-miss matches and weighs fit; Opus 5.5 writes drafts and resume reviews. Structured outputs, each prompt versioned, each call's cost on the record |
-| **MCP** | A server of 30 tools and 9 prompts, through which the operator's AI assistant reads the record and saves its work, under a credential for each call. Any MCP client should work; only Claude Desktop has been tested |
+| **MCP** | A server of 30 tools and 9 prompts, through which the operator's AI assistant reads the record and saves its work, under a credential for each call. Any MCP client should work; only Claude Desktop has been tested so far |
 | **Governance** | Permission sets and field-level security for AI agents: a credential per run, checked at every write down to the fields it sets; refused writes on the record; an append-only audit log, enforced by the database |
 | **Data** | Careers pages read in a real browser, robots.txt honored; five job boards read through their own feeds (Greenhouse, Lever, Ashby, Workday, Oracle Cloud) |
 | **Measured** | 58 of 59 verdicts right on fresh reads, and every role reported closed was closed (12 of 12); 87% of hidden careers pages found again ([AI evaluation](#measured-results)) |
@@ -51,16 +53,16 @@ The job search is the test bed; the patterns are the ones a RevOps or GTM team b
 |---|---|---|
 | An account and its contacts | A company and its contacts, linked to its applications | [Schema](docs/schema.md) |
 | An opportunity, moved through pipeline stages | An application, moved through stages by the operator alone, each change dated | [Schema](docs/schema.md) |
-| Target account list | The watch list: companies chosen by judgment, never a crawl, and re-checked for months | [Sourcing](docs/sourcing.md) |
-| Enrichment imports | Clay CSV exports, each field written kept as a before-and-after diff in the audit log | [Schema](docs/schema.md) |
-| Waterfall enrichment | A company's careers page found cheapest and most certain step first (the page on record, common paths, homepage links, a guessed job board its vendor confirms, an LLM pick last), each find with a confidence; a low one waits for a person | [87% found again](#measured-results) |
-| Enrichment and verification at the source | Checking a role at the employer's own careers page or job board: a hiring signal read at its source, never an aggregator's copy, and "closed" only when the whole list was read | [12 of 12](#measured-results) |
-| ICP and account scoring | Each company scored 0 to 100 against the operator's company preferences (stage, size, business model, industries, what they want and avoid), point by point with its sources; one that does what they avoid is capped at 49 | [The `company_fit` rules](workers/verifier/src/verifier/writing_rules.md#company_fit) |
+| Permission sets and field-level security, for AI agents | Each agent's credential, scoped down to the field and checked at every write, with actions only the operator can take | [The permission model](#the-permission-model) |
+| Data you can trust: every change traceable to who made it and why | The append-only audit log, enforced by the database | [The permission model](docs/governance.md) |
 | Lead scoring, with reasons | Each role scored 0 to 100 against the resume, with its matches by line and its gaps, its must-haves checked one by one (one the resume doesn't show caps the score), read two ways: as an ATS would read the resume, and with the operator's background (and what their own links show of the role) beside it | [Fit scores](docs/agents.md#fit-scores), [the `fit` rules](workers/verifier/src/verifier/writing_rules.md#fit) |
+| ICP and account scoring | Each company scored 0 to 100 against the operator's company preferences (stage, size, business model, industries, what they want and avoid), point by point with its sources; one that does what they avoid is capped at 49 | [The `company_fit` rules](workers/verifier/src/verifier/writing_rules.md#company_fit) |
+| Target account list | The watch list: companies chosen by judgment, never a crawl, and re-checked for months | [Sourcing](docs/sourcing.md) |
+| Enrichment and verification at the source | Checking a role at the employer's own careers page or job board: a hiring signal read at its source, never an aggregator's copy, and "closed" only when the whole list was read | [12 of 12](#measured-results) |
+| Waterfall enrichment | A company's careers page found cheapest and most certain step first (the page on record, common paths, homepage links, a guessed job board its vendor confirms, an LLM pick last), each find with a confidence; a low one waits for a person | [87% found again](#measured-results) |
+| Enrichment imports | Clay CSV exports, each field written kept as a before-and-after diff in the audit log | [Schema](docs/schema.md) |
 | Unit economics per enriched record | A cost per page read, gated behind cheap checks: free job-board feeds first, an unchanged page reuses its last read, every model call's cost on the record | [137 companies for $1.17](#measured-results) |
 | Funnel analytics | Stage conversion and days in each stage, from dated stage changes; how long roles stay listed; AI cost by purpose; raw SQL over the record | The Analytics page, `analytics:report` |
-| Permission sets and field-level security, for AI agents | Each agent's credential, scoped down to the field and checked at every write; stage moves are the operator's alone | [The permission model](#the-permission-model) |
-| Data you can trust: every change traceable to who made it and why | The append-only audit log, enforced by the database | [The permission model](docs/governance.md) |
 | How to roll AI out to a GTM team safely | Autonomy earned per kind of decision, on measured agreement: agents recommend, the operator decides, and no kind acts on its own yet | [9 of 11 agreed](#measured-results) |
 
 ## The permission model
@@ -116,7 +118,7 @@ Measured on the operator's real target list, which stays out of the repo; the te
 - **Finding careers pages (2026-09-30):** the known pages of 71 labelled companies were hidden and found again: 59 of 68 measured correct (87%), none wrong at high or medium confidence.
 - **Recommendations against decisions (as of 2026-11-16):** the AI assistant made 11 recommendations, and 9 matched the operator's decision, measured per kind of decision. Of 89 questions, the operator decided 87 and 2 settled themselves. No kind has been granted autonomy.
 - **Cost (2026-10-14):** 137 companies checked in about 47 minutes for $1.17. Since the cost pass, a check pays the AI to read a page only when its role links changed or its last full read is more than 14 days old, and a free job board is read in its place when it lists the same roles. Checks run when the operator asks: there is no schedule yet.
-- **Traceability (as of 2026-11-16):** 1,840 recorded changes, in an audit log that is append-only in the database. None was refused in real use; refusals are proven in the tests.
+- **Traceability (as of 2026-11-19):** 1,850 recorded changes, in an audit log that is append-only in the database. None was refused in real use; refusals are proven in the tests.
 - **Prompts, before they ship:** the agents' prompts were smoke-tested against the API on made-up records. At 4c, that caught the fit scorer citing resume lines for role preferences only the background states, fixed before it shipped.
 
 ## How it works
@@ -148,7 +150,7 @@ flowchart TB
 
 ## The first agent: verifying roles at the source
 
-The first agent in the system is a **job finder**: it watches a curated set of companies (see [Sourcing](docs/sourcing.md)). Its job is verification: checking, at each employer's own applicant tracking system, which postings are actually still open. Job aggregators scrape listing URLs but never check the employer's careers page, so they cannot distinguish a live posting from a filled one. Both failure directions are real:
+The first agent in the system is a **job finder**: it watches a curated set of companies (see [Sourcing](docs/sourcing.md)). Its job is verification: checking, at each employer's own applicant tracking system, which postings are actually still open. Job aggregators scrape listing URLs but never check the employer's careers page, so they cannot distinguish a live posting from a filled one. Two proven error cases, one in each direction:
 
 | Observed | Aggregator said | Employer's ATS said |
 |---|---|---|
@@ -163,7 +165,7 @@ Most applicant tracking systems — Greenhouse, Lever, Ashby, Workable — rende
 
 That produces the worst available failure mode: the agent *reaches* the page, so it doesn't report an access error, but sees no roles in the DOM, so it reports "not found." **A parsing failure gets reported as a confident negative**, indistinguishable downstream from a true one.
 
-There's no pattern-match shortcut either. Measured across 20 resolved careers pages, roughly **70% were hosted on the company's own domain** rather than a recognizable ATS URL — and those frequently embed a client-side job board anyway. The vendor is often invisible from the URL while the rendering requirement stays identical.
+There's no pattern-match shortcut either. Of the 154 careers pages on record, **89 (58%) are on the company's own domain** rather than a recognizable ATS URL (2026-11-19), and those often embed a client-side job board anyway. The vendor is often invisible from the URL while the rendering requirement stays identical.
 
 **So the verification worker needs a headless browser, not an HTTP client.** (A hosted board's public API is the exception: when the worker recognizes one, it reads the list there, exact and free; the browser is for everything else.)
 
@@ -173,7 +175,7 @@ Seven patterns: three found while prototyping this in Clay, a commercial enrichm
 
 1. **Require corroborating observables the agent can't fake.** Every read also reports `roles_listed_count`, the roles the page shows whatever matched: `not_found` beside 23 roles listed is a credible negative, beside 0 it is almost certainly a parse failure. A carefully specified output contract doesn't guarantee the agent can tell apart the states you defined.
 2. **Prose reasoning beats the structured verdict.** The free-text evidence was read every time to interpret the enum. A structured verdict is a lossy compression of a judgment, so `audit_events.reasoning` is where the fidelity lives.
-3. **Gate expensive operations behind cheap ones.** Deterministic checks first (does the URL resolve? has the page changed?), model calls only on what survives. In the Clay prototype, the AI research step cost ~25x the standard enrichment columns combined.
+3. **Gate expensive operations behind cheap ones.** The checks run as a waterfall: deterministic ones first (does the URL resolve? has the page changed?), model calls only on what survives. In the Clay prototype, the AI research step cost ~25x the standard enrichment columns combined.
 4. **A negative needs the whole list.** A role is marked closed only when every role the page lists was read: through the ATS's own API to the end, or up to the total the page states. Anything less is inconclusive and writes no verdict, a rule enforced by the worker and again at the write path.
 5. **What the agent isn't sure of goes to a person, and the person's call is on the record too.** A low-confidence find waits as a candidate, and every decision the operator makes is audited under their own identity, with their reason. An agent may recommend a decision, never make it; agreement is measured per kind, the only ground on which a kind would ever act on its own.
 6. **A permission is checked where the write happens, not where the agent starts.** A scope table that nothing enforces describes intent, so the check sits at the model layer, where every write passes, down to the attributes it sets. A write some future code path forgets to check is still caught, and refused on the record.
@@ -193,7 +195,7 @@ Built in stages, each decided, built step by step, and recorded as built. [Every
 | 4b — Finding companies | Company proposals and company reviews from the operator's AI assistant through [MCP](docs/mcp.md), against company preferences kept on the profile | 2026-11-10 |
 | 4c — Background, and fit read two ways | A background in three parts, each read only by what may use it; the ATS fit and the Background fit, through [MCP](docs/mcp.md) first, then in the app's own agents | 2026-11-12 |
 | 4d — Screen risk, and your links | Each role's must-haves read one by one, one the resume doesn't show capping the fit; the operator's own website and GitHub read free, and the lines that apply to each role read as extended background | 2026-11-18 |
-| Next | 4e, a review of the pages' experience; 4f, a demo on made-up data | |
+| Next | 4e, a review of the pages' experience; 4f, a demo on made-up data, and a version of the app that's easier to run locally | |
 
 ## Stack
 
@@ -202,7 +204,7 @@ Built in stages, each decided, built step by step, and recorded as built. [Every
 - **Hotwire (Turbo, Stimulus) and importmap** — the operator's pages, plain Rails views with no build step
 - **Python + Playwright** — agent workers (managed with uv). Required rather than preferred: the verification step needs headless rendering plus LLM tooling, and both are strongest there.
 - **Claude, through the Anthropic API** — Haiku 4.5 reads pages, decides near-miss matches, and weighs fit; Opus 5.5 writes drafts and resume reviews. The key stays outside the repo and reaches the worker process alone.
-- **MCP, through the Ruby SDK (gem `mcp`)** — the server the operator's AI assistant connects to (any MCP client should work; only Claude Desktop has been tested)
+- **MCP, through the Ruby SDK (gem `mcp`)** — the server the operator's AI assistant connects to (any MCP client should work; only Claude Desktop has been tested so far)
 - **fx** — database functions and triggers in migrations and `schema.rb`, so the audit log's append-only trigger is rebuilt wherever the schema loads (the test database, CI, a fresh setup)
 - **RSpec, RuboCop, Brakeman, bundler-audit**; ruff and pytest for the worker
 
