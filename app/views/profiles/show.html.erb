@@ -198,7 +198,7 @@
     <% pages = link.pages %>
     <p class="small">
       <strong><%= link.label %></strong> <span class="muted"><%= link.host %></span>:
-      <%= link.read_at ? "#{ProfileLinks.state(link)}, read #{ago(link.read_at)}" : "not read yet" %>.
+      <%= link.read_at ? safe_join([ "#{ProfileLinks.state(link)}, read ", ago(link.read_at) ]) : "not read yet" %>.
     </p>
     <% if pages.any? %>
       <details class="description">

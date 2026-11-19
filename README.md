@@ -18,7 +18,7 @@ AI agents do the legwork: they check at each employer's own careers page whether
 
 **Why "provenance":** every change on record says where it came from: who made it, under which permission, and why.
 
-> **Status:** in use for my own job search, running locally. Now: a screen-risk check on each role's must-haves, and portfolio links as extended background. Next: a review of the pages, then a demo on made-up data. [Build history](docs/build-stages.md).
+> **Status:** in use for my own job search, running locally. Next: a review of the pages, then a demo on made-up data. [Build history](docs/build-stages.md).
 
 **Contents:** [Why I built it](#why-i-built-it) · [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
 
@@ -40,7 +40,7 @@ AI agents do the legwork: they check at each employer's own careers page whether
 | **Governance** | Permission sets and field-level security for AI agents: a credential per run, checked at every write down to the fields it sets; refused writes on the record; an append-only audit log, enforced by the database |
 | **Data** | Careers pages read in a real browser, robots.txt honored; five job boards read through their own feeds (Greenhouse, Lever, Ashby, Workday, Oracle Cloud) |
 | **Measured** | 58 of 59 verdicts right on fresh reads, and every role reported closed was closed (12 of 12); 87% of hidden careers pages found again ([AI evaluation](#measured-results)) |
-| **Quality** | 883 RSpec examples and 340 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
+| **Quality** | 907 RSpec examples and 351 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
 | **Stack** | Ruby on Rails 8.1, PostgreSQL 16, Python 3.13, the Claude API, MCP ([in full](#stack)) |
 
 ## How this maps to GTM work
@@ -56,7 +56,7 @@ The job search is the test bed; the patterns are the ones a RevOps or GTM team b
 | Waterfall enrichment | A company's careers page found cheapest and most certain step first (the page on record, common paths, homepage links, a guessed job board its vendor confirms, an LLM pick last), each find with a confidence; a low one waits for a person | [87% found again](#measured-results) |
 | Enrichment and verification at the source | Checking a role at the employer's own careers page or job board: a hiring signal read at its source, never an aggregator's copy, and "closed" only when the whole list was read | [12 of 12](#measured-results) |
 | ICP and account scoring | Each company scored 0 to 100 against the operator's company preferences (stage, size, business model, industries, what they want and avoid), point by point with its sources; one that does what they avoid is capped at 49 | [The `company_fit` rules](workers/verifier/src/verifier/writing_rules.md#company_fit) |
-| Lead scoring, with reasons | Each role scored 0 to 100 against the resume, with its matches by line and its gaps, read two ways: as an ATS would read the resume, and with the operator's background (and what their own links show of the role) beside it | [Fit scores](docs/agents.md#fit-scores), [the `fit` rules](workers/verifier/src/verifier/writing_rules.md#fit) |
+| Lead scoring, with reasons | Each role scored 0 to 100 against the resume, with its matches by line and its gaps, its must-haves checked one by one (one the resume doesn't show caps the score), read two ways: as an ATS would read the resume, and with the operator's background (and what their own links show of the role) beside it | [Fit scores](docs/agents.md#fit-scores), [the `fit` rules](workers/verifier/src/verifier/writing_rules.md#fit) |
 | Unit economics per enriched record | A cost per page read, gated behind cheap checks: free job-board feeds first, an unchanged page reuses its last read, every model call's cost on the record | [137 companies for $1.17](#measured-results) |
 | Funnel analytics | Stage conversion and days in each stage, from dated stage changes; how long roles stay listed; AI cost by purpose; raw SQL over the record | The Analytics page, `analytics:report` |
 | Permission sets and field-level security, for AI agents | Each agent's credential, scoped down to the field and checked at every write; stage moves are the operator's alone | [The permission model](#the-permission-model) |
@@ -74,7 +74,7 @@ The job search is the test bed; the patterns are the ones a RevOps or GTM team b
 | Clay importer | The seed data (`companies:import`, `postings:import`) | Set tracking or a company's proposal, or rename a company on record |
 | Review queue (a system grant) | Raise, restate and close what resolved (`review:keep`) | Decide an item |
 | Draft agent | A new draft or resume review as it wrote it (`drafts:write`, `resume_reviews:write`, one per run) | Edit or approve a draft, delete a review, send anything |
-| Fit scorer | A role's fit score (`fit:write`): each role scored 0 to 100 against the resume, with its matches by line, its gaps and why, by the [`fit` rules](workers/verifier/src/verifier/writing_rules.md#fit), and the Background fit beside it, by [`background_fit`](workers/verifier/src/verifier/writing_rules.md#background_fit); and the LLM call that weighed it | Touch a role, change a score, send anything |
+| Fit scorer | A role's fit score (`fit:write`): each role scored 0 to 100 against the resume, with its matches by line, its gaps and why, by the [`fit` rules](workers/verifier/src/verifier/writing_rules.md#fit), its must-haves by [`must_haves`](workers/verifier/src/verifier/writing_rules.md#must_haves), and the Background fit beside it, by [`background_fit`](workers/verifier/src/verifier/writing_rules.md#background_fit); and the LLM call that weighed it | Touch a role, change a score, send anything |
 | AI assistant (the operator's own, Claude or another, through MCP) | Only the scopes of the save tool it calls, a credential per call: drafts and reviews, contacts and activities, role and company proposals, fit scores and company reviews, recommendations on the review queue; and, on the operator's word with their reason, the watch list and the company preferences | Change the watch list on its own judgment; set a verdict, or a company's name, careers page or kind; decide a review item; edit, approve or delete what it saved; move a stage; send anything |
 | **No agent** | Starting an application or moving it between stages; editing or approving a draft; deciding a review item; editing the search profile, the resume, or the background and its links (the company preferences aside, on the operator's word); naming a company; deleting a contact; issuing or revoking a credential; asking for a check that writes a verdict or spends API credit | **Human-only by design** |
 
@@ -141,7 +141,7 @@ flowchart TB
 - **Watching.** The verifier finds each watched company's careers page, reads it in full, and records whether each tracked role is still listed. A repeat run pays the AI only for pages whose roles may have changed.
 - **Finding.** The suggester proposes the roles on watched pages that fit a search profile, at no AI cost. The operator's AI assistant finds roles by meaning, and companies that fit what the operator wants of one, each researched and scored. Only the operator decides what is watched.
 - **The pipeline.** An application per role, moved through its stages by the operator alone. What the agents and the operator's AI assistant produce for it (the role's fit, a resume review, its contacts and what happened, the materials written for it) is saved on it as records, each naming who wrote it. Nothing is ever sent.
-- **Fit, read two ways.** Each role is scored from the resume alone, as a recruiter's screening system would read it, and again with the background the operator keeps beside it, and the lines of their own website or GitHub that apply to the role. Each kind of writing sees only the part of that background it may use.
+- **Fit, read two ways.** Each role is scored from the resume alone, as a recruiter's screening system would read it, and again with the background the operator keeps beside it, and the lines of their own website or GitHub that apply to the role. Its must-haves are read one by one first, as a screener checks them: one the resume doesn't show caps the score at 69, however strong the rest, and the app applies the cap, not the model. Each kind of writing sees only the part of that background it may use.
 - **Governance.** Every agent write is checked against a credential issued for its run, and refused on the record when no scope allows it. Every change lands in an append-only audit log that can be searched. What agents can't settle waits in a review queue, where the AI assistant recommends and the operator decides.
 
 **The worker never touches the database.** Rails writes a targets file, runs the Python worker, validates every result against a fixed contract, and records it through one audited write path, under a credential issued for that run alone. How a page is read, a careers page found and a role verified: [the worker's README](workers/verifier/README.md).
@@ -192,7 +192,7 @@ Built in stages, each decided, built step by step, and recorded as built. [Every
 | 4a — Curating the watch list | Companies tracked or archived as roles are; the operator's AI assistant curates them through [MCP](docs/mcp.md), on their word | 2026-11-05 |
 | 4b — Finding companies | Company proposals and company reviews from the operator's AI assistant through [MCP](docs/mcp.md), against company preferences kept on the profile | 2026-11-10 |
 | 4c — Background, and fit read two ways | A background in three parts, each read only by what may use it; the ATS fit and the Background fit, through [MCP](docs/mcp.md) first, then in the app's own agents | 2026-11-12 |
-| 4d — Screen risk, and your links | Each role's must-haves read one by one, a missing one capping the fit; the operator's portfolio links as extended background | under way |
+| 4d — Screen risk, and your links | Each role's must-haves read one by one, one the resume doesn't show capping the fit; the operator's own website and GitHub read free, and the lines that apply to each role read as extended background | 2026-11-18 |
 | Next | 4e, a review of the pages' experience; 4f, a demo on made-up data | |
 
 ## Stack

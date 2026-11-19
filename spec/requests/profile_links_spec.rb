@@ -31,7 +31,8 @@ RSpec.describe "Your links, on the Profile page", type: :request do
     link.update!(read_at: at, read_outcome: "ok", read_skipped: 1)
 
     get profile_path
-    expect(response.body).to include("Your links", "<strong>Website</strong>", "jordan.example", "1 page, 1 left unread, read",
+    expect(response.body).not_to include("&lt;time") # when it was read, as a time, never its markup as text
+    expect(response.body).to include("Your links", "<strong>Website</strong>", "jordan.example", "1 page, 1 left unread, read <time",
                                      "1 page, 4 words", ">Home</a>", "LinkedIn isn't read",
                                      "click \"Read them again\" before weighing a role or reviewing your resume for one again")
 
