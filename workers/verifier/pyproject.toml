@@ -8,9 +8,9 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "anthropic>=2.10.0,<3",
+    "anthropic>=2.11.0,<3",
     "playwright>=1.65.2,<2",
-    "pydantic>=2.14.3,<3",
+    "pydantic>=2.14.4,<3",
     "httpx2>=2.16.2,<3"
 ]
 
@@ -24,7 +24,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
-    "ruff>=0.17.5",
+    "ruff>=0.17.6",
 ]
 
 [tool.pytest.ini_options]
