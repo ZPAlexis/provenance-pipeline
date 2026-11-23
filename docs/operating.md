@@ -6,7 +6,7 @@ Setup in full, every command, backups, and the pages. The README has the quickst
 
 ## Setup
 
-It needs Ruby 3.4.8 and PostgreSQL 16; it was built in WSL (Ubuntu), with the Ruby from mise.
+It needs Ruby 3.4.13 and PostgreSQL 16; it was built in WSL (Ubuntu), with the Ruby from mise.
 
 ```bash
 bundle install
