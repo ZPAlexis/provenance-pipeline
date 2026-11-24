@@ -19,7 +19,7 @@ RSpec.describe ProvenanceMcp::Tools::CompanyStatus do
     create(:posting, :credible_negative, company: acme, role_title: "Data Engineer")
     create(:posting, company: acme, role_title: "GTM Engineer", tracking: "suggested")
     create(:posting, :verified_live, company: acme, role_title: "Office Manager", tracking: "dismissed")
-    create(:application, posting: create(:posting, :verified_live, company: acme, role_title: "Solutions Engineer"), stage: "screening")
+    create(:application, posting: create(:posting, :verified_live, company: acme, role_title: "Solutions Engineer"), stage: "interviewing")
     create(:page_check, company: acme, purpose: "verification", checked_at: Time.utc(2026, 10, 14, 13, 33, 48))
 
     id = ->(title) { acme.postings.find_by!(role_title: title).id }
@@ -41,7 +41,7 @@ RSpec.describe ProvenanceMcp::Tools::CompanyStatus do
       - GTM Engineer (suggested, no answer yet): #{id.call('GTM Engineer')}
       - Office Manager (archived, still listed): #{id.call('Office Manager')}
       Careers page last checked: 2026-10-14 13:33 UTC (7 days ago)
-      Applications: 1 (screening 1)
+      Applications: 1 (interviewing 1)
       Company review: none
       </record>
     TEXT

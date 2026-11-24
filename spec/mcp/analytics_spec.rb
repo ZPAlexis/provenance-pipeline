@@ -34,8 +34,9 @@ RSpec.describe "Analytics through MCP" do
     text = said(call)
 
     expect(text).to start_with("Pipeline (every application): 5 applications.\nHow far they get")
-    expect(text).to include("  Interested: 5", "  Applied: 3, 60% of those at the stage before",
-                            "  Screening: 0, too few at the stage before to say (3)\n  Interviewing: 0\n",
+    expect(text).to include("  Interested: 5", "  Preparing: 3, 60% of those at the stage before", # counted up to their furthest
+                            "  Applied: 3, too few at the stage before to say (3)",
+                            "  Interviewing: 0, too few at the stage before to say (3)\n  Offer: 0\n",
                             "  Interested: 5 times there, median 2, longest 10, 2 still there",
                             "  Applied: 3 times there, median 8, longest 8, 2 still there",
                             "How they end: accepted, 0 of 1 closed (too few to say); an offer, 0 of 3 applied to (too few to say).",

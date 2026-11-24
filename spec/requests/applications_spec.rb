@@ -36,8 +36,8 @@ RSpec.describe "Pipeline", type: :request do
     end
 
     it "moves on the date it happened, logs what happened, and keeps notes, each on its timeline" do
-      patch move_application_path(application), params: { stage: "screening", on: "2026-10-12", note: "Recruiter call booked." }
-      expect(flash[:notice]).to eq("Moved to Screening.")
+      patch move_application_path(application), params: { stage: "interviewing", on: "2026-10-12", note: "Recruiter call booked." }
+      expect(flash[:notice]).to eq("Moved to Interviewing.")
 
       post log_application_path(application), params: { kind: "call", on: "2026-10-14", summary: "Recruiter screen." }
       expect(flash[:notice]).to eq("Logged: call on 2026-10-14.")
@@ -47,7 +47,7 @@ RSpec.describe "Pipeline", type: :request do
       get application_path(application)
       expect(response.body).to include("Recruiter call booked.", "Recruiter screen.", "Applied → ", "Remote-first team.",
                                        "25k a month")
-      expect(application.reload).to have_attributes(stage: "screening", stage_changed_on: Date.new(2026, 10, 12))
+      expect(application.reload).to have_attributes(stage: "interviewing", stage_changed_on: Date.new(2026, 10, 12))
     end
 
     # Found 2026-10-19: a move on the same day as the stage before records no date, and the page broke on it.
@@ -64,13 +64,13 @@ RSpec.describe "Pipeline", type: :request do
 
     # Review pass R9: re-dated in place, a stage kept its first date on the timeline.
     it "re-dates the stage it is at, and shows it at its new date" do
-      later { patch move_application_path(application), params: { stage: "screening", on: "2026-10-12" } }
-      later { patch move_application_path(application), params: { stage: "screening", on: "2026-10-10", note: "Two days earlier." } }
-      expect(flash[:notice]).to eq("Screening re-dated to 2026-10-10.")
+      later { patch move_application_path(application), params: { stage: "interviewing", on: "2026-10-12" } }
+      later { patch move_application_path(application), params: { stage: "interviewing", on: "2026-10-10", note: "Two days earlier." } }
+      expect(flash[:notice]).to eq("Interviewing re-dated to 2026-10-10.")
 
       get application_path(application)
-      row = response.body[%r{<tr>(?:(?!</tr>).)*Moved to Screening(?:(?!</tr>).)*</tr>}m]
-      expect(row).to include("2026-10-10", "Screening re-dated by hand, from 2026-10-12. Two days earlier.").and not_include("2026-10-12</td>")
+      row = response.body[%r{<tr>(?:(?!</tr>).)*Moved to Interviewing(?:(?!</tr>).)*</tr>}m]
+      expect(row).to include("2026-10-10", "Interviewing re-dated by hand, from 2026-10-12. Two days earlier.").and not_include("2026-10-12</td>")
     end
 
     it "shows where it stands as a path, each stage a step to move it to" do
@@ -92,7 +92,7 @@ RSpec.describe "Pipeline", type: :request do
       get application_path(application)
 
       path = response.body[%r{<nav class="stage-path".*?</nav>}m]
-      expect(path.scan(/class="(\w+)"/).flatten).to eq(%w[done done ahead ahead ahead lost])
+      expect(path.scan(/class="(\w+)"/).flatten).to eq(%w[done done done ahead ahead lost])
       expect(path).to include("Rejected")
     end
 

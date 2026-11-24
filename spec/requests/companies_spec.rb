@@ -79,7 +79,7 @@ RSpec.describe "Companies", type: :request do
 
   it "won't offer archiving while an application there is open, and names it" do
     applied = create(:posting, company: company, role_title: "Solutions Engineer")
-    application = create(:application, posting: applied, company: company, stage: "screening")
+    application = create(:application, posting: applied, company: company, stage: "interviewing")
 
     get company_path(company)
 

@@ -3,7 +3,10 @@
 # one or moves it between stages: no agent scope allows writing one (Authority).
 # Every change is audited, so the history of its stages is its audit events.
 class Application < ApplicationRecord
-  OPEN = %w[interested applied screening interviewing offer].freeze
+  # Since 4e, Preparing (researching the company, readying the resume and the application) comes before Applied, and
+  # Screening is gone: it came straight after applying and said nothing Interviewing doesn't. No application ever
+  # stood at it, so nothing on record moved.
+  OPEN = %w[interested preparing applied interviewing offer].freeze
   CLOSED = %w[accepted rejected withdrawn no_response].freeze
   STAGES = (OPEN + CLOSED).freeze
 

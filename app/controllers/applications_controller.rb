@@ -12,6 +12,9 @@ class ApplicationsController < ApplicationController
     @closed = applications.reject(&:open?)
     @latest = Activity.where(application_id: applications.map(&:id)).select("DISTINCT ON (application_id) activities.*")
                       .order(:application_id, occurred_on: :desc, created_at: :desc).index_by(&:application_id)
+    # Each card's role fit, and its company's beside it (4e): two scores, never weighed into each other.
+    @fits = FitScores.shown(applications.map(&:posting_id))
+    @company_fits = WatchList.reviews(applications.map(&:company_id).uniq)
   end
 
   def show

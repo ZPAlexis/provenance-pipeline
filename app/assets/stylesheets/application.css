@@ -459,6 +459,9 @@ code.scope {
   color: var(--text);
 }
 .board .card:hover { text-decoration: none; border-color: var(--accent); }
+/* A card's fits (4e): the role's, and its company's beside it, quieter. */
+.board .card-fits { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 2px; }
+.board .card-fits .company-fit .badge { font-size: 11px; padding: 0 5px; opacity: 0.85; }
 .add-form input[type="date"], .add-form select, .add-form textarea {
   padding: 5px 8px;
   font: 13px var(--font);

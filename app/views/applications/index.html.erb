@@ -22,6 +22,16 @@
             <strong><%= application.posting.role_title %></strong>
             <span class="small"><%= application.company.name %></span>
             <span class="muted small"><%= in_stage(application).upcase_first %></span>
+            <% shown, review = @fits[application.posting_id], @company_fits[application.company_id] %>
+            <span class="card-fits small">
+              <% if shown %>
+                <span title="Its ATS fit, out of 100">Fit <%= fit_badge(shown.score.score) %></span>
+                <% if shown.score.screen_risks.any? %><span class="warn" title="Likely screened out on: <%= shown.score.screen_risks.map { |must| must['asks'] }.to_sentence %>">screen risk</span><% end %>
+              <% else %>
+                <span class="muted">Fit not weighed</span>
+              <% end %>
+              <% if review %><span class="company-fit muted" title="Its company's fit, out of 100: a separate score">company <%= fit_badge(review.score) %></span><% end %>
+            </span>
             <% if (activity = @latest[application.id]) %>
               <span class="muted small">Last: <%= activity.kind.humanize.downcase %>, <%= activity.occurred_on.to_fs(:short) %></span>
             <% end %>
