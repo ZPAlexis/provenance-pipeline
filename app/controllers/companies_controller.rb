@@ -4,14 +4,17 @@ class CompaniesController < ApplicationController
   FILTERS = WatchList::FILTERS
   FITS = WatchList::FITS
   FACTS = WatchList::FACTS
+  # What the list can be ordered by besides its default (4e: by application, then fit, then tracked roles, then last
+  # checked): its fit, best first, or its name.
+  SORTS = { "fit" => "Fit", "name" => "Name" }.freeze
 
   # Words and a review's facts narrow every count; within a tab, what needs a look (never on Suggested, where nothing is
-  # watched yet), then the fit. Sorted by name, or best fit first.
+  # watched yet), then the fit. Ordered by application, fit, tracked roles and last check (4e), or by fit, or by name.
   def index
     @tab = TABS.key?(params[:tab]) ? params[:tab] : "tracked"
     @filter = params[:filter] if FILTERS.key?(params[:filter]) && @tab != "suggested"
     @fit = params[:fit] if FITS.key?(params[:fit])
-    @sort = "fit" if params[:sort] == "fit"
+    @sort = params[:sort] if SORTS.key?(params[:sort])
     @facts = FACTS.keys.to_h { |fact| [ fact, params[fact].to_s.strip ] }.compact_blank
     @q = params[:q].to_s.strip.presence
     @keep = { tab: @tab, filter: @filter, fit: @fit, sort: @sort, q: @q, **@facts.symbolize_keys }
@@ -24,12 +27,12 @@ class CompaniesController < ApplicationController
     ids = @companies.map(&:id)
     # Per company: its newest review, its roles by tracking and answer, its newest application, and when it was last verified.
     @reviews = WatchList.reviews(ids)
-    @companies = @companies.sort_by.with_index { |company, index| [ -(@reviews[company.id]&.score || -1), index ] } if @sort
     @reviewed = CompanyReview.exists?
     @fact_options = @reviewed ? WatchList.fact_options : {}
     @roles = WatchList.role_counts(ids)
     @applications = WatchList.applications(ids)
     @last_checked = WatchList.last_checked(ids)
+    @companies = ordered(@companies)
   end
 
   # The operator's companies (4a), through the same audited service as the commands: archived with its roles in
@@ -153,6 +156,20 @@ class CompaniesController < ApplicationController
   end
 
   private
+
+  # The list in the order chosen: best fit first, by name (as read), or by default by application, fit, tracked roles
+  # and last check (4e).
+  def ordered(companies)
+    case @sort
+    when "fit" then companies.sort_by.with_index { |company, index| [ -(@reviews[company.id]&.score || -1), index ] }
+    when "name" then companies
+    else
+      tracked = @roles.each_with_object(Hash.new(0)) { |((id, tracking, _), n), sum| sum[id] += n if tracking == "tracked" }
+      ListOrder.sort(companies) do |company|
+        [ @applications[company.id], @reviews[company.id]&.score, tracked[company.id], @last_checked[company.id] ]
+      end
+    end
+  end
 
   # What tracking these proposals reads: the boards they were proposed with, free; Check now finds the others' pages.
   def reading(companies)

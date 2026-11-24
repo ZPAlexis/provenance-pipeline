@@ -36,7 +36,7 @@ RSpec.describe "A role's fit read two ways, on the pages", type: :request do
   it "shows the ATS fit in the tables, and picks the roles weighed before the background" do
     get roles_path
 
-    expect(response.body).to include("ATS fit</a>", "ATS fit:", "Before your background <span class=\"count\">1</span>", ">58<", ">66<")
+    expect(response.body).to include("ATS fit</a>", "ATS fit</span>", "Before your background (1)", ">58<", ">66<")
     get roles_path(fit: "before_background")
     expect(response.body).to include("Deal Desk Analyst").and(not_include("Customer Engineer"))
   end

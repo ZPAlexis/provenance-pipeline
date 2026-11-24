@@ -25,8 +25,7 @@ RSpec.describe "Roles", type: :request do
 
       expect(response.body).to include("Data Engineer")
       expect(response.body).not_to include("RevOps Engineer", "Old Role")
-      expect(response.body).to match(/All <span class="count">2</)
-      expect(response.body).to match(/No longer listed <span class="count">1</)
+      expect(response.body).to include("Any (2)", %(<option selected="selected" value="not_found">No longer listed (1)</option>))
     end
 
     it "ignores an answer it does not know" do

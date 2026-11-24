@@ -9,7 +9,7 @@ RSpec.describe "Finding roles and companies, and dismissing roles at once", type
 
   describe "Find" do
     # The cell, not the Add a role form's placeholder, which names São Paulo too.
-    def cell(place) = "<td class=\"muted\">#{place}</td>"
+    def cell(place) = "<span class=\"muted\"> · #{place}</span>" # under the role's title, since 4e
 
     it "narrows the roles to those holding every word typed, case and accents set aside, the tabs' counts with them" do
       get roles_path(q: "sao PAULO")
@@ -30,8 +30,8 @@ RSpec.describe "Finding roles and companies, and dismissing roles at once", type
     it "keeps the tab and the answer it narrows within" do
       get roles_path(tab: "suggested", answer: "pending", q: "brazil")
 
-      expect(response.body).to include('name="tab" value="suggested"', 'name="answer" value="pending"')
-      expect(response.body).to include("/roles?answer=pending&amp;q=brazil&amp;tab=suggested")
+      expect(response.body).to include('name="tab" value="suggested"', 'name="answer" value="pending"', 'name="q" value="brazil"',
+                                       %(<option selected="selected" value="pending">))
     end
 
     it "finds companies by name, domain, or a place one of their roles is in" do

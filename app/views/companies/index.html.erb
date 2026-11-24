@@ -13,42 +13,49 @@
   </div>
 </div>
 
-<details class="add" <%= "open" if flash[:alert] %>>
-  <summary class="btn">Add a company</summary>
-  <% ceiling = Verifier::CheckNow.ceiling(Company.new) %>
-  <%= form_with url: companies_path, class: "add-form" do |form| %>
-    <label>
-      Its domain, or a link on its site
-      <%= form.text_field :link, required: true, placeholder: "acme.com, acme.com/careers, or jobs.lever.co/acme" %>
-    </label>
-    <label>
-      <span>Name <span class="muted">(optional)</span></span>
-      <%= form.text_field :name, placeholder: "Acme" %>
-    </label>
-    <label>
-      <span>Careers page <span class="muted">(optional: watched as given)</span></span>
-      <%= form.text_field :careers_page, placeholder: "acme.com/careers, or its ATS board" %>
-    </label>
-    <%= form.submit "Add", class: "btn primary" %>
-    <%= form.button "Add and read", name: "read", value: "1", class: "btn",
-                    data: { turbo_confirm: "Reading it finds its careers page if it has none, and reads its roles: at most #{cost(ceiling)}, " \
-                                           "free on an ATS board. Add and read it?" } %>
-    <p class="muted small">
-      "Add" reads nothing and costs nothing. Given a careers page, it is watched at that page from now on, as if you set
-      it by hand; without one, it isn't watched until its careers page is found. "Add and read" finds it now, trying any
-      page in the link first (a page found only at low confidence waits for you to confirm), and reads its roles. A job
-      board's link (LinkedIn, Indeed) is never read: give the employer's own.
-    </p>
-  <% end %>
-</details>
-
-<nav class="tabs">
-  <% CompaniesController::TABS.each do |tab, label| %>
-    <%= link_to companies_path(@keep.slice(:q, *fact_keys).merge(tab: tab).compact_blank), class: ("current" if tab == @tab) do %>
-      <%= label %> <span class="count"><%= @counts.fetch(tab) %></span>
+<%# One row (4e): the tabs, then finding and adding; what needs a look, the fit, what reviews found and the order below,
+    applied as soon as one changes. %>
+<div class="list-toolbar">
+  <nav class="tabs">
+    <% CompaniesController::TABS.each do |tab, label| %>
+      <%= link_to companies_path(@keep.slice(:q, *fact_keys).merge(tab: tab).compact_blank), class: ("current" if tab == @tab) do %>
+        <%= label %> <span class="count"><%= @counts.fetch(tab) %></span>
+      <% end %>
     <% end %>
-  <% end %>
-</nav>
+  </nav>
+  <div class="toolbar-tools">
+    <%= render "shared/find", url: companies_path, keep: @keep.except(:q), value: @q,
+                              clear: list.call(q: nil), placeholder: "Name, domain, or a place it hires in" %>
+    <details class="add" <%= "open" if flash[:alert] %>>
+      <summary class="btn primary">Add a company</summary>
+      <% ceiling = Verifier::CheckNow.ceiling(Company.new) %>
+      <%= form_with url: companies_path, class: "add-form" do |form| %>
+        <label>
+          Its domain, or a link on its site
+          <%= form.text_field :link, required: true, placeholder: "acme.com, acme.com/careers, or jobs.lever.co/acme" %>
+        </label>
+        <label>
+          <span>Name <span class="muted">(optional)</span></span>
+          <%= form.text_field :name, placeholder: "Acme" %>
+        </label>
+        <label>
+          <span>Careers page <span class="muted">(optional: watched as given)</span></span>
+          <%= form.text_field :careers_page, placeholder: "acme.com/careers, or its ATS board" %>
+        </label>
+        <%= form.submit "Add", class: "btn primary" %>
+        <%= form.button "Add and read", name: "read", value: "1", class: "btn",
+                        data: { turbo_confirm: "Reading it finds its careers page if it has none, and reads its roles: at most #{cost(ceiling)}, " \
+                                               "free on an ATS board. Add and read it?" } %>
+        <p class="muted small">
+          "Add" reads nothing and costs nothing. Given a careers page, it is watched at that page from now on, as if you set
+          it by hand; without one, it isn't watched until its careers page is found. "Add and read" finds it now, trying any
+          page in the link first (a page found only at low confidence waits for you to confirm), and reads its roles. A job
+          board's link (LinkedIn, Indeed) is never read: give the employer's own.
+        </p>
+      <% end %>
+    </details>
+  </div>
+</div>
 
 <% if @tab == "suggested" %>
   <p class="muted small">
@@ -58,47 +65,38 @@
   </p>
 <% end %>
 
-<%= render "shared/find", url: companies_path, keep: @keep.except(:q), value: @q,
-                          clear: list.call(q: nil), placeholder: "Name, domain, or a place it hires in" %>
-
-<% if @fact_options.any? %>
-  <%= form_with url: companies_path, method: :get, class: "find-form facts-form", "aria-label": "Narrow by what reviews found" do %>
-    <% @keep.except(*fact_keys).compact_blank.each do |name, value| %>
-      <%= hidden_field_tag name, value, id: nil %>
-    <% end %>
-    <span class="muted small">Reviews found:</span>
-    <% @fact_options.each do |fact, options| %>
-      <%= select_tag fact, options_for_select(options, @facts[fact]), include_blank: "Any #{CompaniesController::FACTS.fetch(fact).downcase}",
-                           "aria-label": CompaniesController::FACTS.fetch(fact), id: nil %>
-    <% end %>
-    <button type="submit" class="btn small">Narrow</button>
-    <%= link_to "Clear", list.call(**fact_keys.index_with(nil)), class: "small" if @facts.any? %>
+<%= form_with url: companies_path, method: :get, class: "list-filters", data: { controller: "autosubmit" }, "aria-label": "Narrow and order the list" do %>
+  <%= hidden_field_tag :tab, @tab, id: nil %>
+  <%= hidden_field_tag :q, @q, id: nil if @q %>
+  <% unless @tab == "suggested" %>
+    <label>
+      <span class="muted small">Needs a look</span>
+      <%= select_tag :filter, options_for_select([ [ "All (#{@counts.fetch(@tab)})", "" ] ] +
+                                                 CompaniesController::FILTERS.map { |filter, (label, _, _)| [ "#{label} (#{@filter_counts.fetch(filter)})", filter ] }, @filter),
+                     id: nil, data: { action: "autosubmit#submit" } %>
+    </label>
   <% end %>
-<% end %>
-
-<% unless @tab == "suggested" %>
-  <nav class="filters" aria-label="What needs a look">
-    <%= link_to list.call(filter: nil), class: [ "filter", ("current" if @filter.nil?) ] do %>
-      All <span class="count"><%= @counts.fetch(@tab) %></span>
-    <% end %>
-    <% CompaniesController::FILTERS.each do |filter, (label, holds, _)| %>
-      <%= link_to list.call(filter: filter), class: [ "filter", ("current" if filter == @filter) ], title: holds do %>
-        <%= label %> <span class="count"><%= @filter_counts.fetch(filter) %></span>
-      <% end %>
-    <% end %>
-  </nav>
-<% end %>
-
-<% if @fit || @reviewed %>
-  <nav class="filters" aria-label="Filter by fit">
-    <span class="muted small">Fit:</span>
-    <%= link_to "Any", list.call(fit: nil), class: [ "filter", ("current" if @fit.nil?) ] %>
-    <% CompaniesController::FITS.each do |fit, label| %>
-      <%= link_to list.call(fit: fit), class: [ "filter", ("current" if fit == @fit) ] do %>
-        <%= label %> <span class="count"><%= @fit_counts.fetch(fit) %></span>
-      <% end %>
-    <% end %>
-  </nav>
+  <% if @fit || @reviewed %>
+    <label>
+      <span class="muted small">Fit</span>
+      <%= select_tag :fit, options_for_select([ [ "Any", "" ] ] + CompaniesController::FITS.map { |fit, label| [ "#{label} (#{@fit_counts.fetch(fit)})", fit ] }, @fit),
+                     id: nil, data: { action: "autosubmit#submit" } %>
+    </label>
+  <% end %>
+  <% @fact_options.each do |fact, options| %>
+    <label>
+      <span class="muted small"><%= CompaniesController::FACTS.fetch(fact) %></span>
+      <%= select_tag fact, options_for_select(options, @facts[fact]), include_blank: "Any", id: nil, data: { action: "autosubmit#submit" } %>
+    </label>
+  <% end %>
+  <label>
+    <span class="muted small">Order</span>
+    <%= select_tag :sort, options_for_select([ [ "Application, fit, roles, last checked", "" ] ] +
+                                             CompaniesController::SORTS.map { |key, label| [ label, key ] }, @sort),
+                   id: nil, data: { action: "autosubmit#submit" } %>
+  </label>
+  <%= link_to "Clear", list.call(filter: nil, fit: nil, sort: nil, **fact_keys.index_with(nil)), class: "small" if @filter || @fit || @sort || @facts.any? %>
+  <noscript><button type="submit" class="btn small">Apply</button></noscript>
 <% end %>
 
 <% if @companies.empty? %>
@@ -116,17 +114,18 @@
 <% else %>
   <% suggested = @tab == "suggested" %>
   <% bulk = @tab == "tracked" || suggested %>
-  <% fit_sort = link_to("Fit#{' ↓' if @sort}", list.call(sort: (@sort ? nil : "fit")), title: (@sort ? "Back to name order" : "Best fit first")) %>
+  <% fit_sort = link_to("Fit#{' ↓' if @sort == 'fit'}", list.call(sort: (@sort == "fit" ? nil : "fit")),
+                        title: (@sort == "fit" ? "Back to the default order: by application, then fit" : "Best fit first")) %>
   <%= tag.div(data: { controller: ("bulk" if bulk) }) do %>
     <% if suggested %>
       <%= form_with url: track_many_companies_path, method: :patch, id: "bulk-companies", class: "bulk-form" do |form| %>
-        <span class="muted small" data-bulk-target="count">None selected</span>
+        <span class="small" data-bulk-target="count">None selected</span>
         <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why", placeholder: "Why track them, or decline them?" %>
         <%= form.submit "Track selected", class: "btn small primary", disabled: true,
                                           data: { bulk_target: "submit",
                                                   turbo_confirm: "Track the selected proposals? Each one's board is read at once, free; " \
                                                                  "one with no known board waits for Check now to find its careers page." } %>
-        <%= form.submit "Archive selected", class: "btn small", disabled: true, formaction: dismiss_many_companies_path,
+        <%= form.submit "Archive selected", class: "btn", disabled: true, formaction: dismiss_many_companies_path,
                                             data: { bulk_target: "submit",
                                                     turbo_confirm: "Decline the selected proposals? They are archived, and never proposed again." } %>
       <% end %>
@@ -134,10 +133,10 @@
       <%= form_with url: dismiss_many_companies_path, method: :patch, id: "bulk-companies", class: "bulk-form",
                     data: { turbo_confirm: "Archive the selected companies, with their tracked and suggested roles? They are never " \
                                            "checked, suggested from or reviewed again, until you track one again." } do |form| %>
-        <span class="muted small" data-bulk-target="count">None selected</span>
+        <span class="small" data-bulk-target="count">None selected</span>
         <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why archive them",
                                    placeholder: "Why archive them?" %>
-        <%= form.submit "Archive selected", class: "btn small", disabled: true, data: { bulk_target: "submit" } %>
+        <%= form.submit "Archive selected", class: "btn", disabled: true, data: { bulk_target: "submit" } %>
       <% end %>
     <% end %>
     <div class="table-wrap">
@@ -184,7 +183,7 @@
                   <% end %>
                 </td>
                 <td><%= company_fit_cell(@reviews[company.id], @profile) %></td>
-                <td><%= ago(@last_checked[company.id]) %></td>
+                <td><%= short_ago(@last_checked[company.id]) %></td>
               <% end %>
             </tr>
           <% end %>

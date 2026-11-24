@@ -23,8 +23,7 @@ RSpec.describe "Companies", type: :request do
                                      "2 tracked", "1 gone · 1 no answer yet",
                                      "Maybe Corp", "to confirm", "Bare Inc", "none found", "Archive selected")
     expect(response.body).not_to include("Gone Ltd")
-    expect(response.body).to include("No careers page yet <span class=\"count\">1</span>", "Page to confirm <span class=\"count\">1</span>",
-                                     "No role tracked <span class=\"count\">2</span>", "None still listed <span class=\"count\">1</span>")
+    expect(response.body).to include("No careers page yet (1)", "Page to confirm (1)", "No role tracked (2)", "None still listed (1)")
 
     get companies_path(filter: "to_confirm")
     expect(response.body).to include("Maybe Corp").and(not_include("Bare Inc", "Acme<"))

@@ -38,50 +38,50 @@
 </div>
 <%= render "check_runs/run", run: @fit_run, poll: false if @fit_run %>
 
-<details class="add" <%= "open" if params[:add] %>>
-  <summary class="btn">Add a role</summary>
-  <%= render "roles/add_form", company: nil %>
-</details>
-
-<nav class="tabs">
-  <% RolesController::TABS.each do |tab| %>
-    <%= link_to roles_path(tab: tab, q: @q), class: ("current" if tab == @tab) do %>
-      <%= tracking_label(tab).capitalize %> <span class="count"><%= @counts.fetch(tab, 0) %></span>
-    <% end %>
-  <% end %>
-</nav>
-
-<%= render "shared/find", url: roles_path, keep: { tab: @tab, answer: @answer }, value: @q,
-                          clear: roles_path(tab: @tab, answer: @answer), placeholder: "Title, company, or place" %>
-
-<nav class="filters" aria-label="Filter by listing">
-  <%= link_to roles_path(tab: @tab, q: @q), class: [ "filter", ("current" if @answer.nil?) ] do %>
-    All <span class="count"><%= @answer_counts.values.sum %></span>
-  <% end %>
-  <% RolesController::ANSWERS.each do |state| %>
-    <%= link_to roles_path(tab: @tab, answer: state, q: @q),
-                class: [ "filter", answer_tone(state), ("current" if state == @answer) ] do %>
-      <%= answer_label(state) %> <span class="count"><%= @answer_counts.fetch(state, 0) %></span>
-    <% end %>
-  <% end %>
-</nav>
-
-<% if @fits.any? || @fit %>
-  <nav class="filters" aria-label="Filter by fit">
-    <span class="muted small" title="The ATS fit: your resume alone, as a recruiter's screening system would read it">ATS fit:</span>
-    <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, sort: @sort), class: [ "filter", ("current" if @fit.nil?) ] do %>
-      Any
-    <% end %>
-    <% RolesController::FITS.each do |key, label| %>
-      <% next if key == "before_background" && !@background && key != @fit %>
-      <% next if key == "before_screen" && @fit_counts.fetch(key, 0).zero? && key != @fit %>
-      <%= link_to roles_path(tab: @tab, answer: @answer, q: @q, fit: key, sort: @sort), class: [ "filter", ("current" if key == @fit) ],
-                  title: { "before_background" => "Weighed before your background as it is now: no Background fit read against it",
-                           "before_screen" => "Weighed before the screen check: their must-haves weren't read one by one" }[key] do %>
-        <%= label %> <span class="count"><%= @fit_counts.fetch(key, 0) %></span>
+<%# One row (4e): the tabs, then finding and adding; the filters and the order below, applied as soon as one changes. %>
+<div class="list-toolbar">
+  <nav class="tabs">
+    <% RolesController::TABS.each do |tab| %>
+      <%= link_to roles_path(tab: tab, q: @q), class: ("current" if tab == @tab) do %>
+        <%= tracking_label(tab).capitalize %> <span class="count"><%= @counts.fetch(tab, 0) %></span>
       <% end %>
     <% end %>
   </nav>
+  <div class="toolbar-tools">
+    <%= render "shared/find", url: roles_path, keep: { tab: @tab, answer: @answer, fit: @fit, sort: @sort }, value: @q,
+                              clear: roles_path(tab: @tab, answer: @answer, fit: @fit, sort: @sort), placeholder: "Title, company, or place" %>
+    <details class="add" <%= "open" if params[:add] %>>
+      <summary class="btn primary">Add a role</summary>
+      <%= render "roles/add_form", company: nil %>
+    </details>
+  </div>
+</div>
+
+<%= form_with url: roles_path, method: :get, class: "list-filters", data: { controller: "autosubmit" }, "aria-label": "Narrow and order the list" do %>
+  <%= hidden_field_tag :tab, @tab, id: nil %>
+  <%= hidden_field_tag :q, @q, id: nil if @q %>
+  <label>
+    <span class="muted small">Listing</span>
+    <%= select_tag :answer, options_for_select([ [ "Any (#{@answer_counts.values.sum})", "" ] ] +
+                                               RolesController::ANSWERS.map { |state| [ "#{answer_label(state)} (#{@answer_counts.fetch(state, 0)})", state ] }, @answer),
+                   id: nil, data: { action: "autosubmit#submit" } %>
+  </label>
+  <% if @fits.any? || @fit %>
+    <% fits = RolesController::FITS.reject do |key, _|
+         (key == "before_background" && !@background && key != @fit) || (key == "before_screen" && @fit_counts.fetch(key, 0).zero? && key != @fit)
+       end %>
+    <label title="The ATS fit: your resume alone, as a recruiter's screening system would read it">
+      <span class="muted small">ATS fit</span>
+      <%= select_tag :fit, options_for_select([ [ "Any", "" ] ] + fits.map { |key, label| [ "#{label} (#{@fit_counts.fetch(key, 0)})", key ] }, @fit),
+                     id: nil, data: { action: "autosubmit#submit" } %>
+    </label>
+  <% end %>
+  <label>
+    <span class="muted small">Order</span>
+    <%= select_tag :sort, options_for_select([ [ "Application, fit, last checked", "" ] ] + RolesController::SORTS.map { |key, label| [ label, key ] }, @sort),
+                   id: nil, data: { action: "autosubmit#submit" } %>
+  </label>
+  <noscript><button type="submit" class="btn small">Apply</button></noscript>
 <% end %>
 
 <% if @roles.any? %>
@@ -90,10 +90,10 @@
     <% if bulk %>
       <%= form_with url: dismiss_many_roles_path, method: :patch, id: "bulk-dismiss", class: "bulk-form",
                     data: { turbo_confirm: "Archive the selected roles? They are never checked or suggested again, until you track one again." } do |form| %>
-        <span class="muted small" data-bulk-target="count">None selected</span>
+        <span class="small" data-bulk-target="count">None selected</span>
         <%= form.text_field :note, required: true, autocomplete: "off", "aria-label": "Why archive them",
                                    placeholder: "Why archive them?" %>
-        <%= form.submit "Archive selected", class: "btn small", disabled: true, data: { bulk_target: "submit" } %>
+        <%= form.submit "Archive selected", class: "btn", disabled: true, data: { bulk_target: "submit" } %>
       <% end %>
     <% end %>
     <%= render "table", roles: @roles, fit: @tab == "suggested", bulk: bulk, fits: @fits, company_fits: @company_fits, profile: @profile,

@@ -124,9 +124,8 @@ RSpec.describe "Finding companies", type: :request do
     it "shows each company's newest score, stale ones marked, and narrows and sorts by it" do
       get companies_path
 
-      expect(response.body).to include(">88<", ">64<", ">75<", "stale", "85 and up <span class=\"count\">1</span>",
-                                       "70 and up <span class=\"count\">2</span>", "50 and up <span class=\"count\">3</span>",
-                                       "Not reviewed <span class=\"count\">1</span>", "Stale <span class=\"count\">1</span>")
+      expect(response.body).to include(">88<", ">64<", ">75<", "stale", "85 and up (1)", "70 and up (2)", "50 and up (3)",
+                                       "Not reviewed (1)", "Stale (1)")
       expect(response.body).not_to include(">40<") # the newest is shown, the one before on its page
 
       get companies_path(fit: "70")

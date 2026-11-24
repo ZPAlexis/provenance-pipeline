@@ -74,6 +74,34 @@ module ApplicationHelper
                                                class: "nowrap")
   end
 
+  # How long ago, in the fewest characters, for a list's narrow column (4e): "3d", "5w", "2mo"; in full on hover.
+  def short_ago(time)
+    return tag.span("never", class: "muted") if time.nil?
+
+    seconds = Time.current - time
+    text = if seconds < 1.hour then "now"
+    elsif seconds < 1.day then "#{(seconds / 1.hour).floor}h"
+    elsif seconds < 14.days then "#{(seconds / 1.day).floor}d"
+    elsif seconds < 60.days then "#{(seconds / 1.week).floor}w"
+    elsif seconds < 1.year then "#{(seconds / 30.days).floor}mo"
+    else "#{(seconds / 1.year).floor}y"
+    end
+    tag.time(text, datetime: time.utc.iso8601, title: "#{time_ago_in_words(time)} ago, #{time.utc.strftime('%Y-%m-%d %H:%M UTC')}",
+                   class: "nowrap")
+  end
+
+  # A page's link in a list's narrow column (4e): its site in two words ("greenhouse.io", "acme.com"), the address on hover.
+  def short_link(url)
+    return tag.span("—", class: "muted") if url.blank?
+
+    host = URI.parse(url).host.to_s
+    return url if host.empty?
+
+    link_to("#{host.split('.').last(2).join('.')} ↗", url, target: "_blank", rel: "noopener noreferrer", title: url, class: "nowrap")
+  rescue URI::InvalidURIError
+    url
+  end
+
   # An outside address, shown short: its host and path (or its host alone), opened in a new tab.
   def outside_link(url, label: nil, host_only: false)
     return tag.span("—", class: "muted") if url.blank?

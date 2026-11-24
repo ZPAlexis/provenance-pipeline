@@ -573,6 +573,35 @@ td form.button_to { display: inline-block; }
   border-radius: 6px;
 }
 .bulk-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+/* Until something is picked, the bar stays out of the way (4e). */
+[data-controller~="bulk"]:not(.picked) > .bulk-form { display: none; }
+
+/* A list's tools in one row (4e): its tabs, then finding and adding; the filters and the order under them. */
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 8px 0 8px;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.list-toolbar .tabs { margin: 0; box-shadow: none; flex: 1 1 auto; }
+.list-toolbar .toolbar-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding-bottom: 6px; }
+.list-toolbar .find-form { margin: 0; }
+.list-toolbar details.add { margin: 0; }
+.list-toolbar details.add[open] { flex-basis: 100%; }
+.list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 4px 0 12px; }
+.list-filters label { display: flex; align-items: center; gap: 6px; }
+.list-filters select {
+  max-width: 240px;
+  padding: 4px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 
 /* Contacts (Stage 2e): the people at a company, on its page and its applications' */
 

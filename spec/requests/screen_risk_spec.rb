@@ -46,7 +46,7 @@ RSpec.describe "Screen risk, on the pages", type: :request do
     get roles_path
 
     expect(response.body).to include("screen risk", "Not on the resume: 3+ years of hands-on AI. Capped from 74",
-                                     "Before the screen check <span class=\"count\">1</span>")
+                                     "Before the screen check (1)")
     get roles_path(fit: "before_screen")
     expect(response.body).to include("Deal Desk Analyst").and(not_include("Senior AI Solutions Engineer"))
   end

@@ -5,13 +5,13 @@
         <% if local_assigns[:bulk] %>
           <th><input type="checkbox" aria-label="Select every role listed" data-bulk-target="all" data-action="bulk#all"></th>
         <% end %>
-        <th>Role</th><th>Company</th><th>Location</th><th>Listing</th><th>Checked</th>
+        <th>Role</th><th>Application</th><th>Listing</th>
         <% if local_assigns[:fits] %>
           <% sorted = local_assigns[:sorted] %>
           <th><%= link_to "ATS fit#{' ↓' if sorted == 'fit'}", sorts.call("fit"),
-                          title: (sorted == "fit" ? "Back to company order" : "Your resume alone, as a recruiter's screening system would read it: best first") %></th>
+                          title: (sorted == "fit" ? "Back to the default order: by application, then fit" : "Your resume alone, as a recruiter's screening system would read it: best first") %></th>
           <th><%= link_to "Company fit#{' ↓' if sorted == 'company_fit'}", sorts.call("company_fit"),
-                          title: (sorted == "company_fit" ? "Back to company order" : "Its company's review against your company preferences, best first: a separate score, never weighed into the role's") %></th>
+                          title: (sorted == "company_fit" ? "Back to the default order: by application, then fit" : "Its company's review against your company preferences, best first: a separate score, never weighed into the role's") %></th>
         <% end %>
         <% if local_assigns[:fit] %><th>Why suggested</th><% else %><th>Own page</th><% end %>
         <th>Watch list</th>
@@ -24,11 +24,12 @@
             <td><input type="checkbox" name="ids[]" value="<%= role.id %>" form="bulk-dismiss" aria-label="Select <%= role.role_title %>"
                        data-bulk-target="box" data-action="bulk#count"></td>
           <% end %>
-          <td><%= link_to role.role_title, role_path(role) %></td>
-          <td><%= link_to role.company.name, company_path(role.company) %></td>
-          <td class="muted"><%= role.location %></td>
-          <td><%= answer_badge(role.verification_state) %></td>
-          <td><%= ago(role.last_checked_at) %></td>
+          <td>
+            <%= link_to role.role_title, role_path(role) %>
+            <div class="small"><%= link_to role.company.name, company_path(role.company) %><span class="muted"><%= " · #{role.location}" if role.location %></span></div>
+          </td>
+          <td><%= (application = role.application) ? link_to(stage_badge(application.stage), application_path(application)) : tag.span("—", class: "muted") %></td>
+          <td class="nowrap"><%= answer_badge(role.verification_state) %> <span class="muted small"><%= short_ago(role.last_checked_at) %></span></td>
           <% if local_assigns[:fits] %>
             <td><%= fit_cell(fits[role.id]) %></td>
             <td><%= company_fit_cell(company_fits[role.company_id], profile) %></td>
@@ -36,7 +37,7 @@
           <% if local_assigns[:fit] %>
             <td class="reason"><%= fit_reasons(role) %></td>
           <% else %>
-            <td><%= outside_link(role.job_url, host_only: true) %></td>
+            <td><%= short_link(role.job_url) %></td>
           <% end %>
           <td><%= render "roles/watch", role: role %></td>
         </tr>

@@ -44,6 +44,6 @@ RSpec.describe "A role's page", type: :request do
 
   it "says Listing, not Answer, on the Roles list" do
     get roles_path
-    expect(response.body).to include("<th>Listing</th>", %(aria-label="Filter by listing")).and not_include("<th>Answer</th>")
+    expect(response.body).to include("<th>Listing</th>", %(<span class="muted small">Listing</span>)).and not_include("<th>Answer</th>")
   end
 end
