@@ -5,7 +5,7 @@
         <% if local_assigns[:bulk] %>
           <th><input type="checkbox" aria-label="Select every role listed" data-bulk-target="all" data-action="bulk#all"></th>
         <% end %>
-        <th>Role</th><th>Company</th><th>Location</th><th>Answer</th><th>Checked</th>
+        <th>Role</th><th>Company</th><th>Location</th><th>Listing</th><th>Checked</th>
         <% if local_assigns[:fits] %>
           <% sorted = local_assigns[:sorted] %>
           <th><%= link_to "ATS fit#{' ↓' if sorted == 'fit'}", sorts.call("fit"),

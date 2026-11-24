@@ -3,30 +3,32 @@ import { Controller } from "@hotwired/stimulus"
 // Tabs inside a page (4e): every panel is in the page already, so switching is
 // instant and fetches nothing. A panel's id is the anchor links into the page
 // have always used (#links, #fit), so a link or a redirect to one opens the
-// panel holding it. The tab chosen is remembered for this page while the
-// browser tab is open, so a form sent from a tab comes back to it, and it is
-// put back after a refresh that morphs the page.
+// panel holding it. A page opens on its first tab, unless a form was just sent
+// from another: that tab is remembered once, so the page comes back to it
+// (Turbo drops a redirect's anchor). It is put back after a morph refresh.
 export default class extends Controller {
   static targets = ["tab", "panel"]
 
   connect() {
-    this.show(this.fromHash() || this.remembered() || this.panelTargets[0]?.id)
+    this.show(this.fromHash() || this.sentFrom() || this.panelTargets[0]?.id)
     this.onHash = () => { const id = this.fromHash(); if (id) this.show(id) }
     this.onMorph = () => this.show(this.current)
+    this.onSubmit = () => this.remember(this.current)
     window.addEventListener("hashchange", this.onHash)
     document.addEventListener("turbo:morph", this.onMorph)
+    this.element.addEventListener("submit", this.onSubmit)
   }
 
   disconnect() {
     window.removeEventListener("hashchange", this.onHash)
     document.removeEventListener("turbo:morph", this.onMorph)
+    this.element.removeEventListener("submit", this.onSubmit)
   }
 
   select(event) {
     event.preventDefault()
     const id = event.currentTarget.getAttribute("aria-controls")
     this.show(id)
-    this.remember(id)
     history.replaceState(history.state, "", `#${id}`)
   }
 
@@ -71,8 +73,13 @@ export default class extends Controller {
     return panel?.id
   }
 
-  remembered() {
-    try { return sessionStorage.getItem(this.key_) } catch { return null }
+  // The tab a form was just sent from, once: read and forgotten.
+  sentFrom() {
+    try {
+      const id = sessionStorage.getItem(this.key_)
+      sessionStorage.removeItem(this.key_)
+      return id
+    } catch { return null }
   }
 
   remember(id) {

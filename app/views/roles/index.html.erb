@@ -54,7 +54,7 @@
 <%= render "shared/find", url: roles_path, keep: { tab: @tab, answer: @answer }, value: @q,
                           clear: roles_path(tab: @tab, answer: @answer), placeholder: "Title, company, or place" %>
 
-<nav class="filters" aria-label="Filter by answer">
+<nav class="filters" aria-label="Filter by listing">
   <%= link_to roles_path(tab: @tab, q: @q), class: [ "filter", ("current" if @answer.nil?) ] do %>
     All <span class="count"><%= @answer_counts.values.sum %></span>
   <% end %>

@@ -27,13 +27,16 @@ RSpec.describe "Screen risk, on the pages", type: :request do
     weigh(unscreened, 66)
   end
 
-  it "reads the must-haves above both fits on a role's page, and what capped the ATS fit" do
+  # Since 4e: the risk in the role's header, and on its Fit tab the two fits first, then what the resume doesn't show.
+  it "reads the must-haves after both fits on a role's page, its risk in the header, and what capped the ATS fit" do
     get role_path(screened)
 
-    expect(response.body).to include("Screen risk", "Likely screened out on: 3+ years of hands-on AI.", "not shown", "on the resume",
-                                     "The AI work starts in 2026.", "[3] - Ran discovery for 35 accounts a year.", "of 100, capped from 74",
-                                     "One not on your resume caps the ATS fit at 69")
-    expect(response.body.index("Screen risk")).to be < response.body.index("ATS fit")
+    body = response.body
+    expect(body).to include("What your resume doesn't show", "Likely screened out on: 3+ years of hands-on AI.", "not shown",
+                            "on the resume", "The AI work starts in 2026.", "[3] - Ran discovery for 35 accounts a year.",
+                            "of 100, capped from 74", "One must-have not on your resume caps the ATS fit at 69")
+    expect(body.index("Likely screened out on")).to be < body.index(%(role="tablist"))
+    expect(body.index("<h3>ATS fit</h3>")).to be < body.index("What your resume doesn't show")
 
     get role_path(unscreened)
     expect(response.body).to include("Weighed before the screen check: weigh it again to read its must-haves one by one.")

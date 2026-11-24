@@ -107,6 +107,19 @@ main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 48px; }
 
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
 .page-head .sub { color: var(--muted); }
+/* A detail page's header (4e): its state and fits under the title, its actions beside it. */
+.page-head .fit-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 6px 0 2px; }
+.page-head .fit-strip-item { white-space: nowrap; }
+.page-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; justify-content: flex-end; max-width: 420px; }
+.page-actions .check-form { margin: 0; }
+.page-actions details[open] { flex-basis: 100%; }
+/* One decision at a time: while a fold's form is open, the other actions step aside. */
+.page-actions:has(details[open]) > :not(details[open]):not(:has(details[open])) { display: none; }
+.page-actions:has(details[open]) > :has(details[open]) { flex-basis: 100%; }
+@media (max-width: 720px) {
+  .page-head { flex-direction: column; }
+  .page-actions { justify-content: flex-start; max-width: none; }
+}
 .head-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 
 /* Flash */
@@ -161,6 +174,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0; }
 dl.facts dt { color: var(--muted); }
 dl.facts dd { margin: 0; overflow-wrap: anywhere; }
+/* A record's overview (4e), always in view above its tabs: two columns of facts on a wide screen. */
+@media (min-width: 1000px) {
+  dl.facts.overview { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); }
+}
+/* The two fits side by side (4e), each with its score and why. */
+.fit-scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 28px; }
+.fit-scores h3 { margin-top: 8px; }
 /* A company's careers-page details, folded under the facts that matter to the operator (4a). */
 details.facts-more { margin: 0 0 12px; }
 details.facts-more > summary { cursor: pointer; }
@@ -244,7 +264,7 @@ details.how .how-body p { margin: 4px 0; }
 .watch details[open] > summary { display: none; }
 .watch:has(details[open]) > details:not([open]) { display: none; }
 .watch-form { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
-.watch-form input[type="text"] {
+.watch-form input[type="text"], .watch-form input[type="date"], .watch-form select {
   width: 200px;
   padding: 4px 8px;
   font: 13px var(--font);
@@ -253,6 +273,9 @@ details.how .how-body p { margin: 4px 0; }
   border: 1px solid var(--line);
   border-radius: 6px;
 }
+
+.watch-form label { display: flex; align-items: center; gap: 8px; }
+.watch-form label > input, .watch-form label > select { width: 160px; }
 
 /* Check now */
 

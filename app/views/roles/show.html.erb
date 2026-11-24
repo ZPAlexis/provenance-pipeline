@@ -1,21 +1,63 @@
 <% content_for :title, "#{@role.role_title} · Provenance Pipeline" %>
+<%# A role's page (4e): its header (its listing, how it fits, and what you can do), its overview always in view, then
+    tabs: its fit first, its description, and its checks and history. %>
+<% score = @fit&.score %>
+<% application = @role.application %>
 <div class="page-head">
   <div>
     <h1><%= @role.role_title %></h1>
     <p class="sub">
       <%= link_to @role.company.name, company_path(@role.company) %><%= " · #{@role.location}" if @role.location %>
     </p>
+    <p class="fit-strip">
+      <%= answer_badge(@role.verification_state) %> <%= tracking_badge(@role.tracking) %>
+      <span class="fit-strip-item"><span class="muted small">ATS fit</span> <%= score ? fit_badge(score.score) : tag.span("—", class: "muted", title: "Not weighed yet") %></span>
+      <% if score&.background_reading? %>
+        <span class="fit-strip-item"><span class="muted small">Background fit</span> <%= fit_badge(score.background_score) %></span>
+      <% end %>
+      <span class="fit-strip-item"><span class="muted small">Company fit</span> <%= company_fit_cell(@company_review, @profile) %></span>
+    </p>
+    <% if score&.screened? && score.screen_risks.any? %>
+      <p class="small warn">Likely screened out on: <%= score.screen_risks.map { |must| must["asks"] }.to_sentence %>.</p>
+    <% end %>
   </div>
-  <div><%= answer_badge(@role.verification_state) %> <%= tracking_badge(@role.tracking) %></div>
+  <div class="page-actions">
+    <%= render "check_runs/panel", record: @role, run: @run, compact: true %>
+    <%= render "roles/watch", role: @role %>
+    <% if application %>
+      <%= link_to "Open its application", application_path(application), class: "btn primary" %>
+    <% else %>
+      <details class="start-app" data-controller="fold" <%= "open" if params[:apply] %>>
+        <summary class="btn primary">Start an application</summary>
+        <%= form_with url: applications_path, class: "watch-form" do |form| %>
+          <%= hidden_field_tag :posting_id, @role.id %>
+          <label class="small">Stage <%= select_tag :stage, stage_options("interested") %></label>
+          <label class="small">On <%= form.date_field :on, value: Date.current, max: Date.current %></label>
+          <%= form.text_field :note, placeholder: "A note (optional)", autocomplete: "off", "aria-label": "Note" %>
+          <div class="button-row">
+            <%= form.submit "Start it", class: "btn primary" %>
+            <button type="button" class="btn quiet" data-action="fold#close">Cancel</button>
+          </div>
+          <% unless @role.tracking == "tracked" %><p class="muted small">Starting one tracks this role too.</p><% end %>
+        <% end %>
+      </details>
+    <% end %>
+  </div>
 </div>
+<%= render "check_runs/run", run: @run, poll: false if @run %>
 
-<dl class="facts">
-  <dt>Answer</dt>
+<dl class="facts overview">
+  <dt>Listing</dt>
   <dd><%= answer_label(@role.verification_state) %><%= ", checked " if @role.last_checked_at %><%= ago(@role.last_checked_at) if @role.last_checked_at %></dd>
-  <dt>Roles on the page then</dt>
-  <dd><%= @role.roles_listed_count || tag.span("unknown", class: "muted") %></dd>
-  <dt>Work mode</dt>
-  <dd><%= @role.work_mode || tag.span("not stated", class: "muted") %></dd>
+  <dt>Application</dt>
+  <dd>
+    <% if application %>
+      <%= link_to application_path(application) do %><%= stage_badge(application.stage) %><% end %>
+      <%= in_stage(application) %>, since <%= application.stage_changed_on %>
+    <% else %>
+      <span class="muted">none yet</span>
+    <% end %>
+  </dd>
   <dt>Its own page</dt>
   <dd><%= @role.job_url ? outside_link(@role.job_url, label: @role.job_url) : tag.span("not known yet", class: "muted") %></dd>
   <dt>Found at</dt>
@@ -23,8 +65,12 @@
   <dt>Watched page</dt>
   <dd>
     <%= outside_link(@role.company.careers_page_url, label: @role.company.careers_page_url) %>
-    <span class="muted small">· its company's careers page, set on <%= link_to "#{@role.company.name}'s page", company_path(@role.company) %></span>
+    <span class="muted small">· set on <%= link_to "#{@role.company.name}'s page", company_path(@role.company) %></span>
   </dd>
+  <dt>Work mode</dt>
+  <dd><%= @role.work_mode || tag.span("not stated", class: "muted") %></dd>
+  <dt>Roles on the page then</dt>
+  <dd><%= @role.roles_listed_count || tag.span("unknown", class: "muted") %></dd>
   <% if @role.fit %>
     <dt>Why suggested</dt>
     <dd><%= fit_reasons(@role) %></dd>
@@ -32,11 +78,8 @@
   <dt>Company fit</dt>
   <dd>
     <% if @company_review %>
-      <%= company_fit_cell(@company_review, @profile) %>
-      <span class="muted small">
-        · <%= link_to "#{@role.company.name}'s review", company_path(@role.company, anchor: "review") %> against your company
-        preferences: a separate score, never weighed into this role's fit
-      </span>
+      <%= link_to "#{@role.company.name}'s review", company_path(@role.company, anchor: "review") %>
+      <span class="muted small">against your company preferences: a separate score, never weighed into this role's fit</span>
     <% else %>
       <span class="muted">not reviewed</span>
       <span class="muted small">· your own Claude client reviews a company only when you ask</span>
@@ -60,84 +103,74 @@
   <% end %>
 </details>
 
-<h2>Application</h2>
-<% if (application = @role.application) %>
+<%= how_this_works do %>
   <p>
-    <%= stage_badge(application.stage) %> <%= in_stage(application) %>, since <%= application.stage_changed_on %>.
-    <%= link_to "Open its application", application_path(application) %>
+    <%= { "tracked" => "You track this role: every check looks for it, and it is on your watch list.",
+          "suggested" => "Suggested from your search profile. Track it to watch it, or archive it.",
+          "dismissed" => "You archived this role: it is never checked or suggested again, unless you track it." }
+          .fetch(@role.tracking) %>
+    A note you give to track or archive it becomes the reason on the record.
   </p>
-<% else %>
-  <%= form_with url: applications_path, class: "add-form" do |form| %>
-    <%= hidden_field_tag :posting_id, @role.id %>
-    <label>Stage <%= select_tag :stage, stage_options("interested") %></label>
-    <label>On <%= form.date_field :on, value: Date.current, max: Date.current %></label>
-    <label>Note <%= form.text_field :note, placeholder: "Referred by a former colleague", autocomplete: "off" %></label>
-    <%= form.submit "Start an application", class: "btn primary small" %>
-    <% unless @role.tracking == "tracked" %>
-      <p class="muted small">Starting one tracks this role too.</p>
-    <% end %>
-  <% end %>
+  <p>
+    "Check now" looks for the role on its own page first, free, then on its company's careers page. Its listing says
+    whether the employer still lists it, from the latest check.
+  </p>
 <% end %>
 
-<h2>Description</h2>
-<%= render "roles/description", role: @role, descriptions: @descriptions, run: @describe_run %>
+<div data-controller="tabs">
+<%= page_tabs([ [ "fit", "Fit" ], [ "description", "Description" ], [ "checks", "Checks and history" ] ], label: "This role") %>
 
-<h2 id="fit">Fit</h2>
-<%= render "roles/fit", role: @role, fit: @fit, earlier: @earlier_fits, descriptions: @descriptions, run: @fit_run %>
+<%= tab_panel "fit", first: true do %>
+  <%= render "roles/fit", role: @role, fit: @fit, earlier: @earlier_fits, descriptions: @descriptions, run: @fit_run %>
+<% end %>
 
-<h2>Is it still listed?</h2>
-<%= render "check_runs/panel", record: @role, run: @run %>
+<%= tab_panel "description" do %>
+  <%= render "roles/description", role: @role, descriptions: @descriptions, run: @describe_run %>
+<% end %>
 
-<h2>Watch list</h2>
-<p class="muted small">
-  <%= { "tracked" => "You track this role: every check looks for it, and it is on your watch list.",
-        "suggested" => "Suggested from your search profile. Track it to watch it, or archive it.",
-        "dismissed" => "You archived this role: it is never checked or suggested again, unless you track it." }
-        .fetch(@role.tracking) %>
-  Your note becomes the reason on the record.
-</p>
-<%= render "roles/watch", role: @role %>
+<%= tab_panel "checks" do %>
+  <h3>Checks</h3>
+  <% if @checks.any? %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>When</th><th>Read</th><th class="num">Roles</th><th>Listing</th><th>How it matched</th></tr></thead>
+        <tbody>
+          <% @checks.each do |check| %>
+            <% match = check.matches.find { |m| m["posting_id"] == @role.id } %>
+            <tr>
+              <td><%= ago(check.checked_at) %></td>
+              <td><%= outside_link(check.url) %><br><span class="muted small"><%= read_via_label(check.read_via) %></span></td>
+              <td class="num"><%= check.listing_count %></td>
+              <td><%= match["verdict"] ? answer_badge(match["verdict"]) : tag.span("inconclusive", class: "badge unsure") %></td>
+              <td class="reason"><%= match["reasoning"] %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="empty">No check has looked for this role yet.</p>
+  <% end %>
 
-<h2>History</h2>
-<p class="muted small">
-  Every change to this role: who made it, and why. Checks that confirmed the answer change nothing and are listed below.
-  <%= link_to "Narrow it in the audit log", audit_path(record: @role.id) %>
-</p>
-<div class="table-wrap">
-  <table>
-    <thead><tr><th>When</th><th>Change</th><th>By</th><th>Why</th></tr></thead>
-    <tbody>
-      <% @history.each do |event| %>
-        <tr>
-          <td><%= ago(event.occurred_at) %></td>
-          <td class="nowrap"><%= change_summary(event) %></td>
-          <td><%= actor_cell(event) %></td>
-          <td class="reason"><%= event.reasoning %></td>
-        </tr>
-      <% end %>
-    </tbody>
-  </table>
-</div>
-
-<h2>Checks</h2>
-<% if @checks.any? %>
+  <h3>History</h3>
+  <p class="muted small">
+    Every change to this role and to its fit: who made it, and why. A check that confirmed its listing changes nothing, and
+    is listed above only. <%= link_to "Narrow it in the audit log", audit_path(record: @role.id) %>
+  </p>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>When</th><th>Read</th><th class="num">Roles</th><th>Answer</th><th>How it matched</th></tr></thead>
+      <thead><tr><th>When</th><th>Change</th><th>By</th><th>Why</th></tr></thead>
       <tbody>
-        <% @checks.each do |check| %>
-          <% match = check.matches.find { |m| m["posting_id"] == @role.id } %>
+        <% @history.each do |event| %>
           <tr>
-            <td><%= ago(check.checked_at) %></td>
-            <td><%= outside_link(check.url) %><br><span class="muted small"><%= read_via_label(check.read_via) %></span></td>
-            <td class="num"><%= check.listing_count %></td>
-            <td><%= match["verdict"] ? answer_badge(match["verdict"]) : tag.span("inconclusive", class: "badge unsure") %></td>
-            <td class="reason"><%= match["reasoning"] %></td>
+            <td><%= ago(event.occurred_at) %></td>
+            <td class="nowrap"><%= change_summary(event) %></td>
+            <td><%= actor_cell(event) %></td>
+            <td class="reason"><%= event.reasoning %></td>
           </tr>
         <% end %>
       </tbody>
     </table>
   </div>
-<% else %>
-  <p class="empty">No check has looked for this role yet.</p>
 <% end %>
+</div>

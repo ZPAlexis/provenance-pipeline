@@ -1,13 +1,43 @@
 <%# How well this role fits you (2f): its newest score, weighed from its description, and the ones before it. Read two
     ways since 4c: the ATS fit, your resume alone as a recruiter's screening system would read it, and the Background
     fit beside it, read with your background too. Weighed only when you ask; what it costs is asked first. Screened since
-    4d: each must-have the role states, read one by one, above both readings; one not on your resume caps the ATS fit. %>
+    4d: each must-have the role states, read one by one; one not on your resume caps the ATS fit. Ordered since 4e: the
+    two fits first, then what your resume doesn't show, then what it shows. %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
 <% background = SearchProfile.current&.backgrounds&.newest_first&.first %>
 <section class="check-now">
   <% if fit %>
     <% score = fit.score %>
-    <h3 id="screen-risk">Screen risk</h3>
+    <div class="fit-scores">
+      <div>
+        <h3>ATS fit</h3>
+        <p class="fit-head"><%= fit_badge(score.score) %> <span class="muted small">of 100<%= ", capped from #{score.score_before_cap}" if score.capped? %></span> <%= score.why %></p>
+        <p class="muted small">Your resume alone, as a recruiter's screening system would read it.</p>
+        <% if score.level %><p class="small"><span class="muted">Level:</span> <%= score.level %></p><% end %>
+      </div>
+      <div>
+        <h3 id="background-fit">Background fit</h3>
+        <% if score.background_reading? %>
+          <p class="fit-head"><%= fit_badge(score.background_score) %> <span class="muted small">of 100<%= ", capped from #{score.background_score_before_cap}" if score.background_capped? %></span> <%= score.background_why %></p>
+          <p class="muted small">With your background too: what you're looking for, your role preferences, what isn't on your resume, and your links.</p>
+        <% elsif background %>
+          <p class="muted small">
+            Before your background: weighed from your resume alone. Weigh it again below, or ask your Claude client to ("Weigh
+            my roles", before your background), for a Background fit beside this one.
+          </p>
+        <% else %>
+          <p class="muted small">Save your <%= link_to "background", profile_path(anchor: "background") %> on the Profile page for a Background fit beside this one.</p>
+        <% end %>
+      </div>
+    </div>
+    <% if fit.stale? %>
+      <p class="small warn"><%= fit.stale.to_sentence.upcase_first %> changed since it was weighed: weigh it again for a current score.</p>
+    <% end %>
+    <% if score.background_reading? && fit.background_stale %>
+      <p class="small warn">Your background changed since: weigh it again for a current Background fit.</p>
+    <% end %>
+
+    <h3 id="screen-risk">What your resume doesn't show</h3>
     <% if score.screened? %>
       <% risks = score.screen_risks %>
       <% if risks.any? %>
@@ -18,6 +48,7 @@
         <p class="muted small">The role states no must-have.</p>
       <% end %>
       <% if score.must_haves.any? %>
+        <p class="small"><strong>Its must-haves</strong> <span class="muted">· what a recruiter, or their screening system, checks first</span></p>
         <ul class="small drew-on">
           <% score.must_haves.each do |must| %>
             <li><%= tag.span(FitScore::SHOWN_IN.fetch(must["shown_in"]), class: [ "badge", { "resume" => "live", "background" => "unsure", "none" => "gone" }[must["shown_in"]] ]) %>
@@ -27,32 +58,10 @@
           <% end %>
         </ul>
       <% end %>
-      <p class="muted small">
-        What a recruiter, or their screening system, checks first: what the role states it requires.
-        One not on your resume caps the ATS fit at <%= FitScore::CAP %>; one shown nowhere caps the Background fit.
-      </p>
     <% else %>
       <p class="muted small">Weighed before the screen check: weigh it again to read its must-haves one by one.</p>
     <% end %>
-
-    <h3>ATS fit</h3>
-    <p class="fit-head"><%= fit_badge(score.score) %> <span class="muted small">of 100<%= ", capped from #{score.score_before_cap}" if score.capped? %></span> <%= score.why %></p>
-    <p class="muted small">Your resume alone, as a recruiter's screening system would read it.</p>
-    <% if score.level %><p class="small"><span class="muted">Level:</span> <%= score.level %></p><% end %>
     <div class="fit-lists">
-      <div>
-        <p class="small"><strong>What it asks that your resume shows</strong></p>
-        <% if score.matches.any? %>
-          <ul class="small drew-on">
-            <% score.matches.each do |match| %>
-              <li><%= match["point"] %>
-                <% match["lines"].each do |line| %><br><span class="muted">[<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
-            <% end %>
-          </ul>
-        <% else %>
-          <p class="muted small">Nothing it found.</p>
-        <% end %>
-      </div>
       <div>
         <p class="small"><strong>What it asks that your resume doesn't show</strong></p>
         <% if score.gaps.any? %>
@@ -63,31 +72,7 @@
           <p class="muted small">Nothing it found.</p>
         <% end %>
       </div>
-    </div>
-    <% if score.dropped_lines.positive? %>
-      <p class="small warn">It named <%= pluralize(score.dropped_lines, "line") %> your resume doesn't have; they were left out.</p>
-    <% end %>
-    <% call = score.llm_call %>
-    <p class="muted small">
-      Weighed <%= ago(score.created_at) %> by <%= score.writer %><%= " with #{call.model} for #{cost(call.cost_usd)}" if call %>,
-      from your resume <%= score.resume ? "saved #{score.resume.created_at.to_date}" : "(since deleted)" %> and its description
-      <%= score.role_description ? "read #{score.role_description.first_read_at.to_date}" : "(no longer on record)" %>.
-      Advice for ranking roles: it claims nothing for you.
-    </p>
-    <% if fit.stale? %>
-      <p class="small warn"><%= fit.stale.to_sentence.upcase_first %> changed since it was weighed: weigh it again for a current score.</p>
-    <% end %>
-    <% if earlier.any? %>
-      <p class="muted small">
-        Before: <%= safe_join(earlier.map { |before| "#{before.score}#{" (Background fit #{before.background_score})" if before.background_reading?} on #{before.created_at.to_date}" }, ", ") %>.
-      </p>
-    <% end %>
-
-    <h3 id="background-fit">Background fit</h3>
-    <% if score.background_reading? %>
-      <p class="fit-head"><%= fit_badge(score.background_score) %> <span class="muted small">of 100<%= ", capped from #{score.background_score_before_cap}" if score.background_capped? %></span> <%= score.background_why %></p>
-      <p class="muted small">With your background too: what you're looking for, your role preferences, and what isn't on your resume.</p>
-      <div class="fit-lists">
+      <% if score.background_reading? %>
         <div>
           <p class="small"><strong>Gaps your background covers</strong></p>
           <% if score.covered.any? %>
@@ -101,37 +86,56 @@
             <p class="muted small">None: what the resume doesn't show, the background doesn't either.</p>
           <% end %>
         </div>
-        <div>
-          <p class="small"><strong>Your role preferences</strong></p>
-          <% if score.preferences.any? %>
-            <ul class="small drew-on">
-              <% score.preferences.each do |point| %>
-                <li><%= tag.span(point["verdict"] == "match" ? "met" : "missed", class: [ "badge", point["verdict"] == "match" ? "live" : "gone" ]) %>
-                  <%= point["preference"] %><%= ": #{point['why']}" if point["why"] %>
-                  <% point["lines"].each do |line| %><br><span class="muted">[B<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
-              <% end %>
-            </ul>
-          <% else %>
-            <p class="muted small">None the role touches.</p>
+      <% end %>
+    </div>
+    <p class="muted small">
+      One must-have not on your resume caps the ATS fit at <%= FitScore::CAP %>; one shown nowhere caps the Background fit.
+    </p>
+
+    <h3>What your resume shows</h3>
+    <% if score.matches.any? %>
+      <ul class="small drew-on">
+        <% score.matches.each do |match| %>
+          <li><%= match["point"] %>
+            <% match["lines"].each do |line| %><br><span class="muted">[<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="muted small">Nothing it found.</p>
+    <% end %>
+    <% if score.dropped_lines.positive? %>
+      <p class="small warn">It named <%= pluralize(score.dropped_lines, "line") %> your resume doesn't have; they were left out.</p>
+    <% end %>
+
+    <% if score.background_reading? %>
+      <h3>Your role preferences</h3>
+      <% if score.preferences.any? %>
+        <ul class="small drew-on">
+          <% score.preferences.each do |point| %>
+            <li><%= tag.span(point["verdict"] == "match" ? "met" : "missed", class: [ "badge", point["verdict"] == "match" ? "live" : "gone" ]) %>
+              <%= point["preference"] %><%= ": #{point['why']}" if point["why"] %>
+              <% point["lines"].each do |line| %><br><span class="muted">[B<%= line["line"] %>] <%= line["text"] %></span><% end %></li>
           <% end %>
-        </div>
-      </div>
+        </ul>
+      <% else %>
+        <p class="muted small">None the role touches.</p>
+      <% end %>
       <% if score.background_dropped_lines.positive? %>
         <p class="small warn">It named <%= pluralize(score.background_dropped_lines, "background line") %> your background doesn't have; they were left out.</p>
       <% end %>
+    <% end %>
+
+    <% call = score.llm_call %>
+    <p class="muted small">
+      Weighed <%= ago(score.created_at) %> by <%= score.writer %><%= " with #{call.model} for #{cost(call.cost_usd)}" if call %>,
+      from your resume <%= score.resume ? "saved #{score.resume.created_at.to_date}" : "(since deleted)" %> and its description
+      <%= score.role_description ? "read #{score.role_description.first_read_at.to_date}" : "(no longer on record)" %><%= score.background_reading? ? ", with your background #{score.background ? "saved #{score.background.created_at.to_date} (version #{score.background.version})" : '(since deleted)'}" : "" %>.
+      Advice for ranking roles: it claims nothing for you.
+    </p>
+    <% if earlier.any? %>
       <p class="muted small">
-        Read with your background <%= score.background ? "saved #{score.background.created_at.to_date} (version #{score.background.version})" : "(since deleted)" %>.
+        Before: <%= safe_join(earlier.map { |before| "#{before.score}#{" (Background fit #{before.background_score})" if before.background_reading?} on #{before.created_at.to_date}" }, ", ") %>.
       </p>
-      <% if fit.background_stale %>
-        <p class="small warn">Your background changed since: weigh it again for a current Background fit.</p>
-      <% end %>
-    <% elsif background %>
-      <p class="muted small">
-        Before your background: weighed from your resume alone. Weigh it again below, or ask your Claude client to ("Weigh my
-        roles", before your background), for a Background fit beside this one.
-      </p>
-    <% else %>
-      <p class="muted small">Save your <%= link_to "background", profile_path(anchor: "background") %> on the Profile page for a Background fit beside this one.</p>
     <% end %>
   <% end %>
 
@@ -145,7 +149,7 @@
                   data: { turbo_confirm: "Haiku 4.5 weighs it against your resume#{', its description read first (free)' if descriptions.empty?}: " \
                                          "about #{cost(estimate)}. Weigh it?" } do |form| %>
       <%= hidden_field_tag :posting_id, role.id %>
-      <%= form.submit fit ? "Weigh it again" : "Weigh its fit", class: "btn small" %>
+      <%= form.submit fit ? "Weigh it again" : "Weigh its fit", class: "btn" %>
       <span class="muted small">
         Haiku 4.5 weighs it from <%= descriptions.empty? ? "its description (read first, free)" : "its description" %> and your resume,
         claiming only what your resume shows<%= background ? ", then again with your background for the Background fit" : "" %>: about <%= cost(estimate) %>.

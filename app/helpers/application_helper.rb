@@ -112,6 +112,8 @@ module ApplicationHelper
     changes = event.changes_made
     if event.action == "denied"
       safe_join([ tag.span("Refused", class: "badge gone"), (" #{changes.keys.join(', ')}" if changes.any?) ])
+    elsif event.target_type == "FitScore"
+      fit_change(event)
     elsif event.action == "destroy"
       changes.dig("tracking", 0) == "suggested" ? "withdrawn" : "deleted"
     elsif event.action == "create" && changes.dig("tracking", 1) == "suggested"
@@ -127,6 +129,14 @@ module ApplicationHelper
     else
       event.action == "create" ? "created" : changes.keys.join(", ")
     end
+  end
+
+  # A fit score's event as a role's history says it (4e): the scores it weighed, never its text.
+  def fit_change(event)
+    return "fit score deleted" if event.action == "destroy"
+
+    score, background = event.changes_made.values_at("score", "background_score").map { |change| Array(change).last }
+    "fit weighed: #{score}#{" (Background fit #{background})" if background}"
   end
 
   # Who wrote it, and the credential its run held when an agent did (1.3).
