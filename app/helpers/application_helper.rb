@@ -142,7 +142,7 @@ module ApplicationHelper
       safe_join([ tag.span("Refused", class: "badge gone"), (" #{changes.keys.join(', ')}" if changes.any?) ])
     elsif event.target_type == "FitScore"
       fit_change(event)
-    elsif (said = application_change(event))
+    elsif (said = application_change(event) || company_record_change(event))
       said
     elsif event.action == "destroy"
       changes.dig("tracking", 0) == "suggested" ? "withdrawn" : "deleted"
@@ -151,7 +151,7 @@ module ApplicationHelper
     elsif (state = changes["verification_state"])
       "#{answer_label(state.first || 'pending')} → #{answer_label(state.last)}"
     elsif (tracking = changes["tracking"])
-      "#{tracking.first || 'new'} → #{tracking.last}"
+      "#{tracking.first ? tracking_label(tracking.first) : 'new'} → #{tracking_label(tracking.last)}"
     elsif (url = changes["job_url"])
       url.first ? "own page moved" : "own page learned"
     elsif changes.key?("fit")
@@ -185,6 +185,28 @@ module ApplicationHelper
       Array(changes["status"]).last == "approved" ? "draft approved" : "draft edited"
     when "ResumeReview" then event.action == "destroy" ? "resume review deleted" : "resume review written"
     when "ApplicationContact" then event.action == "destroy" ? "contact unlinked" : "contact linked"
+    end
+  end
+
+  # An event on a company or a record under it (4e), as its history says it: its careers page found or set, renamed,
+  # a review saved, a contact added. Nil for any other record, and for a change the general words say (tracking).
+  def company_record_change(event)
+    changes = event.changes_made
+    case event.target_type
+    when "CompanyReview"
+      event.action == "destroy" ? "company review deleted" : "company review: #{Array(changes['score']).compact.last}"
+    when "Contact" then { "create" => "contact added", "destroy" => "contact deleted" }.fetch(event.action, "contact edited")
+    when "Company"
+      return if changes.key?("tracking") || event.action == "denied"
+      return "added" if event.action == "create"
+
+      status = Array(changes["resolution_status"]).last
+      said = [ ("renamed" if changes.key?("name")),
+               ({ "resolved" => "careers page found", "candidate" => "a careers page to confirm", "failed" => "careers page not found" }
+                  .fetch(status) { "careers page set" } if changes.key?("careers_page_url") || status),
+               ("free board" if changes.key?("board_vendor") || changes.key?("board_in_use")),
+               ("proposal" if changes.key?("proposal")), ("kind" if changes.key?("kind")) ].compact
+      said.any? ? said.join(", ") : nil
     end
   end
 

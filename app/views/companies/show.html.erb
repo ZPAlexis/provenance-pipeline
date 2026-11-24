@@ -1,27 +1,106 @@
 <% content_for :title, "#{@company.name} · Provenance Pipeline" %>
+<%# A company's page (4e): its header (its tracking, its fit, its roles and application, and what you can do), its careers
+    page in view, then tabs: its roles first (its review first for a proposal), its review, its careers page, its
+    contacts, and its history. %>
+<% tracked = @roles.select { |role| role.tracking == "tracked" } %>
+<% proposal = @company.suggested? %>
 <div class="page-head">
   <div>
     <h1><%= @company.name %></h1>
     <p class="sub"><%= domain_link(@company) %></p>
+    <p class="fit-strip">
+      <%= tracking_badge(@company.tracking) %>
+      <span class="fit-strip-item"><span class="muted small">Fit</span> <%= company_fit_cell(@review, @profile) %></span>
+      <span class="fit-strip-item small"><%= pluralize(tracked.size, "role") %> tracked<%= ", #{tracked.count { |role| role.verification_state == 'verified_live' }} still listed" if tracked.any? %></span>
+      <% if @open_application %>
+        <span class="fit-strip-item"><span class="muted small">Application</span> <%= link_to stage_badge(@open_application.stage), application_path(@open_application) %></span>
+      <% end %>
+    </p>
   </div>
-  <div><%= tracking_badge(@company.tracking) %></div>
+  <div class="page-actions">
+    <%= render "check_runs/panel", record: @company, run: @run, compact: true %>
+    <%= render "companies/watch", company: @company, in_play: @in_play, open_application: @open_application, archived_with: @archived_with %>
+  </div>
 </div>
-<%= render "companies/watch", company: @company, in_play: @in_play, open_application: @open_application, archived_with: @archived_with %>
+<%= render "check_runs/run", run: @run, poll: false if @run %>
 <% if @company.dismissed? %>
   <p class="muted small">Archived: never checked, suggested from or reviewed, until you track it again.</p>
-<% elsif @company.suggested? %>
+<% elsif proposal %>
   <p class="muted small">Proposed by your own Claude client: not watched or checked until you track it. Tracking it reads the board it was proposed with at once, free; archiving it declines it for good.</p>
 <% end %>
 
-<dl class="facts">
+<% if @company.resolution_status == "candidate" %>
+  <h2>Is this its careers page?</h2>
+  <p class="muted small">
+    Found at low confidence (<%= @company.resolution_method %>): never watched until you say so.
+    <%= "Its pages list many employers' roles: it may be a #{@company.kind_suggestion}. #{@company.kind_evidence}" if @company.kind_suggestion %>
+  </p>
+  <div class="decide">
+    <%= button_to "Confirm it", confirm_page_company_path(@company), method: :patch, class: "btn primary" %>
+    <%= button_to "Reject it", reject_page_company_path(@company), method: :patch, class: "btn" %>
+  </div>
+<% end %>
+
+<dl class="facts overview">
   <dt>Careers page</dt>
   <dd><%= careers_page_cell(@company) %></dd>
   <dt>Read through</dt>
   <dd><%= read_through(@company) %></dd>
 </dl>
 
-<details class="facts-more">
-  <summary class="muted small">How its careers page was found, and what kind of company it is</summary>
+<div data-controller="tabs">
+<% tabs = [ [ "roles", "Roles" ], [ "review", "Review" ], [ "careers", "Careers page" ], [ "contacts", "Contacts" ], [ "history", "History" ] ] %>
+<% tabs = [ tabs[1], tabs[0], *tabs[2..] ] if proposal %>
+<%= page_tabs(tabs, label: "This company") %>
+
+<%= tab_panel "roles", first: !proposal do %>
+  <% if @company.dismissed? %>
+    <p class="muted small">Track it again to add a role here.</p>
+  <% else %>
+    <details class="add" <%= "open" if params[:add_role] %>>
+      <summary class="btn">Add a role here</summary>
+      <%= render "roles/add_form", company: @company %>
+    </details>
+  <% end %>
+  <% if @roles.any? %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Role</th><th>Application</th><th>Listing</th><th>Watch list</th><th>Own page</th></tr></thead>
+        <tbody>
+          <% @roles.each do |role| %>
+            <tr>
+              <td>
+                <%= link_to role.role_title, role_path(role) %>
+                <% if role.location %><div class="muted small"><%= role.location %></div><% end %>
+              </td>
+              <td><%= (application = role.application) ? link_to(stage_badge(application.stage), application_path(application)) : tag.span("—", class: "muted") %></td>
+              <td class="nowrap"><%= answer_badge(role.verification_state) %> <span class="muted small"><%= short_ago(role.last_checked_at) %></span></td>
+              <td><%= tracking_badge(role.tracking) %></td>
+              <td><%= short_link(role.job_url) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="empty">No role on record here yet.</p>
+  <% end %>
+<% end %>
+
+<%= tab_panel "review", first: proposal do %>
+  <%# A proposal (4b): why it may fit first, then how well; once tracked, its review first. %>
+  <% if proposal %>
+    <%= render "companies/proposal", company: @company if @company.proposal.present? %>
+    <%= render "companies/review", company: @company, review: @review, earlier: @earlier_reviews, profile: @profile %>
+  <% else %>
+    <%= render "companies/review", company: @company, review: @review, earlier: @earlier_reviews, profile: @profile %>
+    <%= render "companies/proposal", company: @company if @company.proposal.present? %>
+  <% end %>
+<% end %>
+
+<%= tab_panel "careers" do %>
+  <% ceiling = Verifier::CheckNow.ceiling(@company) %>
+  <p class="muted small">"Check now" reads it: <%= render "check_runs/about", record: @company, role: false, ceiling: ceiling %></p>
   <dl class="facts">
     <dt>How it was found</dt>
     <dd>
@@ -43,28 +122,6 @@
       </dd>
     <% end %>
   </dl>
-</details>
-
-<%# A proposal (4b): why it may fit and how well, before checking it; once tracked, after its roles. %>
-<% if @company.suggested? %>
-  <%= render "companies/proposal", company: @company if @company.proposal.present? %>
-  <%= render "companies/review", company: @company, review: @review, earlier: @earlier_reviews, profile: @profile %>
-<% end %>
-
-<% if @company.resolution_status == "candidate" %>
-  <h2>Is this its careers page?</h2>
-  <p class="muted small">
-    Found at low confidence (<%= @company.resolution_method %>): never watched until you say so.
-    <%= "Its pages list many employers' roles: it may be a #{@company.kind_suggestion}. #{@company.kind_evidence}" if @company.kind_suggestion %>
-  </p>
-  <div class="decide">
-    <%= button_to "Confirm it", confirm_page_company_path(@company), method: :patch, class: "btn primary" %>
-    <%= button_to "Reject it", reject_page_company_path(@company), method: :patch, class: "btn" %>
-  </div>
-<% end %>
-
-<h2>Check its careers page now</h2>
-<%= render "check_runs/panel", record: @company, run: @run %>
 
 <details class="add">
   <summary class="muted small">Rename it</summary>
@@ -83,45 +140,7 @@
   <% end %>
 </details>
 
-<h2>Roles</h2>
-<% if @company.dismissed? %>
-  <p class="muted small">Track it again to add a role here.</p>
-<% else %>
-  <details class="add" <%= "open" if params[:add_role] %>>
-    <summary class="btn small">Add a role here</summary>
-    <%= render "roles/add_form", company: @company %>
-  </details>
-<% end %>
-<% if @roles.any? %>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Role</th><th>Location</th><th>Listing</th><th>Watch list</th><th>Checked</th><th>Own page</th></tr></thead>
-      <tbody>
-        <% @roles.each do |role| %>
-          <tr>
-            <td><%= link_to role.role_title, role_path(role) %></td>
-            <td class="muted"><%= role.location %></td>
-            <td><%= answer_badge(role.verification_state) %></td>
-            <td><%= tracking_badge(role.tracking) %></td>
-            <td><%= ago(role.last_checked_at) %></td>
-            <td><%= outside_link(role.job_url) %></td>
-          </tr>
-        <% end %>
-      </tbody>
-    </table>
-  </div>
-<% else %>
-  <p class="empty">No role on record here yet.</p>
-<% end %>
-
-<% unless @company.suggested? %>
-  <%= render "companies/review", company: @company, review: @review, earlier: @earlier_reviews, profile: @profile %>
-  <%= render "companies/proposal", company: @company if @company.proposal.present? %>
-<% end %>
-
-<%= render "contacts", company: @company, contacts: @contacts %>
-
-<h2>Recent checks</h2>
+  <h3>Recent checks</h3>
 <% if @checks.any? %>
   <div class="table-wrap">
     <table>
@@ -145,25 +164,35 @@
 <% else %>
   <p class="empty">Never checked.</p>
 <% end %>
-
-<h2>Recent changes</h2>
-<% if @events.any? %>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>When</th><th>By</th><th>Changed</th><th>Why</th></tr></thead>
-      <tbody>
-        <% @events.each do |event| %>
-          <tr>
-            <td><%= ago(event.occurred_at) %></td>
-            <td><%= actor_cell(event) %></td>
-            <td class="muted"><%= event.changes_made.keys.join(", ") %></td>
-            <td class="reason"><%= event.reasoning.to_s.truncate(240) %></td>
-          </tr>
-        <% end %>
-      </tbody>
-    </table>
-  </div>
-  <p class="muted small"><%= link_to "Every change to this company, in the audit log", audit_path(record: @company.id) %></p>
-<% else %>
-  <p class="empty">No changes recorded.</p>
 <% end %>
+
+<%= tab_panel "contacts" do %>
+  <%= render "contacts", company: @company, contacts: @contacts %>
+<% end %>
+
+<%= tab_panel "history" do %>
+  <p class="muted small">
+    Every change to this company and to what was saved under it (its reviews and its contacts): who made it, and why.
+    The newest <%= CompaniesController::HISTORY %> here; <%= link_to "every change to it in the audit log", audit_path(record: @company.id) %>.
+  </p>
+  <% if @history.any? %>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>When</th><th>Change</th><th>By</th><th>Why</th></tr></thead>
+        <tbody>
+          <% @history.each do |event| %>
+            <tr>
+              <td><%= ago(event.occurred_at) %></td>
+              <td class="nowrap"><%= change_summary(event) %></td>
+              <td><%= actor_cell(event) %></td>
+              <td class="reason"><%= event.reasoning.to_s.truncate(240) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="empty">No changes recorded.</p>
+  <% end %>
+<% end %>
+</div>

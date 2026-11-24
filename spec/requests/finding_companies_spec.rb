@@ -248,12 +248,14 @@ RSpec.describe "Finding companies", type: :request do
       expect(response.body).to include(">Proposed<", "Sells to revenue teams in Brazil.", "A job-board search",
                                        "Nothing read: No known board at that link.", "jobs.ashbyhq.com/contoso", "news.example/contoso-raises",
                                        "model reported: claude-opus-5-5", "Not reviewed yet.")
-      expect(response.body.index(">Proposed<")).to be < response.body.index("Check its careers page now")
+      expect(response.body).to include(%(id="review-tab" role="tab" aria-controls="review" aria-selected="true"))
+      expect(response.body.index(">Proposed<")).to be < response.body.index("<h2>Company review</h2>")
 
       Verifier::Tracking.track_company!(proposal, note: "It fits.")
       get company_path(proposal)
       expect(response.body).to include("How it was proposed", "Sells to revenue teams in Brazil.")
-      expect(response.body.index("How it was proposed")).to be > response.body.index("Check its careers page now")
+      expect(response.body).to include(%(id="roles-tab" role="tab" aria-controls="roles" aria-selected="true"))
+      expect(response.body.index("How it was proposed")).to be > response.body.index("<h2>Company review</h2>")
     end
   end
 end

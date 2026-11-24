@@ -1,6 +1,6 @@
 <%# How well this company fits your company preferences (4b): its newest review, as your own Claude client researched it
     when you asked, and the scores before it. Advice for choosing companies, never weighed into a role's fit. %>
-<h2 id="review">Company review</h2>
+<h2>Company review</h2>
 <% if review %>
   <section class="check-now company-review">
     <p class="fit-head"><%= fit_badge(review.score) %> <span class="muted small">of 100</span> <%= review.why %></p>

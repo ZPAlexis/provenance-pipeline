@@ -61,7 +61,7 @@ RSpec.describe "Companies", type: :request do
 
     get company_path(company)
     expect(response.body).to include(%(href="https://#{company.domain}"), dismiss_company_path(company), "Why archive it?",
-                                     "Its 1 role in play is archived with it", "How its careers page was found")
+                                     "Its 1 role in play is archived with it", "How it was found") # in its Careers page tab, since 4e
 
     patch dismiss_company_path(company), params: { note: " " }
     expect(flash[:alert]).to eq("Say why: the note becomes the audit reasoning.")

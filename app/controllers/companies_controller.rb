@@ -7,6 +7,8 @@ class CompaniesController < ApplicationController
   # What the list can be ordered by besides its default (4e: by application, then fit, then tracked roles, then last
   # checked): its fit, best first, or its name.
   SORTS = { "fit" => "Fit", "name" => "Name" }.freeze
+  # How many changes a company's History shows (4e); the audit log holds every one.
+  HISTORY = 50
 
   # Words and a review's facts narrow every count; within a tab, what needs a look (never on Suggested, where nothing is
   # watched yet), then the fit. Ordered by application, fit, tracked roles and last check (4e), or by fit, or by name.
@@ -141,9 +143,15 @@ class CompaniesController < ApplicationController
   def show
     @company = Company.find(params[:id])
     @run = @company.check_runs.where(kind: "company").newest_first.first
-    @roles = @company.postings.order(:tracking, :role_title)
+    @roles = @company.postings.includes(:application).order(:tracking, :role_title)
     @checks = @company.page_checks.order(checked_at: :desc).limit(10)
-    @events = @company.audit_events.order(occurred_at: :desc).limit(10).includes(:credential)
+    # Every change to the company and to what was saved under it (4e): its reviews (the AI assistant's) and its contacts
+    # (by the company id they record, so a deleted one shows), the newest 50 here, every one in the audit log.
+    contacts = AuditEvent.where(target_type: "Contact").where("jsonb_exists(changes_made -> 'company_id', :id)", id: @company.id)
+    @history = AuditEvent.where(target: @company).or(contacts)
+                         .or(AuditEvent.where(target_type: "Contact", target_id: @company.contacts.select(:id)))
+                         .or(AuditEvent.where(target_type: "CompanyReview", target_id: @company.company_reviews.select(:id)))
+                         .order(occurred_at: :desc).limit(HISTORY).includes(:credential)
     @contacts = @company.contacts.includes(applications: :posting)
     # What tracking or archiving it would do: its roles in play, an open application that stops archiving, and the
     # roles that would come back with it.
