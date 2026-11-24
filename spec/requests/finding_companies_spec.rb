@@ -49,7 +49,7 @@ RSpec.describe "Finding companies", type: :request do
       profile.destroy!
 
       get profile_path
-      expect(response.body).to include("Save the profile above first: the company preferences are kept with it.")
+      expect(response.body).to include("Save your search profile first: the company preferences are kept with it.")
       patch company_preferences_profile_path, params: { company_preferences: { company_wants: "Anything." } }
       expect(flash[:alert]).to eq("Save the profile first: the company preferences are kept with it.")
     end

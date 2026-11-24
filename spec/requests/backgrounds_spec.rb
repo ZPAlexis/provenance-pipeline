@@ -12,7 +12,7 @@ RSpec.describe "The background", type: :request do
   it "shows its three parts on the Profile page, each with what reads it" do
     get profile_path
 
-    expect(response.body).to include("Background information", "What I&#39;m looking for", "Role preferences", "Background not on the resume",
+    expect(response.body).to include(%(aria-controls="background"), "What I&#39;m looking for", "Role preferences", "Background not on the resume",
                                      "never as a claim of experience", "Read only by role fit, never by a draft",
                                      "from your background, not on the resume", "Save background")
   end
@@ -77,7 +77,7 @@ RSpec.describe "The background", type: :request do
   it "waits for a saved profile" do
     profile.destroy!
     get profile_path
-    expect(response.body).to include("Save the profile above first: the background is kept with it.")
+    expect(response.body).to include("Save your search profile first: the background is kept with it.")
     save(looking_for: "Text.")
     expect(flash[:alert]).to eq("Save the profile first: the background is kept with it.")
   end

@@ -18,7 +18,7 @@ AI agents do the legwork: they check at each employer's own careers page whether
 
 **Why "provenance":** every change on record says where it came from: who made it, under which permission, and why.
 
-> **Status:** in use for my own job search, running locally. Next: a review of the pages, then a demo on made-up data, with a version of the app that's easier to run locally. [Build history](docs/build-stages.md).
+> **Status:** in use for my own job search, running locally. Now: a review of the pages, from my own use. Next: a demo on made-up data, with a version of the app that's easier to run locally. [Build history](docs/build-stages.md).
 
 **Contents:** [Why I built it](#why-i-built-it) · [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
 
@@ -195,7 +195,8 @@ Built in stages, each decided, built step by step, and recorded as built. [Every
 | 4b — Finding companies | Company proposals and company reviews from the operator's AI assistant through [MCP](docs/mcp.md), against company preferences kept on the profile | 2026-11-10 |
 | 4c — Background, and fit read two ways | A background in three parts, each read only by what may use it; the ATS fit and the Background fit, through [MCP](docs/mcp.md) first, then in the app's own agents | 2026-11-12 |
 | 4d — Screen risk, and your links | Each role's must-haves read one by one, one the resume doesn't show capping the fit; the operator's own website and GitHub read free, and the lines that apply to each role read as extended background | 2026-11-18 |
-| Next | 4e, a review of the pages' experience; 4f, a demo on made-up data, and a version of the app that's easier to run locally | |
+| 4e — The first major review of the pages | Tabs inside the detail pages, a role's fit first, the AI assistant's work in every record's history, and the lists ordered by application and fit, from the operator's own use | under way |
+| Next | 4f, a demo on made-up data, and a version of the app that's easier to run locally | |
 
 ## Stack
 

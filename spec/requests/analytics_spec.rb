@@ -54,12 +54,13 @@ RSpec.describe "Analytics", type: :request do
     expect(response.body).to include(audit_path(who: "agent:verifier"))
   end
 
+  # The top bar's Record menu links it on every page (4e); the dashboard's own line waits for an application.
   it "is linked from the dashboard once there is an application" do
     get root_path
-    expect(response.body).not_to include(analytics_path)
+    expect(response.body).to include(%(href="#{analytics_path}")).and not_include("How the pipeline is going")
 
     applications
     get root_path
-    expect(response.body).to include(%(href="#{analytics_path}"))
+    expect(response.body).to include(%(<a href="#{analytics_path}">How the pipeline is going</a>))
   end
 end

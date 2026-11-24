@@ -1,13 +1,20 @@
 <% content_for :title, "Profile · Provenance Pipeline" %>
 <div class="page-head">
   <div>
-    <h1>Search profile</h1>
-    <p class="sub">
-      What you are looking for. Roles on watched pages that fit it will be suggested; only you decide which to track.
-      <% if @profile.persisted? %>Saved <%= ago(@profile.updated_at) %>.<% end %>
-    </p>
+    <h1>Profile</h1>
+    <p class="sub">What you are looking for, what you bring beyond your resume, and what you want of a company: yours alone to edit.</p>
   </div>
 </div>
+
+<div data-controller="tabs">
+<%= page_tabs([ [ "search", "Search profile" ], [ "resume", "Resume" ], [ "background", "Background" ], [ "links", "Your links" ],
+                [ "company", "What you want of a company" ] ], label: "Profile") %>
+
+<%= tab_panel "search", first: true do %>
+<p class="muted small">
+  What you are looking for: roles on watched pages that fit it are suggested, and only you decide which to track.
+  <% if @profile.persisted? %>Saved <%= ago(@profile.updated_at) %>.<% end %>
+</p>
 
 <%= form_with model: @profile, url: profile_path, method: :patch, class: "profile-form" do |f| %>
   <%= render "errors", profile: @profile %>
@@ -73,12 +80,24 @@
   </div>
 <% end %>
 
-<h2 id="resume">Resume</h2>
+<%= turbo_frame_tag "profile-preview" do %>
+  <p class="muted">
+    Preview weighs the profile above, saved or not, against every watched company's roles as its page last listed them.
+    It costs nothing and writes nothing.
+  </p>
+<% end %>
+<% end %>
+
+<%= tab_panel "resume" do %>
 <p class="muted small">
   Paste your resume as plain text or Markdown and save it: the drafter reads it, with each role's description, and claims only what it shows.
-  Each time you save a changed text, the one before is kept as an earlier version below. It is held in this database only:
-  never in the repository, its fixtures, or its seeds. The record of each save names its size and a hash, never its text.
 </p>
+<%= how_this_works do %>
+  <p>
+    Each time you save a changed text, the one before is kept as an earlier version below. It is held in this database only:
+    never in the repository, its fixtures, or its seeds. The record of each save names its size and a hash, never its text.
+  </p>
+<% end %>
 <% if @profile.persisted? %>
   <% current, *earlier = @resumes %>
   <% if current %>
@@ -105,17 +124,23 @@
     </details>
   <% end %>
 <% else %>
-  <p class="muted small">Save the profile above first: the resume is kept with it.</p>
+  <p class="muted small">Save your search profile first: the resume is kept with it.</p>
+<% end %>
 <% end %>
 
-<h2 id="background">Background information</h2>
+<%= tab_panel "background" do %>
 <p class="muted small">
   What you'd tell the assistant about yourself beyond your resume, in three parts, each read only by what may use it (said
-  under each). Keep it short: the fit scorer weighs everything it is given, so a long background crowds out your resume.
-  Write only what is safe to quote: your own Claude client may hold all of it in one conversation. Held in this database
-  only; the record of each save names each part's size and a hash, never its text. Each change is a new version, and
-  what read it says which.
+  under each).
 </p>
+<%= how_this_works do %>
+  <p>
+    Keep it short: the fit scorer weighs everything it is given, so a long background crowds out your resume. Write only
+    what is safe to quote: your own Claude client may hold all of it in one conversation. Held in this database only; the
+    record of each save names each part's size and a hash, never its text. Each change is a new version, and what read it
+    says which.
+  </p>
+<% end %>
 <% if @profile.persisted? %>
   <% current, *earlier = @backgrounds %>
   <% if current %>
@@ -154,25 +179,31 @@
     </details>
   <% end %>
 <% else %>
-  <p class="muted small">Save the profile above first: the background is kept with it.</p>
+  <p class="muted small">Save your search profile first: the background is kept with it.</p>
+<% end %>
 <% end %>
 
-<h2 id="links">Your links</h2>
+<%= tab_panel "links" do %>
 <p class="muted small">
-  Your website, your GitHub, or any other portfolio (a blog, Behance), at most <%= ProfileLink::MAX %>. The app reads each
-  one, free and never by the AI: a GitHub account through GitHub's public API (your profile and your own repos' READMEs),
-  any other site with the pages its sitemap lists and those it links to on the same site, one level deep, robots.txt
-  honored. A site whose pages are reached only by script needs a sitemap.xml to be read whole. For a site in several
-  languages, give the address of yours (yoursite.com/en). LinkedIn isn't read: what matters from it belongs in "Background
-  not on the resume" above. What each read found is kept here, version by version, in this database only; the record of
-  each save names each link by a hash.
+  Your website, your GitHub, or any other portfolio (a blog, Behance), at most <%= ProfileLink::MAX %>, read by the app for
+  free and used as more of your background.
 </p>
-<p class="muted small">
-  With a background saved above, each role is read with the lines of these pages that share the most of its description's
-  words, as your background is: by the Background fit (never the ATS fit, and never as a role preference), and by resume reviews
-  and tailored resumes, where each point drawn on them is flagged "from your links" for you to confirm. Cover letters and
-  outreach notes never read them.
-</p>
+<%= how_this_works do %>
+  <p>
+    The app reads each one, free and never by the AI: a GitHub account through GitHub's public API (your profile and your
+    own repos' READMEs), any other site with the pages its sitemap lists and those it links to on the same site, one level
+    deep, robots.txt honored. A site whose pages are reached only by script needs a sitemap.xml to be read whole. For a site
+    in several languages, give the address of yours (yoursite.com/en). LinkedIn isn't read: what matters from it belongs in
+    "Background not on the resume", in the Background tab. What each read found is kept here, version by version, in this
+    database only; the record of each save names each link by a hash.
+  </p>
+  <p>
+    With a background saved, each role is read with the lines of these pages that share the most of its description's
+    words, as your background is: by the Background fit (never the ATS fit, and never as a role preference), and by resume
+    reviews and tailored resumes, where each point drawn on them is flagged "from your links" for you to confirm. Cover
+    letters and outreach notes never read them.
+  </p>
+<% end %>
 <% if @profile.persisted? %>
   <% if @links_error %><p class="small warn" role="alert"><%= @links_error %></p><% end %>
   <% rows = @links_given || @links.map { |link| { "label" => link.label, "url" => link.url } } %>
@@ -219,23 +250,22 @@
     </p>
   <% end %>
 <% else %>
-  <p class="muted small">Save the profile above first: the links are kept with it.</p>
+  <p class="muted small">Save your search profile first: the links are kept with it.</p>
+<% end %>
 <% end %>
 
-<%= turbo_frame_tag "profile-preview" do %>
-  <p class="muted">
-    Preview weighs the profile above, saved or not, against every watched company's roles as its page last listed them.
-    It costs nothing and writes nothing.
-  </p>
-<% end %>
-
-<h2 id="company">What you want of a company</h2>
+<%= tab_panel "company" do %>
 <p class="muted small">
   Your own Claude client weighs a company against these when you ask it to review one, and proposes companies that may
-  fit them; where a company hires is weighed against your places above. A review read against them before is marked
-  stale when you change them. What you want and avoid, and the words to avoid, are your own business: the record of
-  each save holds them by a hash, never their text.
+  fit them.
 </p>
+<%= how_this_works do %>
+  <p>
+    Where a company hires is weighed against your places, in the Search profile tab. A review read against these before is
+    marked stale when you change them. What you want and avoid, and the words to avoid, are your own business: the record
+    of each save holds them by a hash, never their text.
+  </p>
+<% end %>
 <% if @profile.persisted? %>
   <%= form_with model: @profile, scope: :company_preferences, url: company_preferences_profile_path, method: :patch, class: "profile-form" do |f| %>
     <div class="field">
@@ -305,5 +335,7 @@
     </p>
   <% end %>
 <% else %>
-  <p class="muted small">Save the profile above first: the company preferences are kept with it.</p>
+  <p class="muted small">Save your search profile first: the company preferences are kept with it.</p>
 <% end %>
+<% end %>
+</div>

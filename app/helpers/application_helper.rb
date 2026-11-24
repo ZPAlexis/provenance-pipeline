@@ -141,4 +141,27 @@ module ApplicationHelper
   def nav_link(label, path, current:)
     link_to(label, path, class: ("current" if current))
   end
+
+  # Tabs inside a page (4e), inside an element with data-controller="tabs": `tabs` is [[id, label], ...], the first
+  # open. Each panel's id is the anchor links into the page already use, so a link to #links opens the tab holding it.
+  def page_tabs(tabs, label:)
+    tag.nav(class: "tabs page-tabs", role: "tablist", "aria-label": label) do
+      safe_join(tabs.each_with_index.map do |(id, text), index|
+        link_to(text, "##{id}", id: "#{id}-tab", role: "tab", "aria-controls": id, "aria-selected": index.zero?,
+                                tabindex: (index.zero? ? 0 : -1), class: ("current" if index.zero?),
+                                data: { tabs_target: "tab", action: "tabs#select keydown->tabs#key" })
+      end)
+    end
+  end
+
+  # A tab's panel (4e): hidden until chosen, but the first, so the page shows its first tab before the script runs.
+  def tab_panel(id, first: false, &)
+    tag.section(id: id, class: "tab-panel", role: "tabpanel", "aria-labelledby": "#{id}-tab", hidden: !first,
+                data: { tabs_target: "panel" }, &)
+  end
+
+  # What a page or a tab explains beyond its one line (4e), folded until asked for.
+  def how_this_works(&)
+    tag.details(class: "how") { safe_join([ tag.summary("How this works"), tag.div(class: "how-body", &) ]) }
+  end
 end

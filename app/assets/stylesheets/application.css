@@ -76,6 +76,27 @@ code { font: 12px var(--mono); }
 .site-nav .brand { font-weight: 700; color: var(--text); margin-right: 12px; }
 .site-nav a.current { color: var(--text); font-weight: 600; }
 .site-nav .spacer { flex: 1; }
+/* A menu in the top bar (4e): the record's own pages, folded under one name. */
+.nav-menu { position: relative; }
+.nav-menu > summary { list-style: none; cursor: pointer; color: var(--accent); }
+.nav-menu > summary::-webkit-details-marker { display: none; }
+.nav-menu > summary::after { content: " ▾"; font-size: 11px; }
+.nav-menu.current > summary { color: var(--text); font-weight: 600; }
+.nav-menu .menu-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 190px;
+  padding: 6px 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.nav-menu .menu-list a { display: block; padding: 6px 14px; color: var(--text); white-space: nowrap; }
+.nav-menu .menu-list a:hover { background: var(--bg); text-decoration: none; }
+.nav-menu .menu-list a.current { font-weight: 600; color: var(--accent); }
 
 main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 48px; }
 
@@ -183,6 +204,16 @@ details.facts-more > summary { cursor: pointer; }
 .tabs a.current { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 .tabs a:hover { text-decoration: none; color: var(--text); }
 .tabs .count { color: var(--muted); font-weight: 400; }
+/* Tabs inside a page (4e): they stay in view while a long tab scrolls. */
+.page-tabs { position: sticky; top: 0; z-index: 10; background: var(--bg); }
+/* A link to a tab, or to something inside one, stops below the tabs, not under them. */
+.tab-panel, .tab-panel [id] { scroll-margin-top: 52px; }
+/* What a page explains beyond its one line, folded (4e). */
+details.how { margin: 0 0 12px; max-width: 820px; }
+details.how > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details.how > summary:hover { color: var(--text); }
+details.how .how-body { margin-top: 4px; color: var(--muted); font-size: 12px; }
+details.how .how-body p { margin: 4px 0; }
 
 /* Answer filters */
 
@@ -253,7 +284,7 @@ details.facts-more > summary { cursor: pointer; }
 .btn {
   display: inline-block;
   padding: 5px 12px;
-  font: 600 13px var(--font);
+  font: 600 13px/1.35 var(--font);
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -262,7 +293,8 @@ details.facts-more > summary { cursor: pointer; }
 }
 .btn:hover { border-color: var(--accent); text-decoration: none; }
 .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-.btn.small { padding: 2px 9px; font-size: 12px; }
+/* One size for every button (4e); the compact one only inside a table's rows. */
+td .btn, td .btn.small { padding: 2px 9px; font-size: 12px; }
 
 .empty { padding: 18px; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; }
 
