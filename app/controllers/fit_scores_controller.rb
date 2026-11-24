@@ -18,7 +18,11 @@ class FitScoresController < ApplicationController
       offered = FitScores.offered.includes(:company).order(:created_at).to_a
       FitScores.weighable(again ? FitScores.public_send(again, offered) : FitScores.unscored(offered))
     end
-    back = role ? role_path(role, anchor: "fit") : roles_path(sort: "fit")
+    # From an application's page (4e), back to it; from a role's page, back to its fit.
+    back = if role&.application && params[:from] == "application" then application_path(role.application, anchor: "fit")
+    elsif role then role_path(role, anchor: "fit")
+    else roles_path(sort: "fit")
+    end
     if (why = refusal(role, roles, again))
       return redirect_to back, alert: "Not weighed: #{why}.", status: :see_other
     end

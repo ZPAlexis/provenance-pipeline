@@ -114,6 +114,8 @@ module ApplicationHelper
       safe_join([ tag.span("Refused", class: "badge gone"), (" #{changes.keys.join(', ')}" if changes.any?) ])
     elsif event.target_type == "FitScore"
       fit_change(event)
+    elsif (said = application_change(event))
+      said
     elsif event.action == "destroy"
       changes.dig("tracking", 0) == "suggested" ? "withdrawn" : "deleted"
     elsif event.action == "create" && changes.dig("tracking", 1) == "suggested"
@@ -137,6 +139,34 @@ module ApplicationHelper
 
     score, background = event.changes_made.values_at("score", "background_score").map { |change| Array(change).last }
     "fit weighed: #{score}#{" (Background fit #{background})" if background}"
+  end
+
+  # An event on an application or a record under it (4e), as its history says it: its stage moved, an activity
+  # logged, a draft or a resume review written, a contact linked. Nil for any other record.
+  def application_change(event)
+    changes = event.changes_made
+    case event.target_type
+    when "Application" then application_stage_change(event.action, changes)
+    when "Activity" then { "create" => "logged: #{Array(changes['kind']).compact.last.to_s.humanize.downcase}",
+                           "destroy" => "activity deleted" }.fetch(event.action, "activity edited")
+    when "Draft"
+      label = Draft::LABELS.fetch(Array(changes["kind"]).compact.last, "Draft").downcase
+      return "#{label} deleted" if event.action == "destroy"
+      return "#{label} written" if event.action == "create"
+
+      Array(changes["status"]).last == "approved" ? "draft approved" : "draft edited"
+    when "ResumeReview" then event.action == "destroy" ? "resume review deleted" : "resume review written"
+    when "ApplicationContact" then event.action == "destroy" ? "contact unlinked" : "contact linked"
+    end
+  end
+
+  def application_stage_change(action, changes)
+    from, to = Array(changes["stage"])
+    return "started at #{Application.stage_label(to)}" if action == "create" && to
+    return "#{Application.stage_label(from)} → #{Application.stage_label(to)}" if from && to && from != to
+    return "redated to #{Array(changes['stage_changed_on']).last}" if changes.key?("stage_changed_on")
+
+    { "notes" => "notes", "comp_expectation" => "pay expectation" }.values_at(*changes.keys).compact.join(", ").presence || "edited"
   end
 
   # Who wrote it, and the credential its run held when an agent did (1.3).

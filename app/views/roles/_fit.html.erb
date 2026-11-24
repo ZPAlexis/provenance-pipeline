@@ -149,6 +149,7 @@
                   data: { turbo_confirm: "Haiku 4.5 weighs it against your resume#{', its description read first (free)' if descriptions.empty?}: " \
                                          "about #{cost(estimate)}. Weigh it?" } do |form| %>
       <%= hidden_field_tag :posting_id, role.id %>
+      <%= hidden_field_tag :from, local_assigns[:from] if local_assigns[:from] %>
       <%= form.submit fit ? "Weigh it again" : "Weigh its fit", class: "btn" %>
       <span class="muted small">
         Haiku 4.5 weighs it from <%= descriptions.empty? ? "its description (read first, free)" : "its description" %> and your resume,

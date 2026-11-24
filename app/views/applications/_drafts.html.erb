@@ -30,7 +30,7 @@
       <%= form.submit "Write it", class: "btn primary small" %>
       <p class="muted small">
         Opus 5.5 writes it from your resume (saved <%= resume.created_at.to_date %>), the role's description (read <%= description.first_read_at.to_date %>),
-        your profile and your notes above, claiming only what your resume shows: about <%= cost(estimate) %>. You edit it and approve it; nothing is ever sent.
+        your profile and your notes, claiming only what your resume shows: about <%= cost(estimate) %>. You edit it and approve it; nothing is ever sent.
         Or write it, and a tailored resume, in your own Claude client through MCP, on your subscription: it saves them here.
       </p>
     <% end %>
@@ -39,110 +39,15 @@
   <%= render "check_runs/run", run: run, poll: false if run && (run.active? || run.answer != "drafted") %>
 </section>
 
-<% drafts.each do |draft| %>
-  <section class="draft" id="<%= dom_id(draft) %>" data-controller="copy">
-    <div class="draft-head">
-      <strong><%= draft.label %></strong>
-      <%= tag.span(draft.approved? ? "Approved" : "Draft", class: [ "badge", ("live" if draft.approved?) ]) %>
-      <span class="muted small">
-        <% if draft.contact %>to <%= draft.contact.name %> · <% end %><%= draft.language %> · <%= pluralize(draft.words, "word") %> · written <%= ago(draft.created_at) %><% if draft.edited? %> · edited by you<% end %>
-        <% if draft.approved? %> · approved <%= ago(draft.approved_at) %><% end %>
-      </span>
-    </div>
-
-    <%= form_with url: application_draft_path(application, draft), method: :patch, id: dom_id(draft, :edit), class: "draft-form" do |form| %>
-      <% if draft.kind == "outreach" %>
-        <label>Subject <%= form.text_field :subject, value: draft.subject, autocomplete: "off", data: { copy_target: "subject" } %></label>
+<% drafts.group_by(&:kind).each do |kind, of_kind| %>
+  <% newest, *earlier = of_kind %>
+  <%= render "applications/draft", draft: newest, application: application, resume: resume, description: description, background: background %>
+  <% if earlier.any? %>
+    <details class="earlier">
+      <summary class="muted small"><%= pluralize(earlier.size, "earlier #{Draft::LABELS.fetch(kind, 'draft').downcase}") %></summary>
+      <% earlier.each do |draft| %>
+        <%= render "applications/draft", draft: draft, application: application, resume: resume, description: description, background: background %>
       <% end %>
-      <label><%= { "outreach" => "Note", "tailored_resume" => "Resume" }.fetch(draft.kind, "Letter") %>
-        <%# Tall enough for the whole text at desktop width (about 90 characters a line), and no taller than a screen. %>
-        <%= form.text_area :body, value: draft.body, rows: draft.body.lines.sum { |line| [ (line.length / 90.0).ceil, 1 ].max }.clamp(8, 30),
-                                  data: { copy_target: "body" } %></label>
-    <% end %>
-    <div class="button-row">
-      <button type="submit" form="<%= dom_id(draft, :edit) %>" class="btn small">Save changes</button>
-      <% unless draft.approved? %>
-        <button type="submit" form="<%= dom_id(draft, :edit) %>" name="approve" value="1" class="btn primary small">Save and approve</button>
-      <% end %>
-      <% if draft.kind == "outreach" %>
-        <button type="button" class="btn small" data-action="copy#copy" data-copy-field-param="subject">Copy subject</button>
-      <% end %>
-      <button type="button" class="btn small" data-action="copy#copy" data-copy-field-param="body">Copy <%= { "outreach" => "note", "tailored_resume" => "resume" }.fetch(draft.kind, "letter") %></button>
-      <%= button_to "Delete", application_draft_path(application, draft), method: :delete, class: "btn small",
-                              data: { turbo_confirm: "Delete this #{draft.label.downcase}? Its record keeps its size and hash, not its text." } %>
-    </div>
-    <p class="muted small">
-      <%= draft.approved? ? "Approved: copy it and send it yourself. Nothing is sent from here; a change returns it to a draft." :
-                            "Yours to edit. Approve it once it says what you'll send; nothing is sent from here." %>
-    </p>
-
-    <% if draft.gaps.any? %>
-      <div class="gaps">
-        <p class="small"><strong>What the role asks for that your resume doesn't show</strong> (left out of <%= draft.tailored_resume? ? "it" : "the draft" %>)</p>
-        <ul class="small">
-          <% draft.gaps.each do |gap| %>
-            <li><strong><%= gap["asks"] %></strong>: <%= gap["note"] %></li>
-          <% end %>
-        </ul>
-      </div>
-    <% else %>
-      <p class="muted small">It found nothing the role asks for that your resume doesn't show.</p>
-    <% end %>
-    <% if draft.notes.present? %>
-      <p class="small"><span class="muted">Its note:</span> <%= draft.notes %></p>
-    <% end %>
-    <% if draft.dropped_lines.positive? %>
-      <p class="small warn">It named <%= pluralize(draft.dropped_lines, "line") %> your resume doesn't have; they were left out.</p>
-    <% end %>
-    <% if draft.tailored_resume? %>
-      <details class="description">
-        <summary class="muted small">What it changed: <%= pluralize(draft.tailoring.size, "change") %></summary>
-        <ul class="small drew-on">
-          <% draft.tailoring.each do |change| %>
-            <% named = change["lines"].map { |line| line["line"] } %>
-            <li><%= change["change"] %> <span class="muted">· <%= named.any? ? "#{'line'.pluralize(named.size)} #{named.join(', ')}" : "no line named" %></span><%= from_background(change) %></li>
-          <% end %>
-        </ul>
-      </details>
-    <% else %>
-      <details class="description">
-        <summary class="muted small">What it drew on: <%= pluralize(draft.drew_on.size, "line") %> of your resume</summary>
-        <ul class="small drew-on">
-          <% draft.drew_on.each do |point| %>
-            <li><span class="muted">[<%= point["line"] %>]</span> <%= point["text"] %> <span class="muted">· <%= point["used_for"] %></span></li>
-          <% end %>
-        </ul>
-      </details>
-    <% end %>
-
-    <% written_by = AuditEvent.find_by(target: draft, action: "create") %>
-    <% call = draft.llm_call %>
-    <% if draft.revises %>
-      <p class="muted small">A revision of the <%= link_to "#{draft.revises.label.downcase} of #{draft.revises.created_at.to_date}", "##{dom_id(draft.revises)}" %>.</p>
-    <% end %>
-    <p class="muted small">
-      <% if draft.written_by == "agent:assistant" %>
-        Written by your Claude client and saved through MCP<%= " (it reports #{draft.reported_model})" if draft.reported_model %>, on your subscription,
-      <% else %>
-        Written by the drafter<%= " with #{call.model}#{" at #{call.settings.dig('output_config', 'effort')} effort" if call.settings.dig('output_config', 'effort')} for #{cost(call.cost_usd)}" if call %>,
-      <% end %>
-      from your resume <%= draft.resume ? "saved #{draft.resume.created_at.to_date}" : "(since deleted)" %>
-      and the role's description <%= draft.role_description ? "read #{draft.role_description.first_read_at.to_date}" : "(no longer on record)" %>
-      <% if written_by&.credential %> · <%= link_to "its credential", agent_credential_path(written_by.credential) %><% end %>
-    </p>
-    <% asked = [ draft.asked_language, ("to stress “#{draft.guidance}”" if draft.guidance.present?) ].compact %>
-    <% if asked.any? %>
-      <% said = "You asked for #{asked.to_sentence}" %>
-      <p class="muted small"><%= said.end_with?("”") ? said : "#{said}." %></p>
-    <% end %>
-    <% stale = [ ("your resume" if resume && resume.content_hash != draft.resume_hash),
-                 ("the role's description" if description && description.content_hash != draft.description_hash),
-                 ("the background it read" if draft.background_stale_for(background)) ].compact %>
-    <% if stale.any? %>
-      <p class="small warn">
-        <%= stale.to_sentence.upcase_first %> <%= stale.one? ? "has" : "have" %> changed since it was written: a new draft reads
-        <%= stale.one? ? "it as it is" : "them as they are" %> now.
-      </p>
-    <% end %>
-  </section>
+    </details>
+  <% end %>
 <% end %>

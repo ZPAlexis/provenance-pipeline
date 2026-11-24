@@ -4,13 +4,30 @@
 <%# Its forms redirect back here: keep the reader's place, and the notice in view. %>
 <% turbo_refreshes_with method: :replace, scroll: :preserve %>
 <% content_for :floating_flash, true %>
+<%# An application's page (4e): where it stands, the role's fits and its company's, so the work happens here; then tabs:
+    what happened, the fit, the writing, the people, your notes, and every change. %>
+<% score = @fit&.score %>
 <div class="page-head">
   <div>
     <p class="muted small"><%= link_to "Pipeline", applications_path %> / Application</p>
     <h1><%= link_to role.role_title, role_path(role) %></h1>
     <p class="sub"><%= link_to @application.company.name, company_path(@application.company) %><%= " · #{role.location}" if role.location %></p>
+    <p class="fit-strip">
+      <%= stage_badge(@application.stage) %> <%= answer_badge(role.verification_state) %>
+      <span class="fit-strip-item"><span class="muted small">ATS fit</span> <%= score ? link_to(fit_badge(score.score), "#fit") : tag.span("—", class: "muted", title: "Not weighed yet") %></span>
+      <% if score&.background_reading? %>
+        <span class="fit-strip-item"><span class="muted small">Background fit</span> <%= link_to fit_badge(score.background_score), "#background-fit" %></span>
+      <% end %>
+      <span class="fit-strip-item"><span class="muted small">Company fit</span> <%= company_fit_cell(@company_review, @profile) %></span>
+    </p>
+    <% if score&.screened? && score.screen_risks.any? %>
+      <p class="small warn">Likely screened out on: <%= score.screen_risks.map { |must| must["asks"] }.to_sentence %>.</p>
+    <% end %>
   </div>
-  <div><%= stage_badge(@application.stage) %></div>
+  <div class="page-actions">
+    <%= link_to "Move it", "#move", class: "btn primary" %>
+    <%= link_to "Log what happened", "#log", class: "btn" %>
+  </div>
 </div>
 
 <nav class="stage-path" aria-label="Where it stands">
@@ -20,11 +37,11 @@
   <% end %>
 </nav>
 
-<dl class="facts">
+<dl class="facts overview">
   <dt>Stage</dt>
   <dd><%= Application.stage_label(@application.stage) %>, <%= in_stage(@application) %> (since <%= @application.stage_changed_on %>)</dd>
-  <dt>The role</dt>
-  <dd><%= answer_badge(role.verification_state) %><%= ", checked " if role.last_checked_at %><%= ago(role.last_checked_at) if role.last_checked_at %></dd>
+  <dt>Listing</dt>
+  <dd><%= answer_label(role.verification_state) %><%= ", checked " if role.last_checked_at %><%= ago(role.last_checked_at) if role.last_checked_at %></dd>
   <dt>Description</dt>
   <dd>
     <% if (description = role.role_descriptions.newest_first.first) %>
@@ -33,20 +50,21 @@
       <span class="muted">not read yet</span> · <%= link_to "the role's page", role_path(role) %> reads it
     <% end %>
   </dd>
-  <dt>Resume reviews</dt>
-  <dd>
-    <%= @reviews.any? ? pluralize(@reviews.size, "review") : tag.span("none yet", class: "muted") %>
-    · <%= link_to @reviews.any? ? "see them" : "how to write one", "#reviews" %>
-  </dd>
-  <dt>Drafts</dt>
+  <dt>Writing</dt>
   <dd>
     <% approved = @drafts.count(&:approved?) %>
-    <%= @drafts.any? ? "#{pluralize(@drafts.size, 'draft')}#{", #{approved} approved" if approved.positive?}" : tag.span("none yet", class: "muted") %>
-    · <%= link_to @drafts.any? ? "see them" : "write one", "#drafts" %>
+    <%= @reviews.any? ? pluralize(@reviews.size, "resume review") : tag.span("no resume review", class: "muted") %>,
+    <%= @drafts.any? ? "#{pluralize(@drafts.size, 'draft')}#{", #{approved} approved" if approved.positive?}" : tag.span("no draft", class: "muted") %>
+    · <%= link_to "see them", "#writing" %>
   </dd>
 </dl>
 
-<h2 id="move">Move it</h2>
+<div data-controller="tabs">
+<%= page_tabs([ [ "activity", "Activity" ], [ "fit", "Fit" ], [ "writing", "Writing" ], [ "contacts", "Contacts" ],
+                [ "notes", "Notes" ], [ "history", "History" ] ], label: "This application") %>
+
+<%= tab_panel "activity", first: true do %>
+<h3 id="move">Move it</h3>
 <%= form_with url: move_application_path(@application), method: :patch, class: "add-form" do |form| %>
   <label>To <%= select_tag :stage, stage_options(Application::STAGES.include?(params[:stage]) ? params[:stage] : @application.stage) %></label>
   <label>On <%= form.date_field :on, value: Date.current, max: Date.current %></label>
@@ -55,7 +73,7 @@
   <p class="muted small">Yours alone: no agent can move an application. The date is when it happened; a correction is fine.</p>
 <% end %>
 
-<h2>Log what happened</h2>
+<h3 id="log">Log what happened</h3>
 <%= form_with url: log_application_path(@application), class: "add-form" do |form| %>
   <label>What <%= select_tag :kind, activity_options %></label>
   <label>On <%= form.date_field :on, value: Date.current %></label>
@@ -67,11 +85,8 @@
   <%= form.submit "Log it", class: "btn small" %>
 <% end %>
 
-<h2>Timeline</h2>
-<p class="muted small">
-  Its stages come from the audit log, dated as you dated them.
-  <%= link_to "This application in the audit log", audit_path(record: @application.id) %>
-</p>
+<h3>Timeline</h3>
+<p class="muted small">Its stages and what happened, dated as you dated them. Every change to it is under History.</p>
 <% if @timeline.any? %>
   <div class="table-wrap">
     <table>
@@ -118,9 +133,32 @@
   <p class="empty">Nothing yet.</p>
 <% end %>
 
-<%= render "contacts", application: @application, company_contacts: company_contacts %>
+<% end %>
 
-<h2 id="notes">Notes and pay expectation</h2>
+<%= tab_panel "fit" do %>
+  <%= render "roles/fit", role: role, fit: @fit, earlier: @earlier_fits, descriptions: @descriptions, run: @fit_run, from: "application" %>
+  <h3 id="company-fit">Company fit</h3>
+  <% if @company_review %>
+    <p class="fit-head"><%= company_fit_cell(@company_review, @profile) %> <span class="muted small">of 100</span> <%= @company_review.why %></p>
+    <p class="muted small">
+      <%= @application.company.name %> against your company preferences, reviewed <%= ago(@company_review.created_at) %>: a
+      separate score, never weighed into the role's fit. <%= link_to "Its full review", company_path(@application.company, anchor: "review") %>
+    </p>
+  <% else %>
+    <p class="muted small">Not reviewed: your own Claude client reviews a company only when you ask.</p>
+  <% end %>
+<% end %>
+
+<%= tab_panel "writing" do %>
+  <%= render "reviews", application: @application, reviews: @reviews, run: @review_run %>
+  <%= render "drafts", application: @application, drafts: @drafts, run: @draft_run %>
+<% end %>
+
+<%= tab_panel "contacts" do %>
+  <%= render "contacts", application: @application, company_contacts: company_contacts %>
+<% end %>
+
+<%= tab_panel "notes" do %>
 <%= form_with url: note_application_path(@application), method: :patch, class: "add-form" do |form| %>
   <label>Pay expectation <%= form.text_field :comp_expectation, value: @application.comp_expectation, placeholder: "e.g. 25k a month",
                                                                  autocomplete: "off" %></label>
@@ -128,7 +166,27 @@
                                                        placeholder: "Who you spoke to, what matters to them, what to ask next" %></label>
   <%= form.submit "Save notes", class: "btn small" %>
 <% end %>
+<% end %>
 
-<%= render "reviews", application: @application, reviews: @reviews, run: @review_run %>
-
-<%= render "drafts", application: @application, drafts: @drafts, run: @draft_run %>
+<%= tab_panel "history" do %>
+  <p class="muted small">
+    Every change to this application and to what was saved under it (its activities, contacts, drafts and resume reviews):
+    who made it, and why. <%= link_to "Narrow it in the audit log", audit_path(record: @application.id) %>
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Change</th><th>By</th><th>Why</th></tr></thead>
+      <tbody>
+        <% @history.each do |event| %>
+          <tr>
+            <td><%= ago(event.occurred_at) %></td>
+            <td class="nowrap"><%= change_summary(event) %></td>
+            <td><%= actor_cell(event) %></td>
+            <td class="reason"><%= event.reasoning %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+</div>

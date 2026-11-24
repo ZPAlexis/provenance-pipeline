@@ -72,7 +72,7 @@ RSpec.describe "What the client saved, on the application's page", type: :reques
 
     get application_path(application)
 
-    expect(response.body).to include("1 review", "Discovery at volume", "· line 3", "Spanish", "Lead with discovery", "· lines 3, 1",
+    expect(response.body).to include("1 resume review", "Discovery at volume", "· line 3", "Spanish", "Lead with discovery", "· lines 3, 1",
                                      "A close fit.", "Written by your Claude client, through MCP (it reports claude-opus-5-5)", "its credential")
   end
 

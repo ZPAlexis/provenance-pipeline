@@ -181,6 +181,9 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 /* The two fits side by side (4e), each with its score and why. */
 .fit-scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 28px; }
 .fit-scores h3 { margin-top: 8px; }
+/* Earlier reviews and drafts, folded under the newest (4e). */
+details.earlier { margin: 4px 0 16px; }
+details.earlier > summary { cursor: pointer; padding: 4px 0; }
 /* A company's careers-page details, folded under the facts that matter to the operator (4a). */
 details.facts-more { margin: 0 0 12px; }
 details.facts-more > summary { cursor: pointer; }

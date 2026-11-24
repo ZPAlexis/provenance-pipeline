@@ -1,7 +1,6 @@
 <%# An application's contacts (2e): people at its company, linked to it, or added here and linked. Kept with the
     company, so a recruiter on two of its roles is one contact. Other people's details: in this database only. %>
 <% linked = application.contacts.to_a %>
-<h2 id="contacts">Contacts</h2>
 <% if linked.any? %>
   <ul class="contact-list">
     <% linked.each do |contact| %>

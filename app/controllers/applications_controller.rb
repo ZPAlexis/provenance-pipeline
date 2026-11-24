@@ -20,6 +20,7 @@ class ApplicationsController < ApplicationController
     @reviews = @application.resume_reviews.includes(:resume, :role_description, :llm_call).newest_first.to_a
     @review_run = @application.posting.check_runs.where(kind: "review").newest_first.first
     @draft_run = @application.posting.check_runs.where(kind: "draft").newest_first.first
+    fit_and_history
   end
 
   def create
@@ -56,6 +57,25 @@ class ApplicationsController < ApplicationController
   end
 
   private
+
+  # The role's fit and its company's (4e), to work from this page alone, and every change to the application and what
+  # was saved under it: its activities and contacts (by the application's id they record, so a deleted one shows too),
+  # its drafts and its resume reviews, the AI assistant's included.
+  def fit_and_history
+    role = @application.posting
+    @fit = FitScores.shown([ role ])[role.id]
+    @earlier_fits = role.fit_scores.newest_first.offset(1).limit(5).to_a
+    @descriptions = role.role_descriptions.newest_first.to_a
+    @fit_run = CheckRun.where(kind: "fit").active.first || role.check_runs.where(kind: "fit").newest_first.first
+    @company_review = CompanyReviews.newest(@application.company)
+    @profile = SearchProfile.current
+    under = AuditEvent.where(target_type: %w[Activity ApplicationContact])
+                      .where("jsonb_exists(changes_made -> 'application_id', :id)", id: @application.id)
+    @history = AuditEvent.where(target: @application).or(under)
+                         .or(AuditEvent.where(target_type: "Draft", target_id: @application.drafts.select(:id)))
+                         .or(AuditEvent.where(target_type: "ResumeReview", target_id: @application.resume_reviews.select(:id)))
+                         .order(occurred_at: :desc).includes(:credential)
+  end
 
   def find_application
     @application = Application.includes(:company, :posting, :activities).find(params[:id])

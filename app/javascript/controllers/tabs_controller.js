@@ -64,12 +64,16 @@ export default class extends Controller {
     if (box.left < bar.left || box.right > bar.right) tab.parentElement.scrollLeft += box.left - bar.left - 16
   }
 
-  // The panel holding the element the address's anchor names, scrolled to when it sits inside the panel.
+  // The panel holding the element the address's anchor names, scrolled to when it sits inside the panel, any fold
+  // around it opened (an earlier draft, folded under the newest).
   fromHash() {
     const anchor = decodeURIComponent(window.location.hash.slice(1))
     const target = anchor && document.getElementById(anchor)
     const panel = target && this.panelTargets.find((each) => each === target || each.contains(target))
-    if (panel && panel !== target) requestAnimationFrame(() => target.scrollIntoView())
+    if (panel && panel !== target) {
+      for (let fold = target.closest("details"); fold && panel.contains(fold); fold = fold.parentElement?.closest("details")) fold.open = true
+      requestAnimationFrame(() => target.scrollIntoView())
+    }
     return panel?.id
   }
 
