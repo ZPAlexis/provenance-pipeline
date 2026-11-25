@@ -1,0 +1,13 @@
+<%# The reply to the page's ask (4e): asks again in 20 seconds (poll) while `asking` and, when the AI assistant changed
+    what the page shows since it was opened, says so with Refresh, which reloads the page as it is, its open tab kept.
+    Only the page's frame carries the address it asks: a reply's frame never does. %>
+<%= turbo_frame_tag "assistant_changes" do %>
+  <div <%= tag.attributes(data: { controller: "poll", poll_interval_value: 20_000 }) if asking %>>
+    <% if said %>
+      <div class="assistant-changes" role="status" data-controller="reload">
+        <span><%= said %></span>
+        <button type="button" class="btn small primary" data-action="reload#now">Refresh</button>
+      </div>
+    <% end %>
+  </div>
+<% end %>

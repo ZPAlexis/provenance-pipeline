@@ -72,12 +72,7 @@ class ApplicationsController < ApplicationController
     @fit_run = CheckRun.where(kind: "fit").active.first || role.check_runs.where(kind: "fit").newest_first.first
     @company_review = CompanyReviews.newest(@application.company)
     @profile = SearchProfile.current
-    under = AuditEvent.where(target_type: %w[Activity ApplicationContact])
-                      .where("jsonb_exists(changes_made -> 'application_id', :id)", id: @application.id)
-    @history = AuditEvent.where(target: @application).or(under)
-                         .or(AuditEvent.where(target_type: "Draft", target_id: @application.drafts.select(:id)))
-                         .or(AuditEvent.where(target_type: "ResumeReview", target_id: @application.resume_reviews.select(:id)))
-                         .order(occurred_at: :desc).includes(:credential)
+    @history = RecordHistory.for(@application).order(occurred_at: :desc).includes(:credential)
   end
 
   def find_application

@@ -147,11 +147,7 @@ class CompaniesController < ApplicationController
     @checks = @company.page_checks.order(checked_at: :desc).limit(10)
     # Every change to the company and to what was saved under it (4e): its reviews (the AI assistant's) and its contacts
     # (by the company id they record, so a deleted one shows), the newest 50 here, every one in the audit log.
-    contacts = AuditEvent.where(target_type: "Contact").where("jsonb_exists(changes_made -> 'company_id', :id)", id: @company.id)
-    @history = AuditEvent.where(target: @company).or(contacts)
-                         .or(AuditEvent.where(target_type: "Contact", target_id: @company.contacts.select(:id)))
-                         .or(AuditEvent.where(target_type: "CompanyReview", target_id: @company.company_reviews.select(:id)))
-                         .order(occurred_at: :desc).limit(HISTORY).includes(:credential)
+    @history = RecordHistory.for(@company).order(occurred_at: :desc).limit(HISTORY).includes(:credential)
     @contacts = @company.contacts.includes(applications: :posting)
     # What tracking or archiving it would do: its roles in play, an open application that stops archiving, and the
     # roles that would come back with it.

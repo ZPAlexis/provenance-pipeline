@@ -3,6 +3,7 @@
     page in view, then tabs: its roles first (its review first for a proposal), its review, its careers page, its
     contacts, and its history. %>
 <% tracked = @roles.select { |role| role.tracking == "tracked" } %>
+<%= render "assistant_changes/watch", kind: "company", record: @company %>
 <% proposal = @company.suggested? %>
 <div class="page-head">
   <div>

@@ -3,6 +3,7 @@
     tabs: its fit first, its description, and its checks and history. %>
 <% score = @fit&.score %>
 <% application = @role.application %>
+<%= render "assistant_changes/watch", kind: "role", record: @role %>
 <div class="page-head">
   <div>
     <h1><%= @role.role_title %></h1>

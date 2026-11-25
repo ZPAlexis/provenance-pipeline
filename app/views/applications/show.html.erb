@@ -3,6 +3,7 @@
 <% content_for :title, "#{role.role_title} · Pipeline · Provenance Pipeline" %>
 <%# Its forms redirect back here: keep the reader's place, and the notice in view. %>
 <% turbo_refreshes_with method: :replace, scroll: :preserve %>
+<%= render "assistant_changes/watch", kind: "application", record: @application %>
 <% content_for :floating_flash, true %>
 <%# An application's page (4e): where it stands, the role's fits and its company's, so the work happens here; then tabs:
     what happened, the fit, the writing, the people, your notes, and every change. %>

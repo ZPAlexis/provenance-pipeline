@@ -1,0 +1,4 @@
+<%# Watches the page's record for the AI assistant's changes while the page is open (4e): a frame asked for now and
+    then every 20 seconds, as a check run's frame asks while it runs, from the audit log alone. When there are any, a
+    banner says what, with Refresh. `kind` is the record's name in the address (role, application, company). %>
+<%= turbo_frame_tag "assistant_changes", src: assistant_changes_path(kind, record, since: Time.current.utc.iso8601(6)) %>

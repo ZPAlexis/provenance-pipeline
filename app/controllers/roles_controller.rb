@@ -66,8 +66,7 @@ class RolesController < ApplicationController
     @profile = SearchProfile.current
     @fit_run = CheckRun.where(kind: "fit").active.first || @role.check_runs.where(kind: "fit").newest_first.first
     # Every change to the role and to its fit scores (4e): what the AI assistant saved under it shows here too.
-    @history = AuditEvent.where(target: @role).or(AuditEvent.where(target_type: "FitScore", target_id: @role.fit_scores.select(:id)))
-                         .order(occurred_at: :desc).includes(:credential)
+    @history = RecordHistory.for(@role).order(occurred_at: :desc).includes(:credential)
     # The checks whose matching said something about this role, newest first.
     @checks = @role.company.page_checks.where("matches @> ?", [ { posting_id: @role.id } ].to_json)
                    .order(checked_at: :desc).limit(10)

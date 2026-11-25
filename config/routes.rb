@@ -38,6 +38,9 @@ Rails.application.routes.draw do
   end
   resources :check_runs, only: %i[create show]
   resource :check_all, only: %i[show create], controller: "check_all"
+  # What the AI assistant changed on a page's record since it was opened (4e), polled by the page.
+  get "assistant_changes/:kind/:id", to: "assistant_changes#show", as: :assistant_changes,
+                                     constraints: { kind: /role|application|company/ }
   get "changes", to: "changes#index", as: :changes
   get "audit", to: "audit_events#index", as: :audit
   get "analytics", to: "analytics#index", as: :analytics
