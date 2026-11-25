@@ -1,5 +1,5 @@
 module ProvenanceMcp
-  # What the operator's own Claude client reads to recommend a decision on a review item (2g step 3): the item as the
+  # What the operator's own AI assistant reads to recommend a decision on a review item (2g step 3): the item as the
   # Review page frames it (its question, what was seen, what to check, the actions it may recommend), and everything
   # on record that bears on it. The record's text is fenced as data.
   module Review

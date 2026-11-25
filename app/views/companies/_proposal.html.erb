@@ -1,4 +1,4 @@
-<%# Why your own Claude client proposed this company (4b): why it may fit, where it was found, and what its board listed
+<%# Why your AI assistant proposed this company (4b): why it may fit, where it was found, and what its board listed
     when proposed (the app's own free read, never the client's word). Kept once it is tracked or declined. %>
 <% proposal = company.proposal %>
 <h2 id="proposal"><%= company.suggested? ? "Proposed" : "How it was proposed" %></h2>
@@ -19,7 +19,7 @@
   <% end %>
   <dt>By</dt>
   <dd>
-    Your Claude client, through MCP<%= " (model reported: #{proposal['reported_model']})" if proposal["reported_model"] %>,
+    Your AI assistant, through MCP<%= " (model reported: #{proposal['reported_model']})" if proposal["reported_model"] %>,
     <%= ago(company.created_at) %>
   </dd>
 </dl>

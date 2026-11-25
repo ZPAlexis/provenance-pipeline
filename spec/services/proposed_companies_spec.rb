@@ -2,7 +2,7 @@ require "rails_helper"
 require Rails.root.join("mcp/provenance_mcp")
 ProvenanceMcp.tools
 
-# A company the operator's own Claude client proposed (4b) is not tracked until the operator, or the client on their
+# A company the operator's own AI assistant proposed (4b) is not tracked until the operator, or the client on their
 # word, tracks it: nothing checks it, suggests its roles or asks about it, and every check that once asked "archived?"
 # asks "tracked?". Chosen by hand (its link pasted, a role added there) or tracked through MCP, it is tracked, and the
 # board it was proposed with is read at once, free. A read tool's call leaves the test's transaction read-only, so an
@@ -55,7 +55,7 @@ RSpec.describe "A company proposed and not yet tracked" do
       expect(declined).to include("- Fabrikam: a proposal, declined: never proposed again")
       expect(CheckRun.sole).to have_attributes(company: proposal, request: { "read" => "board" }, requested_by: "agent:assistant")
       expect(AuditEvent.where(target: fabrikam).last.reasoning)
-        .to eq("Declined on the operator's word: proposed by the operator's own Claude client, archived, and never proposed again. Not my market.")
+        .to eq("Declined on the operator's word: proposed by the operator's own AI assistant, archived, and never proposed again. Not my market.")
       expect(AuditEvent.where(target: proposal).last.credential.reload.scopes).to eq(%w[watchlist:curate])
     end
 
@@ -71,8 +71,8 @@ RSpec.describe "A company proposed and not yet tracked" do
     end
 
     it "is said to be a proposal, not watched" do
-      expect(said(call(:CompanyStatus, company: "Contoso"))).to include("Contoso (contoso.example), proposed by the operator's own Claude " \
-                                                                         "client: not watched until the operator tracks it, id #{proposal.id}")
+      expect(said(call(:CompanyStatus, company: "Contoso"))).to include("Contoso (contoso.example), proposed by the operator's own AI " \
+                                                                         "assistant: not watched until the operator tracks it, id #{proposal.id}")
       expect(said(call(:ListCompanies, tracking: "all"))).to include("- Contoso (contoso.example), proposed, id #{proposal.id}")
     end
   end

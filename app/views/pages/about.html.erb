@@ -1,23 +1,151 @@
 <% content_for :title, "About · Provenance Pipeline" %>
-<h1>About</h1>
-<p>An agent-governed pipeline system. AI agents are first-class users, operating under scoped permissions with full provenance on every write.</p>
-<p>Its first piece is a job finder: it watches a chosen set of companies, reads their careers pages, and records whether each tracked role is still listed, through one audited write path. Every verdict says who wrote it and why.</p>
-<p>A company or a role found elsewhere is added by its link, and a role you add is tracked. Adding reads nothing unless you ask, so it costs nothing: a role added so needs its title, and a company its careers page to be watched; asked, its careers page is found and read right away, and a role is checked at its own page. A job board's link is never read; it is kept as where you found the role.</p>
-<p>A search profile says what you are looking for. An agent of its own, the suggester, weighs every watched page's latest roles against it at no cost and proposes the ones that fit, each with why; it never proposes a role you track or archived, and only you decide which to track. You track companies the same way: archiving one, with its roles, stops every check, suggestion and review question about it until you track it again. Your own Claude client can do it for you through MCP, on your word and with your reason on the record: list your companies as this app does, track or archive companies and roles, add a role to a company (never checked, so nothing is spent), or change a role's own page; never on its own judgment. The Roles and Companies pages find a role by its title, company or place, and a company by its name, domain or a place it hires in; roles and companies you don't want are archived many at once.</p>
-<p>An application starts from a role's page and moves through its stages on the Pipeline page, with what happened along the way. Only you start one or move it: no agent can, whatever it holds, and one that tries is refused on the record.</p>
-<p>A role's description is read from its own page (through its board's job API, or the page rendered; never by the AI) when an application starts or when you ask, and every version is kept. Your resume is pasted on the Profile page and held in this database only.</p>
-<p>The people you deal with at a company (recruiters, hiring managers, referrers, interviewers) are kept as its contacts, on the company's page, and linked to its applications on theirs; what happened along the way can say whom it was with. Their details are other people's: they stay in this database, and the record names them by a hash alone.</p>
-<p>From them, a draft agent writes a cover letter or a short outreach note for an application, in the role's language unless you ask for another; an outreach note can be to one of the company's contacts, and opens with their first name. It claims only what your resume shows, names the lines of it the draft rests on, and lists what the role asks for that your resume doesn't show. You edit each draft and approve it on the application's page, then copy it and send it yourself: nothing is ever sent from here, and only you can edit or approve one.</p>
-<p>A fit scorer weighs a role against your resume when you ask, from the role's own description: a score from 0 to 100, the level it asks beside yours, what it asks that your resume shows (with the lines that show it), what it doesn't, and why. The Roles page ranks roles by it, and weighs the unscored in one go, its cost shown first. Your own Claude client can do the same on your subscription through MCP, and find roles on your watched pages by meaning rather than your profile's exact words, suggesting the ones that may fit; you track the ones you want.</p>
-<p>Your own Claude client can also find companies for you, when you ask. It reads what you want of a company, kept on the Profile page (what you want and avoid, in your own words, and the stages, sizes, business models and industries you list), searches the open web, checks each one against your record and reads its job board (free), and proposes the ones that may fit, each with a review: a score from 0 to 100, point by point against what you want, with its sources. Proposals wait on the Companies page's Suggested tab: tracking one has its board read at once, free; archiving one declines it, and it is never proposed again. A role's company fit shows beside its own fit, and is never weighed into it. What you want and avoid are your own words: the record of each save holds them by a hash, never their text.</p>
-<p>A resume review weighs your resume against an application's role: what it shows that the role asks for, with the lines behind each point, what it doesn't, and what to change for this role. The drafter writes one from the application's page; it is advice for you, never sent.</p>
-<p>Beside your resume, the Profile page keeps your background in three parts, pasted and held in this database only, each read only by what may use it. What you're looking for is your motivation: the fit scorer reads it, and a cover letter or an outreach note may draw on it for why you want the role, never as a claim of experience. Your role preferences are for the fit scorer alone. Background not on your resume is read by the fit scorer, and by a resume review or a tailored resume, which flag each point drawn from it (“from your background, not on the resume”) for you to confirm. A role's fit is then read two ways: the ATS fit, your resume alone as a recruiter's screening system would read it, which the tables show, and the Background fit beside it on the role's page, with the gaps your background covers and where to address each, in the resume or the cover letter. The background never raises the ATS fit, and company reviews don't read it. Every reading records the version it read, and says when your background changed since; the same holds from your own Claude client, which is given only the part each kind of writing may use.</p>
-<p>Before a role's fit is scored, its must-haves are read one by one, as a recruiter's screening system checks them: what it states it requires, a number of years, a degree, where you must be based. Each is shown on your resume, only in your background, or not shown. One your resume doesn't show caps the ATS fit at 69, however much else it shows, and one shown nowhere caps the Background fit: the app applies the cap, and keeps the score as weighed beside it. The role's page names what you'd likely be screened out on, and the Roles page marks it.</p>
-<p>Your own links extend your background: up to five on the Profile page, your website and GitHub mattering most (LinkedIn isn't read: what matters from it belongs in your background). The app reads them for free, never with the AI, only when you save them or ask it to read them again, and keeps each page it read. For each role, the lines of those pages that share the most of its description's words are read as your background is: by the Background fit, and by a resume review or a tailored resume, which flag each point drawn on them (“from your links”) for you to confirm; never by the ATS fit or a letter.</p>
-<p>The same writing works from your own Claude client, on your subscription, through the app's MCP server: it reads an application's materials and the writing rules, writes a cover letter, an outreach note, a review of your resume against the role, or a resume tailored to it, and saves it back when you say so. Each save holds a credential for that one call and is recorded as the client's; what it saved is yours to edit, approve or delete. Tell it what happened and it logs it, adding a contact if you say to, but it never moves an application: it says when one looks ready to move, and you move it.</p>
-<p>Every tracked company can be checked at once from the Roles page: its careers page read again, the roles you track confirmed, and new roles that fit your profile suggested, its plan and the most it could cost shown first. Your own Claude client's role search reads these lists as they were last read, so the dashboard says how old they are. What changed then lists what the check found: answers that changed, suggestions made and withdrawn, careers pages and boards, new questions, and lists that changed so much they may be another page now.</p>
-<p>What an agent can't settle waits for you on the Review page: a careers page found at low confidence, a list read only in part, an answer resting on the AI's judgment alone. Each question comes with what was seen and an action proposed; you decide it, on the record. One you leave as is comes back only when what was seen changes. Your own Claude client can work through the queue for you, through MCP: it reads each item, looks where the record can't settle it, and recommends a decision with what it checked. You accept it in one click or decide otherwise, and how often you agree is measured per kind; it never decides one itself.</p>
-<p>Each agent run holds a credential issued for that run, with only the scopes it needs, and every write it makes is checked against it, down to what it changes: the verifier records verdicts but never tracks a role, and the suggester proposes roles but never touches one you decided on. A write no scope allows is refused, and the refusal is on the record. The Agents page shows who may write what, the credentials their runs held, and what each wrote.</p>
-<p>Every write on record, yours and every agent's, refused ones included, is on the Audit log page, newest first: narrowed by who made it, the kind of record, what was done, the days, one record or credential, or what it changed, each with what it changed, why, and the credential behind it. Nothing there can be changed or deleted. Your own Claude client can ask it the same questions through MCP: what an agent did, or when and why a role's answer changed.</p>
-<p>The Analytics page says how the search is going, from the same record: how far applications get and how long they sit in each stage, as you dated them; how long roles stay listed, how often their answers change and how fresh they are; and what the AI cost, how your client's recommendations came out, and what each agent wrote. A rate needs at least five to go on, and says so when it hasn't. Your client can ask the same through MCP.</p>
-<p class="muted">Local and single-user: there is no login, so it is never deployed as it is.</p>
+<%# What the app is and how its parts work (4e): an opening, four steps, then a section for each with a sentence, a few
+    points and its pages, at a readable line length. The pages' "How this works" folds say the same, where it applies. %>
+<div class="about">
+  <h1>About</h1>
+  <p class="lead">
+    An agent-governed CRM for a job search. AI agents do the legwork under scoped permissions, your AI assistant works
+    beside them through MCP, and every change on record says who made it, under which permission, and why. The
+    decisions that matter stay yours.
+  </p>
+
+  <ol class="steps">
+    <li><a href="#watch"><strong>Watch</strong><span>Roles checked at each employer's own careers page.</span></a></li>
+    <li><a href="#find"><strong>Find</strong><span>Roles and companies that fit, proposed for you to decide.</span></a></li>
+    <li><a href="#apply"><strong>Apply</strong><span>Your pipeline, the writing for it, and the people in it.</span></a></li>
+    <li><a href="#govern"><strong>Govern</strong><span>Credentials, the review queue, the audit log.</span></a></li>
+  </ol>
+
+  <section id="watch">
+    <h2>Watching roles</h2>
+    <p>
+      The app watches the companies you track at their own careers pages, and records whether each role you track is
+      still listed, through one audited write path.
+    </p>
+    <ul>
+      <li>
+        <strong>Add by link:</strong> paste a role's link on the Roles page. Its company is added when new; a link on an
+        ATS board (Greenhouse, Lever, Ashby, Workday, Oracle) has the board watched at once, read free. The role is checked
+        right after when that costs nothing; otherwise "Check now" on its page says what it could cost first.
+      </li>
+      <li>
+        <strong>Checks:</strong> "Check now" on a role or a company, or "Check all tracked companies" on the Roles page,
+        which confirms the roles you track and finds new ones that fit. A check that could spend says what it could cost
+        and asks first: "at most" what its pages cost when last read in full, "about" for a page never read.
+      </li>
+      <li>
+        <strong>Descriptions:</strong> read from a role's own page, through its board's job API or the page rendered,
+        never by the AI; every version kept, and read again when a check finds the role's own posting elsewhere.
+      </li>
+      <li>
+        <strong>Your watch list:</strong> track or archive roles and companies, many at once; archiving a company archives
+        its roles in play. A job board's link (LinkedIn, Indeed) is never read: it is kept as where you found a role.
+      </li>
+    </ul>
+    <p class="pages"><%= link_to "Roles", roles_path %> · <%= link_to "Companies", companies_path %></p>
+  </section>
+
+  <section id="find">
+    <h2>Finding roles and companies</h2>
+    <p>What may fit is proposed, never tracked: you decide what to watch.</p>
+    <ul>
+      <li>
+        <strong>Suggestions:</strong> the suggester weighs every watched page's latest roles against your search profile,
+        at no cost, and proposes those that fit, each with why; never one you track or archived.
+      </li>
+      <li>
+        <strong>Fit:</strong> a role is weighed against your resume when you ask, from its own description, two ways: the
+        ATS fit, your resume alone as a recruiter's screening system would read it, and the Background fit beside it. Its
+        must-haves are read one by one: one your resume doesn't show caps the ATS fit at 69, and the role's page names what
+        you'd likely be screened out on.
+      </li>
+      <li>
+        <strong>Your background:</strong> on the Profile page, in three parts (what you're looking for, your role
+        preferences, background not on your resume), each read only by what may use it, with up to
+        <%= ProfileLink::MAX %> of your own links read free. It never raises the ATS fit.
+      </li>
+      <li>
+        <strong>Companies:</strong> your AI assistant finds companies that may fit what you want of one, reviews each
+        against it with its sources, and proposes them on the Companies page's Suggested tab. Tracking one reads its board
+        at once, free; archiving one declines it for good. A company's fit is never weighed into a role's.
+      </li>
+    </ul>
+    <p class="pages"><%= link_to "Profile", profile_path %> · <%= link_to "Roles by fit", roles_path(sort: "fit") %> · <%= link_to "Proposed companies", companies_path(tab: "suggested") %></p>
+  </section>
+
+  <section id="apply">
+    <h2>Applying</h2>
+    <p>Only you start an application or move it: no agent can, whatever it holds.</p>
+    <ul>
+      <li>
+        <strong>The pipeline:</strong> Interested, Preparing, Applied, Interviewing, Offer, then a close (accepted,
+        rejected, withdrawn, no response), with what happened along the way and with whom.
+      </li>
+      <li>
+        <strong>Writing:</strong> a cover letter or an outreach note, a review of your resume against the role, or a
+        resume tailored to it. Only what your resume shows, the lines behind each point, and what the role asks that your
+        resume doesn't. Yours to edit and approve; nothing is ever sent from here.
+      </li>
+      <li>
+        <strong>Contacts:</strong> the people you deal with at a company, linked to its applications. Their details stay
+        in this database; the record names them by a hash alone.
+      </li>
+    </ul>
+    <p class="pages"><%= link_to "Pipeline", applications_path %></p>
+  </section>
+
+  <section id="assistant">
+    <h2>Your AI assistant</h2>
+    <p>
+      Your own AI assistant (Claude or another MCP client; only Claude Desktop has been tested) works through the app's
+      MCP server, on your subscription, and changes the record only on your word.
+    </p>
+    <ul>
+      <li>
+        <strong>It writes</strong> letters, notes, resume reviews and tailored resumes from an application's materials and
+        the writing rules, and saves them when you say so, each save under a credential for that one call.
+      </li>
+      <li>
+        <strong>It finds and weighs</strong> roles on your watched pages by meaning, and finds and reviews companies.
+      </li>
+      <li>
+        <strong>It keeps your watch list</strong> on your word, with your reason on the record; logs what happened, but
+        never moves an application; and recommends decisions on the review queue, never making one.
+      </li>
+      <li>
+        <strong>It answers</strong> from the audit log and the analytics. A role's, an application's or a company's page
+        says when it changes what you're looking at, with Refresh.
+      </li>
+    </ul>
+  </section>
+
+  <section id="govern">
+    <h2>Governance</h2>
+    <p>
+      Each agent run holds a credential with only the scopes it needs; every write is checked against it, down to what it
+      changes, and lands in an append-only audit log. A write no scope allows is refused, on the record.
+    </p>
+    <ul>
+      <li>
+        <strong>The review queue:</strong> what an agent can't settle waits for you, with what was seen and an action
+        proposed. Your AI assistant can recommend a decision on each; you accept it in one click or decide otherwise, and
+        how often you agree is measured per kind.
+      </li>
+      <li><strong>The Agents page:</strong> who may write what, the credentials their runs held, and every write refused.</li>
+      <li>
+        <strong>The audit log:</strong> every write on record, yours and every agent's, refused ones included; nothing in
+        it can be changed or deleted. What changed lists what a check of all tracked companies found.
+      </li>
+      <li>
+        <strong>Analytics:</strong> how far applications get, how long roles stay listed, and what the AI cost. A rate
+        needs at least <%= Analytics::FLOOR %> to go on, and says so when it hasn't.
+      </li>
+    </ul>
+    <p class="pages">
+      <%= link_to "Review", review_path %> · <%= link_to "Agents", agents_path %> · <%= link_to "Audit log", audit_path %> ·
+      <%= link_to "What changed", changes_path %> · <%= link_to "Analytics", analytics_path %>
+    </p>
+  </section>
+
+  <p class="muted small">Local and single-user: there is no login, so it is never deployed as it is.</p>
+</div>

@@ -1,5 +1,5 @@
 # What the operator wants of a company (4b), kept on the search profile beside what they look for in a role: saved by
-# the operator, or by their own Claude client on their word (company_preferences:write, those fields alone). What they
+# the operator, or by their own AI assistant on their word (company_preferences:write, those fields alone). What they
 # want and avoid, in their words, and the words to avoid, are their own business: the audit log holds them by a hash
 # alone, and a save carries a fixed reasoning, never a reason restated in its own words.
 module CompanyPreferences

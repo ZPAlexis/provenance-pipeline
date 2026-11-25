@@ -1,7 +1,7 @@
 # What the dashboard shows: where the tracked roles stand, what changed lately,
 # the companies watched, and what reading pages has cost. Read-only.
 module Overview
-  RECENT_CHANGES = 12
+  RECENT_CHANGES = 8 # about a screen, on the dashboard's tab (4e)
   RECENT_RUNS = 8
   # A tracked role not checked for this long is worth a look: listings are read
   # in full every 14 days, so its answer may have gone stale.

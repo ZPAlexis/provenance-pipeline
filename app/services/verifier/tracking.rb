@@ -13,7 +13,7 @@ module Verifier
 
     module_function
 
-    # How a change came, in its audit reasoning: by the operator's own hand, or by their own Claude client on their
+    # How a change came, in its audit reasoning: by the operator's own hand, or by their own AI assistant on their
     # word (4a step 4, through MCP), the actor naming which.
     def by(actor) = actor == AuditEvent::OPERATOR ? "by hand" : "on the operator's word"
 
@@ -40,7 +40,7 @@ module Verifier
       ApplicationRecord.transaction do
         company.update!(tracking: "dismissed")
         AuditEvent.record_write!(company, actor: actor,
-                                          reasoning: declined ? "Declined #{by(actor)}: proposed by the operator's own Claude client, archived, and never proposed again. #{note}" :
+                                          reasoning: declined ? "Declined #{by(actor)}: proposed by the operator's own AI assistant, archived, and never proposed again. #{note}" :
                                                                 "Archived #{by(actor)}: never checked, suggested from or reviewed again. #{note}")
         roles = company.postings.not_dismissed.to_a
         roles.each do |posting|
@@ -62,7 +62,7 @@ module Verifier
         back = with_roles ? archived_with(company) : {}
         company.update!(tracking: "tracked")
         AuditEvent.record_write!(company, actor: actor,
-                                          reasoning: proposal ? "Tracked #{by(actor)}: proposed by the operator's own Claude client. #{note}" :
+                                          reasoning: proposal ? "Tracked #{by(actor)}: proposed by the operator's own AI assistant. #{note}" :
                                                                 "Tracked #{by(actor)}. #{note}")
         BoardRead.after_tracking(company, requested_by: actor) if proposal
         back.each do |posting, was|

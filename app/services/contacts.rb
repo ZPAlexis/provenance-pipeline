@@ -1,5 +1,5 @@
 # The people at a company the operator deals with (Stage 2e): written by the operator on the pages, or (2e
-# step 2) by the operator's own Claude client through MCP. A contact is kept with its company and linked to any
+# step 2) by the operator's own AI assistant through MCP. A contact is kept with its company and linked to any
 # of its applications. Its personal details (name, email, link, notes) are audited as hashes, never as values,
 # so deleting a contact removes it from the record; its role and kind are audited as they are. Deleting one is
 # the operator's alone.

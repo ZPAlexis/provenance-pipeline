@@ -1,5 +1,5 @@
 <%# An application's drafts: cover letters and outreach notes written by the in-app drafter (2c) or saved by
-    your own Claude client through MCP, and tailored resumes (2d); yours to edit, approve, copy, or delete.
+    your AI assistant through MCP, and tailored resumes (2d); yours to edit, approve, copy, or delete.
     Nothing is sent from here. %>
 <% needs = Drafts.missing(application) %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
@@ -31,7 +31,7 @@
       <p class="muted small">
         Opus 5.5 writes it from your resume (saved <%= resume.created_at.to_date %>), the role's description (read <%= description.first_read_at.to_date %>),
         your profile and your notes, claiming only what your resume shows: about <%= cost(estimate) %>. You edit it and approve it; nothing is ever sent.
-        Or write it, and a tailored resume, in your own Claude client through MCP, on your subscription: it saves them here.
+        Or write it, and a tailored resume, in your AI assistant through MCP, on your subscription: it saves them here.
       </p>
     <% end %>
   <% end %>

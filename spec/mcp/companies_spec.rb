@@ -227,13 +227,13 @@ RSpec.describe "Finding companies through MCP" do
 
     it "shows a company's proposal and its newest review in full, with the scores before it" do
       text = said(call(:CompanyStatus, company: "acme.example"))
-      expect(text).to include("Company review: 81, 1 met, 0 missed, 1 unknown, by your Claude client, through MCP",
+      expect(text).to include("Company review: 81, 1 met, 0 missed, 1 unknown, by your AI assistant, through MCP",
                               "  why: It sells to revenue teams and hires in Brazil; its funding is unknown.",
                               "  found: Series B; B2B; hires in Latin America", "  match, wants: Products for revenue teams. (Its product page.) [https://acme.example/product]",
                               "  unknown, stage: Series A or B", "  concern: A small team.", "  sources checked: https://acme.example/about", "  before: 58 on")
 
       proposal = said(call(:CompanyStatus, company: "contoso.example"))
-      expect(proposal).to include("Proposed by the operator's own Claude client", "found by a job-board search (solutions engineer brazil)",
+      expect(proposal).to include("Proposed by the operator's own AI assistant", "found by a job-board search (solutions engineer brazil)",
                                   "  why it may fit: Sells to revenue teams in Brazil.", "  its board when proposed: https://jobs.ashbyhq.com/contoso: 12 roles",
                                   "Company review: none")
       expect(said(call(:CompanyStatus, company: "tailspin.example"))).to include("Company review: none (an archived company is never reviewed)")

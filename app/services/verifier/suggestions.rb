@@ -11,12 +11,12 @@ module Verifier
   # (deleted, its whole record kept in the audit) when it no longer fits the
   # profile, or when its latest check found it gone from the whole list.
   #
-  # The operator's own Claude client may propose roles too (2f step 3), judged by meaning rather than the profile's
+  # The operator's own AI assistant may propose roles too (2f step 3), judged by meaning rather than the profile's
   # words: from the same stored lists, through MCP as agent:assistant. Its suggestions are marked as the client's, and
   # a refresh neither refits nor withdraws them while their page still lists them.
   module Suggestions
     ACTOR = "agent:suggester".freeze
-    # The operator's own Claude client, proposing roles through MCP (2f step 3).
+    # The operator's own AI assistant, proposing roles through MCP (2f step 3).
     CLIENT = "agent:assistant".freeze
     SCOPES = %w[postings:suggest].freeze
     # One refresh writes at a time: a check finishing as the profile is saved must not suggest a role twice.
@@ -123,7 +123,7 @@ module Verifier
               **FIT_FIELDS.to_h { |field| [ field.to_sym, role[field] ] })
     end
 
-    # A suggestion the operator's own Claude client proposed (2f step 3): the client's, not the profile's words.
+    # A suggestion the operator's own AI assistant proposed (2f step 3): the client's, not the profile's words.
     def proposed_by_client?(posting) = posting.fit.is_a?(Hash) && posting.fit["by"] == CLIENT
 
     # A role a preview listed, by its key (the read it was listed in, and its place there): its company, that read,
@@ -160,7 +160,7 @@ module Verifier
       why.to_s.strip.tap { |said| raise ArgumentError, "say why it fits, in a sentence or two" if said.empty? || said.size > 600 }
     end
 
-    # A role on a watched page proposed by the operator's own Claude client (2f step 3), by its key or as a candidate
+    # A role on a watched page proposed by the operator's own AI assistant (2f step 3), by its key or as a candidate
     # already found: a suggestion as the suggester's are, marked as the client's, with its reason. Under the caller's
     # credential (postings:suggest).
     def propose!(key, why:, profile: SearchProfile.current, actor: CLIENT)
@@ -175,7 +175,7 @@ module Verifier
       )
       AuditEvent.record_write!(
         posting, actor: actor,
-        reasoning: "Suggested by the operator's Claude client: #{why} Listed on its company's careers page when read at " \
+        reasoning: "Suggested by the operator's AI assistant: #{why} Listed on its company's careers page when read at " \
                    "#{check.checked_at.utc.iso8601} (check #{check.id}, run #{check.run_id})."
       )
       posting

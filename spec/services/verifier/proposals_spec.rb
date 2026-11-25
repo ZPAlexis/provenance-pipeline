@@ -1,6 +1,6 @@
 require "rails_helper"
 
-# Companies the operator's own Claude client proposes (4b): added as "suggested", with why, under a credential holding
+# Companies the operator's own AI assistant proposes (4b): added as "suggested", with why, under a credential holding
 # companies:suggest; what each one's board lists is the app's own free read, never the client's word; and why it may
 # fit is the operator's business, held by the audit log as a hash alone.
 RSpec.describe Verifier::Proposals do
@@ -67,7 +67,7 @@ RSpec.describe Verifier::Proposals do
 
     event = AuditEvent.find_by!(target: company)
     expect(event).to have_attributes(actor: "agent:assistant", action: "create",
-                                     reasoning: "Proposed by the operator's own Claude client, found by a job-board search. " \
+                                     reasoning: "Proposed by the operator's own AI assistant, found by a job-board search. " \
                                                 "Why it may fit is kept on the company alone.")
     expect(event.changes_made.dig("proposal", "why")).to eq([ nil, Resume.digest("Sells to revenue teams in Brazil.") ])
     expect(event.changes_made.to_json).not_to include("revenue teams")
@@ -151,7 +151,7 @@ RSpec.describe Verifier::Proposals do
     expect(proposed.reload).to have_attributes(name: "Fabrikam", tracking: "suggested")
     expect(proposed.proposal["why"]).to eq("Opened an office in São Paulo.")
     event = AuditEvent.where(target: proposed).order(:occurred_at).last
-    expect(event.reasoning).to start_with("Proposal refreshed by the operator's own Claude client")
+    expect(event.reasoning).to start_with("Proposal refreshed by the operator's own AI assistant")
     expect(event.changes_made.dig("proposal", "why")).to eq([ Resume.digest(old_why), Resume.digest("Opened an office in São Paulo.") ])
   end
 

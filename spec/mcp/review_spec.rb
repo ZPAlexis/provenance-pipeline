@@ -3,7 +3,7 @@ require Rails.root.join("mcp/provenance_mcp")
 ProvenanceMcp.tools
 ProvenanceMcp.prompts
 
-# The operator's own Claude client recommending decisions on the review queue (2g step 3). A read tool's or a prompt's
+# The operator's own AI assistant recommending decisions on the review queue (2g step 3). A read tool's or a prompt's
 # call leaves the test's transaction read-only: each example writes before its first such call.
 RSpec.describe "Recommending decisions on the review queue through MCP" do
   let!(:partial) { create(:company, :resolved, name: "Acme", domain: "acme.example") }

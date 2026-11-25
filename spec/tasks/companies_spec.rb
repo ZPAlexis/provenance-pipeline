@@ -28,7 +28,7 @@ RSpec.describe "companies: commands" do
     expect(run_task("companies:reviews").out).to include("1 companies, best first:", " 81  Fabrikam  81, 1 met, 0 missed, 0 unknown")
     expect(run_task("companies:reviews", DUE: "1").out).to include("1 due a review:", "- Contoso (contoso.example, suggested): #{contoso.id}")
     shown = run_task("companies:review", "fabrikam").out
-    expect(shown).to include("Fabrikam: 81, by your Claude client, through MCP", "Why: It sells to revenue teams.",
+    expect(shown).to include("Fabrikam: 81, by your AI assistant, through MCP", "Why: It sells to revenue teams.",
                              "match: Products for revenue teams. (Its product page.)", "Facts: Stage Series B",
                              "Sources: https://fabrikam.example/product")
 

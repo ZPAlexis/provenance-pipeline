@@ -1,5 +1,5 @@
 module ProvenanceMcp
-  # What the operator's own Claude client needs to write about an application (2d step 2): the writing rules,
+  # What the operator's own AI assistant needs to write about an application (2d step 2): the writing rules,
   # shared with the worker's draft command, and the application's materials as the drafter reads them.
   module Writing
     # The rules every piece of writing keeps, in one file: the worker builds its drafter's prompt from it.

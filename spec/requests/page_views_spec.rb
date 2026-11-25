@@ -75,7 +75,7 @@ RSpec.describe "Page views", type: :request do
 
     get company_path(proposal)
 
-    expect(response.body).to include("Proposed by your own Claude client: not watched or checked until you track it.",
+    expect(response.body).to include("Proposed by your AI assistant: not watched or checked until you track it.",
                                      "Track it", "Why track it?", "Declined for good: it is never proposed again.",
                                      "Reading the board it was proposed with, free")
     get companies_path(tab: "all")

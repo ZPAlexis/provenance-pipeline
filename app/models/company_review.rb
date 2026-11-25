@@ -1,4 +1,4 @@
-# How well a company fits the operator's company preferences (4b), as their own Claude client researched it: a score
+# How well a company fits the operator's company preferences (4b), as their own AI assistant researched it: a score
 # from 0 to 100 and why; the facts found, each with its sources, and the stage, size, business model, industries and
 # the regions it operates and hires in as values the pages filter on; one line per preference (match: it meets it;
 # miss: it doesn't; unknown: nothing found), with the evidence; concerns, open questions, and the sources checked.
@@ -6,7 +6,7 @@
 # choosing companies: it claims nothing. Written through CompanyReviews, which audits it by its score, counts and
 # digests, never its text: it is read against the operator's own preferences.
 class CompanyReview < ApplicationRecord
-  WRITERS = { "agent:assistant" => "your Claude client, through MCP" }.freeze
+  WRITERS = { "agent:assistant" => "your AI assistant, through MCP" }.freeze
   VERDICTS = %w[match miss unknown].freeze
   # What a point weighs: one of the company preferences, or where it hires against the places the operator can work.
   ABOUT = %w[wants avoids stage size business_model industries excluded places].freeze

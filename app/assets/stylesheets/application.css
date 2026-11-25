@@ -166,6 +166,33 @@ main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 48px; }
 }
 a.tile:hover { text-decoration: none; border-color: var(--accent); }
 .tile .value { font-size: 24px; font-weight: 700; line-height: 1.2; }
+
+/* The About page (4e): a readable line, four steps, then a section for each. */
+.about { max-width: 860px; }
+.about > :not(ol.steps) { max-width: 72ch; }
+.about .lead { font-size: 16px; line-height: 1.55; }
+.about section { margin-top: 26px; scroll-margin-top: 16px; }
+.about section > ul { padding-left: 20px; }
+.about section > ul li { margin-bottom: 7px; line-height: 1.5; }
+.about .pages { font-size: 13px; }
+ol.steps { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px; margin: 18px 0 8px; padding: 0; }
+ol.steps li { counter-increment: step; }
+ol.steps a { display: block; height: 100%; padding: 10px 12px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; }
+ol.steps a:hover { text-decoration: none; border-color: var(--accent); }
+ol.steps strong { display: block; color: var(--accent); }
+ol.steps strong::before { content: counter(step) ". "; }
+ol.steps span { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+
+/* The dashboard (4e: about one screen): its groups two to a row, their tiles smaller. */
+.dash-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 4px 24px; margin-bottom: 8px; }
+.dash-group h2 { margin: 12px 0 8px; }
+.dash-group > p { margin: 6px 0 0; }
+.tiles.compact { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+.tiles.compact .tile { padding: 8px 10px; }
+.tiles.compact .value { font-size: 20px; }
+.tiles.compact .label { font-size: 11.5px; line-height: 1.3; }
 .tile .label { color: var(--muted); font-size: 12px; }
 .tile.live .value { color: var(--live); }
 .tile.gone .value { color: var(--gone); }
@@ -442,9 +469,15 @@ details.guidance > summary { cursor: pointer; }
 
 /* Agents (1.3) */
 
-.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+/* 4e: cards the size of their own content (a fold opened stretches no other), their scopes as chips. */
+.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-items: start; }
 .agent { padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
-.agent.human { border-style: dashed; }
+.agent p { margin: 6px 0; }
+.agent.human { border-style: dashed; margin-bottom: 10px; }
+ul.human-only { margin: 6px 0 0; padding-left: 18px; columns: 2 280px; column-gap: 28px; }
+ul.human-only li { break-inside: avoid; margin-bottom: 3px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.scope-fold > summary { cursor: pointer; }
 .agent-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 ul.scopes { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
 code.scope {

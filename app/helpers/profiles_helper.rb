@@ -31,7 +31,7 @@ module ProfilesHelper
   def fit_reasons(posting)
     return tag.span("—", class: "muted") unless posting.fit
 
-    by_client = "Your Claude client: " if Verifier::Suggestions.proposed_by_client?(posting)
+    by_client = "Your AI assistant: " if Verifier::Suggestions.proposed_by_client?(posting)
     safe_join([ "#{by_client}#{posting.fit['reasoning']}", fit_notes(Array(posting.fit["notes"])) ], " ")
   end
 

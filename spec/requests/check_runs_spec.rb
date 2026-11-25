@@ -82,6 +82,6 @@ RSpec.describe "Check now", type: :request do
 
     get root_path
 
-    expect(response.body).to include("Recent checks you asked for", "No longer listed", "$0.004")
+    expect(response.body).to include("Checks you asked for", "No longer listed", "$0.004")
   end
 end

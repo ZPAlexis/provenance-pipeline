@@ -3,7 +3,7 @@ require Rails.root.join("mcp/provenance_mcp")
 ProvenanceMcp.tools
 ProvenanceMcp.prompts
 
-# What the operator's own Claude client saves back through MCP (2d step 3): as agent:assistant, under a credential
+# What the operator's own AI assistant saves back through MCP (2d step 3): as agent:assistant, under a credential
 # for that one call, read against the resume version it saw. Save tools write, so examples may write after a call.
 RSpec.describe "Saving what the client wrote, through MCP" do
   let!(:company) { create(:company, :resolved, name: "Acme", domain: "acme.example") }

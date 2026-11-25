@@ -13,7 +13,7 @@
 # shown on the resume, shown only in the background, or not shown. A must-have not shown on the resume caps the ATS fit
 # at CAP, one shown nowhere the Background fit: the app applies it, and keeps the score as weighed beside the cap.
 class FitScore < ApplicationRecord
-  WRITERS = { "agent:fit_scorer" => "the fit scorer", "agent:assistant" => "your Claude client, through MCP" }.freeze
+  WRITERS = { "agent:fit_scorer" => "the fit scorer", "agent:assistant" => "your AI assistant, through MCP" }.freeze
   # Where a gap the background covers is to be addressed.
   ADDRESS_IN = { "resume" => "the resume", "cover_letter" => "the cover letter", "both" => "the resume and the cover letter" }.freeze
   PREFERENCE_VERDICTS = %w[match miss].freeze

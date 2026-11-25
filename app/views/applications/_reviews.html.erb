@@ -1,5 +1,5 @@
 <%# An application's resume reviews (2d): your resume weighed against the role, written in the app by the drafter
-    (on the API) or saved by your own Claude client through MCP (on your subscription). Advice for you: nothing in
+    (on the API) or saved by your AI assistant through MCP (on your subscription). Advice for you: nothing in
     them is sent or claimed. %>
 <% resume = SearchProfile.current&.resumes&.newest_first&.first %>
 <% description = application.posting.role_descriptions.newest_first.first %>
@@ -19,7 +19,7 @@
       <%= form.submit "Review my resume", class: "btn small" %>
       <p class="muted small">
         Opus 5.5 weighs your resume against the role's description: strengths with the lines behind them, gaps, suggestions;
-        about <%= cost(estimate) %>. Or ask your own Claude client for one through MCP (the Resume review prompt), on your
+        about <%= cost(estimate) %>. Or ask your AI assistant for one through MCP (the Resume review prompt), on your
         subscription: it saves it here when you tell it to.
       </p>
     <% end %>

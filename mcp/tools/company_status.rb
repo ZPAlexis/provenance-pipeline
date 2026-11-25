@@ -39,7 +39,7 @@ module ProvenanceMcp
           return [] if proposal.blank?
 
           source = Verifier::Proposals::SOURCES.fetch(proposal["source"].to_s, "another source")
-          [ "Proposed by the operator's own Claude client#{" (model reported: #{proposal['reported_model']})" if proposal['reported_model']}, " \
+          [ "Proposed by the operator's own AI assistant#{" (model reported: #{proposal['reported_model']})" if proposal['reported_model']}, " \
             "#{company.created_at.utc.to_date}: found by #{source}#{" (#{proposal['query']})" if proposal['query']}",
             "  why it may fit: #{proposal['why']}",
             "  its board when proposed: #{Verifier::Proposals.seen_said(proposal['seen'])}",
@@ -69,7 +69,7 @@ module ProvenanceMcp
         def heading(company)
           kind = { "recruiter" => "a recruiter (its roles are its clients')", "aggregator" => "an aggregator (other employers' roles: never watched)" }
           archived = ", archived: never checked, suggested from or reviewed, until the operator tracks it again" if company.dismissed?
-          archived = ", proposed by the operator's own Claude client: not watched until the operator tracks it" if company.suggested?
+          archived = ", proposed by the operator's own AI assistant: not watched until the operator tracks it" if company.suggested?
           "#{company.name}#{" (#{company.domain})" if company.domain}#{", #{kind[company.kind]}" if kind[company.kind]}#{archived}, id #{company.id}"
         end
 

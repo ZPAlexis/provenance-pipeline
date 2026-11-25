@@ -1,5 +1,5 @@
 # What each kind of review item asks, and what to look at before deciding it (1.5e): one source, read by the Review
-# page, the review commands, and (2g) the operator's own Claude client through MCP when it recommends a decision, as
+# page, the review commands, and (2g) the operator's own AI assistant through MCP when it recommends a decision, as
 # the writing rules are one source for writing.
 module ReviewGuidance
   LABELS = {

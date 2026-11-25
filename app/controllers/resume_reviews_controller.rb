@@ -1,5 +1,5 @@
 # An application's resume reviews (Stage 2d): written by the drafter in the background (a check run of kind
-# review), or saved by the operator's own Claude client through MCP; deleted here by the operator alone,
+# review), or saved by the operator's own AI assistant through MCP; deleted here by the operator alone,
 # audited by their counts and hashes.
 class ResumeReviewsController < ApplicationController
   def create

@@ -1,11 +1,11 @@
-<%# How well this company fits your company preferences (4b): its newest review, as your own Claude client researched it
+<%# How well this company fits your company preferences (4b): its newest review, as your AI assistant researched it
     when you asked, and the scores before it. Advice for choosing companies, never weighed into a role's fit. %>
 <h2>Company review</h2>
 <% if review %>
   <section class="check-now company-review">
     <p class="fit-head"><%= fit_badge(review.score) %> <span class="muted small">of 100</span> <%= review.why %></p>
     <% if review.stale?(profile) %>
-      <p class="small warn">Your company preferences or places changed since it was reviewed: ask your Claude client to review it again for a current score.</p>
+      <p class="small warn">Your company preferences or places changed since it was reviewed: ask your AI assistant to review it again for a current score.</p>
     <% end %>
     <% if review.thin? %>
       <p class="small warn">It knows less than it doesn't: more of your preferences came out unknown than met and missed together.</p>
@@ -81,7 +81,7 @@
   <p class="muted small">Not reviewed: an archived company isn't.</p>
 <% else %>
   <p class="muted small">
-    Not reviewed yet. Your own Claude client reviews a company only when you ask it to: it researches the company and
+    Not reviewed yet. Your AI assistant reviews a company only when you ask it to: it researches the company and
     weighs it against your company preferences, point by point, with its sources.
   </p>
 <% end %>

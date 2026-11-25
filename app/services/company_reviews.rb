@@ -1,5 +1,5 @@
 # How well a company fits the operator's company preferences (4b): reviewed only when the operator asks, by their own
-# Claude client, which researches the company on the open web and saves the review back as agent:assistant under a
+# AI assistant, which researches the company on the open web and saves the review back as agent:assistant under a
 # credential holding company_reviews:write, read against the preferences version it saw. Every review is kept; the
 # newest is shown, stale once the preferences or the places change. Audited by its score, counts and digests, never
 # its text. A review never weighs into a role's fit: company fit and role fit are two scores.

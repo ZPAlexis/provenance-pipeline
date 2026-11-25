@@ -104,7 +104,7 @@ module Authority
       ]
     },
     "companies:suggest" => {
-      about: "Propose a company that may fit the operator, as their own Claude client: added as suggested, with its name, " \
+      about: "Propose a company that may fit the operator, as their own AI assistant: added as suggested, with its name, " \
              "domain and why (where it was found, and what the app's own free read of its board saw), never tracked and " \
              "never with a careers page; its why refreshed while it is still a proposal. Only the operator, or the " \
              "client on their word, tracks one.",
@@ -171,7 +171,7 @@ module Authority
     },
     # 4b: how well a company fits those preferences, as the operator's own client researched it.
     "company_reviews:write" => {
-      about: "Save a review of how well a company fits the operator's company preferences, as their own Claude client " \
+      about: "Save a review of how well a company fits the operator's company preferences, as their own AI assistant " \
              "researched it: a score and why, the facts found with their sources, one line per preference. Never edit " \
              "or delete one.",
       rules: [ Rule.new(model: "CompanyReview", actions: %i[create], only_if: ->(review) { review.written_by == "agent:assistant" }) ]
@@ -223,7 +223,7 @@ module Authority
     "agent:fit_scorer" => { about: "Weighs roles against the resume, from each role's own description, with a score from 0 to " \
                                    "100 and why, for the operator to rank roles by. Tracks, dismisses and sends nothing.",
                             scopes: %w[fit:write] },
-    "agent:assistant" => { about: "Saves what the operator's own Claude client writes through the MCP server (drafts, reviews, " \
+    "agent:assistant" => { about: "Saves what the operator's own AI assistant writes through the MCP server (drafts, reviews, " \
                                   "contacts, activities, the roles and companies it proposes, the fit it weighs, its reviews " \
                                   "of companies, the company preferences it is told, and what it recommends on the review " \
                                   "queue), and curates the watch list on the operator's word (tracks " \

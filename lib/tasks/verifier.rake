@@ -682,7 +682,7 @@ namespace :verifier do
     abort e.message.upcase_first
   end
 
-  desc "The companies your own Claude client proposed (4b), waiting for you: each with its id, where it was found, " \
+  desc "The companies your AI assistant proposed (4b), waiting for you: each with its id, where it was found, " \
        "what its board listed when the app read it, and why it may fit. Track one (verifier:track_company) or decline " \
        "it (verifier:dismiss_company). Reads only."
   task proposals: :environment do

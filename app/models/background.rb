@@ -1,7 +1,7 @@
 # The operator's background beyond the resume (4c), pasted on the Profile page in three parts, each read only by what
 # may use it. Kept version by version, as the resume is, through Backgrounds, which audits each part by its size and
 # hash, never its text. Personal data, held in this database only; the operator writes in it only what is safe to
-# quote, since their own Claude client may hold all of it in one conversation.
+# quote, since their own AI assistant may hold all of it in one conversation.
 class Background < ApplicationRecord
   # Each part, as the Profile page names it, and what reads it.
   PARTS = {

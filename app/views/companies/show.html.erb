@@ -27,7 +27,7 @@
 <% if @company.dismissed? %>
   <p class="muted small">Archived: never checked, suggested from or reviewed, until you track it again.</p>
 <% elsif proposal %>
-  <p class="muted small">Proposed by your own Claude client: not watched or checked until you track it. Tracking it reads the board it was proposed with at once, free; archiving it declines it for good.</p>
+  <p class="muted small">Proposed by your AI assistant: not watched or checked until you track it. Tracking it reads the board it was proposed with at once, free; archiving it declines it for good.</p>
 <% end %>
 
 <% if @company.resolution_status == "candidate" %>

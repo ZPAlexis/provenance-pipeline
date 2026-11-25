@@ -1,4 +1,4 @@
-# Reviews of the resume against an application's role (Stage 2d): saved by the operator's own Claude client
+# Reviews of the resume against an application's role (Stage 2d): saved by the operator's own AI assistant
 # through MCP as agent:assistant, under the credential of that one call (resume_reviews:write), read against
 # the resume version the client saw; or written in the app by the drafter, with the worker's `review` (one
 # LLM call, the drafter's model) under a credential for the run holding resume_reviews:write alone. Deleted

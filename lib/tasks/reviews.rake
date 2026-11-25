@@ -8,7 +8,7 @@ namespace :reviews do
   task list: :environment do
     reviews = ResumeReview.includes(:llm_call, application: %i[company posting]).newest_first
     reviews = reviews.where(application_id: ENV["APPLICATION"]) if ENV["APPLICATION"].present?
-    abort "No review yet: write one from an application's page, with reviews:write, or from your Claude client through MCP." if reviews.empty?
+    abort "No review yet: write one from an application's page, with reviews:write, or from your AI assistant through MCP." if reviews.empty?
 
     reviews.each do |review|
       puts "#{review.id}  #{review.created_at.to_date}  #{named.call(review.application)}: #{review.language}, " \

@@ -81,7 +81,7 @@
   <% end %>
   <p class="muted small">
     <% if draft.written_by == "agent:assistant" %>
-      Written by your Claude client and saved through MCP<%= " (it reports #{draft.reported_model})" if draft.reported_model %>, on your subscription,
+      Written by your AI assistant and saved through MCP<%= " (it reports #{draft.reported_model})" if draft.reported_model %>, on your subscription,
     <% else %>
       Written by the drafter<%= " with #{call.model}#{" at #{call.settings.dig('output_config', 'effort')} effort" if call.settings.dig('output_config', 'effort')} for #{cost(call.cost_usd)}" if call %>,
     <% end %>

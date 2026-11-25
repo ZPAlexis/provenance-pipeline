@@ -1,13 +1,18 @@
 <% content_for :title, "Analytics · Provenance Pipeline" %>
+<%# How the search is going (3.3; 4e): tabs for the pipeline, the watch and the agents, each about a screen. %>
 <div class="page-head">
   <div>
     <h1>Analytics</h1>
-    <p class="sub">
-      How the search is going, worked out from the record: the audit log, the page reads and the AI calls. A rate needs
-      at least <%= Analytics::FLOOR %> to go on; below that it says so.
-    </p>
+    <p class="sub">How the search is going, worked out from the record.</p>
   </div>
 </div>
+
+<%= how_this_works do %>
+  <p>
+    Every figure is worked out from the record as it is: the audit log, the page reads and the AI calls. A rate needs at
+    least <%= Analytics::FLOOR %> to go on; below that it says so, rather than reading a trend into a handful.
+  </p>
+<% end %>
 
 <%= form_with url: analytics_path, method: :get, class: "check-form" do %>
   <label class="small">Since <%= date_field_tag :since, @since %></label>
@@ -15,14 +20,11 @@
   <%= link_to "Everything", analytics_path, class: "small" if @since %>
   <span class="muted small">Applications started, roles first seen listed, and the reads, calls and writes made since then.</span>
 <% end %>
-<nav class="filters" aria-label="Sections">
-  <%= link_to "Pipeline", "#pipeline", class: "filter" %>
-  <%= link_to "The watch", "#watch", class: "filter" %>
-  <%= link_to "The agents", "#agents", class: "filter" %>
-</nav>
+<div data-controller="tabs">
+<%= page_tabs([ [ "pipeline", "Pipeline" ], [ "watch", "The watch" ], [ "agents", "The agents" ] ], label: "Analytics") %>
 
 <% pipeline = @pipeline %>
-<h2 id="pipeline">Pipeline</h2>
+<%= tab_panel "pipeline", first: true do %>
 <% if pipeline.applications.zero? %>
   <p class="empty">No application started <%= @since ? "since #{@since}" : "yet" %>: start one from a role's page.</p>
 <% else %>
@@ -116,8 +118,10 @@
   listed <%= pipeline.unapplied == 1 ? "has" : "have" %> no application.
 </p>
 
+<% end %>
+
 <% watch = @watch %>
-<h2 id="watch">The watch</h2>
+<%= tab_panel "watch" do %>
 <h3>How long roles stay listed</h3>
 <% lasting = watch.lasting %>
 <div class="tiles">
@@ -181,8 +185,10 @@
 </div>
 <p class="muted small">Now, whatever the period. "Check all tracked companies", on the <%= link_to "Roles page", roles_path %>, reads them all again.</p>
 
+<% end %>
+
 <% agents = @agents %>
-<h2 id="agents">The agents</h2>
+<%= tab_panel "agents" do %>
 <h3>What the AI cost</h3>
 <% if agents.days.any? %>
   <p class="muted small"><%= money(agents.cost) %> over <%= pluralize(agents.spend.sum(&:calls), "call") %><%= " since #{@since}" if @since %>.</p>
@@ -259,7 +265,7 @@
     </table>
   </div>
   <p class="muted small">
-    Your Claude client's recommendations on the review queue. Agreement is of those you decided: the only ground on
+    Your AI assistant's recommendations on the review queue. Agreement is of those you decided: the only ground on
     which a kind would ever act on its own.
   </p>
 <% else %>
@@ -287,3 +293,5 @@
 <% else %>
   <p class="empty">Nothing written<%= " since #{@since}" if @since %>.</p>
 <% end %>
+<% end %>
+</div>

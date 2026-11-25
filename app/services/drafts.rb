@@ -128,7 +128,7 @@ module Drafts
                     output_tokens: llm["output_tokens"], cost_usd: llm["cost_usd"], called_at: Time.current)
   end
 
-  # What the operator's own Claude client wrote through MCP (2d), saved as `actor` under the credential of that one
+  # What the operator's own AI assistant wrote through MCP (2d), saved as `actor` under the credential of that one
   # call: a cover letter, an outreach note, or a tailored resume, read against the resume version the client saw. A
   # polished version revises the draft it came from, which stays. Returns the draft and what was saved, in words.
   #

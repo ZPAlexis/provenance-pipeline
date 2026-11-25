@@ -172,7 +172,7 @@ module FitScores
     [ score, cost, nil ]
   end
 
-  # A score the operator's own Claude client weighed through MCP (2f step 3), saved as `actor` under the credential of
+  # A score the operator's own AI assistant weighed through MCP (2f step 3), saved as `actor` under the credential of
   # that one call: read against the resume version the client saw and the role's newest description, its matches'
   # lines resolved to the resume's own. Returns the score and what was saved, in words.
   #

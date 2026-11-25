@@ -140,7 +140,7 @@ RSpec.describe "Deciding a review item", type: :request do
   end
 end
 
-# Recommendations from the operator's own Claude client (2g step 2): shown on their items, accepted in one click as the
+# Recommendations from the operator's own AI assistant (2g step 2): shown on their items, accepted in one click as the
 # operator's decision, and agreement measured.
 RSpec.describe "Accepting a recommended decision", type: :request do
   include ActiveJob::TestHelper
@@ -165,7 +165,7 @@ RSpec.describe "Accepting a recommended decision", type: :request do
     get review_path
     expect(response.body).to include("Recommended:", ">https://acme.example/careers</a>", "high confidence",
                                      "Its homepage links Careers to this page, which lists 12 roles.", ">https://acme.example</a> · its sitemap",
-                                     "By your Claude client, through MCP", "(claude-opus-5-5, as reported)", ">Accept: set this page<",
+                                     "By your AI assistant, through MCP", "(claude-opus-5-5, as reported)", ">Accept: set this page<",
                                      "Watches this page as Acme&#39;s careers page; its roles are read at its next check.",
                                      "1 item carries a recommendation from your", "See them",
                                      "With a recommendation <span class=\"count\">1</span>")
@@ -183,7 +183,7 @@ RSpec.describe "Accepting a recommended decision", type: :request do
 
     expect(company.reload).to have_attributes(careers_page_url: "https://acme.example/careers", resolution_status: "resolved")
     expect(item.reload).to have_attributes(status: "done", decision: "set_page", decided_by: "human:operator")
-    expect(item.note).to eq("Accepted the recommendation of your Claude client, through MCP (high confidence): " \
+    expect(item.note).to eq("Accepted the recommendation of your AI assistant, through MCP (high confidence): " \
                             "Its homepage links Careers to this page, which lists 12 roles.")
     expect(ReviewRecommendations.outcome(item)).to eq("agreed")
 

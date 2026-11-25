@@ -167,7 +167,7 @@ RSpec.describe Verifier::Suggestions do
     end
   end
 
-  # The operator's own Claude client proposing roles by meaning, through MCP (2f step 3).
+  # The operator's own AI assistant proposing roles by meaning, through MCP (2f step 3).
   describe ".propose!" do
     before { allow(DatabaseBackup).to receive(:daily) }
 
@@ -186,7 +186,7 @@ RSpec.describe Verifier::Suggestions do
       expect(posting.fit).to eq("by" => "agent:assistant", "profile_id" => profile.id, "title" => "Recruiter",
                                 "reasoning" => "Recruiting operations is close to the work.")
       expect(AuditEvent.find_by!(target: posting)).to have_attributes(
-        actor: "agent:assistant", action: "create", reasoning: start_with("Suggested by the operator's Claude client: Recruiting operations")
+        actor: "agent:assistant", action: "create", reasoning: start_with("Suggested by the operator's AI assistant: Recruiting operations")
       )
     end
 

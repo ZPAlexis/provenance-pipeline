@@ -1,4 +1,4 @@
-# A recommended decision on an open review item (Stage 2g), from the operator's own Claude client through MCP, as
+# A recommended decision on an open review item (Stage 2g), from the operator's own AI assistant through MCP, as
 # agent:assistant under review:recommend: one of the item's own actions, with the page or kind it needs, a
 # confidence, what was checked, and why. Kept on the item (its `recommendation`) for the operator to accept in one
 # click or not: it decides nothing, and makes none of the writes it recommends. One current recommendation an item: a
@@ -58,7 +58,7 @@ module ReviewRecommendations
   end
 
   # Who made a recommendation, in words.
-  WRITERS = { "agent:assistant" => "your Claude client, through MCP" }.freeze
+  WRITERS = { "agent:assistant" => "your AI assistant, through MCP" }.freeze
 
   def writer(actor) = WRITERS.fetch(actor.to_s, actor.to_s)
 

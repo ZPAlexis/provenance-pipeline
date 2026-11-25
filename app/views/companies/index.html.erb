@@ -6,7 +6,7 @@
   <div>
     <h1>Companies</h1>
     <p class="sub">
-      The companies you track: each one's careers page is watched for roles. Those your own Claude client proposes wait
+      The companies you track: each one's careers page is watched for roles. Those your AI assistant proposes wait
       under Suggested until you track or archive them. Archive one you no longer want, with its roles: it is never
       checked, suggested from or reviewed again, until you track it.
     </p>
@@ -59,7 +59,7 @@
 
 <% if @tab == "suggested" %>
   <p class="muted small">
-    Proposed by your own Claude client, each with why it may fit, where it was found, and what its board listed when it
+    Proposed by your AI assistant, each with why it may fit, where it was found, and what its board listed when it
     was proposed (the app's own read, free). Track one to watch it: the board it was proposed with is read at once,
     free. Archive one to decline it: it is never proposed again.
   </p>
@@ -106,7 +106,7 @@
     <% elsif @filter || @fit || @facts.any? %>
       No company here with the filters chosen.
     <% elsif @tab == "suggested" %>
-      No proposal waits for you. Your own Claude client proposes companies that may fit when you ask it to.
+      No proposal waits for you. Your AI assistant proposes companies that may fit when you ask it to.
     <% else %>
       None.
     <% end %>

@@ -2,7 +2,7 @@ require "rails_helper"
 require Rails.root.join("mcp/provenance_mcp")
 ProvenanceMcp.tools
 
-# The watch list through MCP (4a step 4): the operator's own Claude client lists the companies as the Companies page
+# The watch list through MCP (4a step 4): the operator's own AI assistant lists the companies as the Companies page
 # does, and on the operator's word tracks or archives companies and roles, adds a role, or changes a role's own page,
 # as agent:assistant under a credential for that one call holding watchlist:curate. A read tool's call leaves the
 # test's transaction read-only, so an example writes before its first list_companies.

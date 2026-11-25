@@ -1,6 +1,6 @@
 # A review of the resume against an application's role (Stage 2d): strengths with the resume lines behind
 # them, gaps, suggestions, and a note. Advice for the operator: it writes nothing to send and claims nothing.
-# Written by the operator's own Claude client through MCP (and, from 2d step 4, in the app); kept with the
+# Written by the operator's own AI assistant through MCP (and, from 2d step 4, in the app); kept with the
 # resume and description versions it read. Saved and deleted through ResumeReviews, which audits each by its
 # counts and hashes, never its text.
 class ResumeReview < ApplicationRecord

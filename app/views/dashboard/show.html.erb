@@ -1,4 +1,6 @@
 <% content_for :title, "Dashboard · Provenance Pipeline" %>
+<%# Where everything stands (4e: about one screen): the tile groups side by side, how old the tracked companies' lists
+    are beside them, then tabs for the checks you asked for and the verdicts that changed, about eight rows each. %>
 <div class="page-head">
   <div>
     <h1>Dashboard</h1>
@@ -6,8 +8,10 @@
   </div>
 </div>
 
+<div class="dash-groups">
+<section class="dash-group">
 <h2>Pipeline</h2>
-<div class="tiles">
+<div class="tiles compact">
   <% Application::OPEN.each do |stage| %>
     <%= link_to applications_path(anchor: stage), class: [ "tile", ("live" if stage == "offer" && @applications[stage].to_i.positive?) ] do %>
       <div class="value"><%= @applications.fetch(stage, 0) %></div>
@@ -22,11 +26,13 @@
 <% if @applications.empty? %>
   <p class="muted small">No application yet: start one from a role's page.</p>
 <% else %>
-  <p class="muted small"><%= link_to "How the pipeline is going", analytics_path %>: how far applications get, how long they sit in each stage, and how they end.</p>
+  <p class="muted small"><%= link_to "How the pipeline is going", analytics_path %>: how far applications get, how long they sit, how they end.</p>
 <% end %>
+</section>
 
+<section class="dash-group">
 <h2>Tracked roles</h2>
-<div class="tiles">
+<div class="tiles compact">
   <% [ [ "verified_live", "live" ], [ "not_found", "gone" ], [ "inaccessible", "unsure" ], [ "pending", "" ] ].each do |state, tone| %>
     <%= link_to roles_path(answer: state), class: [ "tile", tone ] do %>
       <div class="value"><%= @roles.fetch(state, 0) %></div>
@@ -49,21 +55,11 @@
 <% if @stale.positive? %>
   <p class="muted small"><%= pluralize(@stale, "tracked role") %> not checked in the last <%= Overview::STALE_AFTER.inspect %>.</p>
 <% end %>
+</section>
 
-<h2>Tracked companies' lists</h2>
-<p class="small">
-  <% if @list_ages.companies.zero? %>
-    No company is tracked with a careers page to read yet.
-  <% else %>
-    Of <%= pluralize(@list_ages.companies, "tracked company") %>, <%= @list_ages.stale %> last read more than <%= Overview::STALE_AFTER.inspect %>
-    ago<%= ", the oldest " if @list_ages.oldest %><%= ago(@list_ages.oldest) if @list_ages.oldest %>, and <%= @list_ages.never %> never.
-  <% end %>
-  Your AI assistant's role search reads these lists as they were last read: <%= link_to "Check all tracked companies", roles_path %>, on
-  the Roles page, reads them again.
-</p>
-
+<section class="dash-group">
 <h2>Companies and cost</h2>
-<div class="tiles">
+<div class="tiles compact">
   <%= link_to companies_path, class: "tile" do %>
     <div class="value"><%= @companies[:watched] %></div>
     <div class="label">Companies watched</div>
@@ -89,8 +85,27 @@
     <div class="label">API credit, all time · last call <%= ago(@spend[:last_call]) %></div>
   </div>
 </div>
+</section>
 
-<h2>Recent checks you asked for</h2>
+<section class="dash-group">
+<h2>Tracked companies' lists</h2>
+<p class="small">
+  <% if @list_ages.companies.zero? %>
+    No company is tracked with a careers page to read yet.
+  <% else %>
+    Of <%= pluralize(@list_ages.companies, "tracked company") %>, <%= @list_ages.stale %> last read more than <%= Overview::STALE_AFTER.inspect %>
+    ago<%= ", the oldest " if @list_ages.oldest %><%= ago(@list_ages.oldest) if @list_ages.oldest %>, and <%= @list_ages.never %> never.
+  <% end %>
+  Your AI assistant's role search reads these lists as they were last read: <%= link_to "Check all tracked companies", roles_path %>, on
+  the Roles page, reads them again.
+</p>
+</section>
+</div>
+
+<div data-controller="tabs">
+<%= page_tabs([ [ "checks", "Checks you asked for" ], [ "verdicts", "Verdict changes" ] ], label: "Lately") %>
+
+<%= tab_panel "checks", first: true do %>
 <% if @runs.any? %>
   <div class="table-wrap">
     <table>
@@ -143,11 +158,12 @@
 <% else %>
   <p class="empty">None yet: "Check now" on a role's or a company's page asks for one.</p>
 <% end %>
+<% end %>
 
-<h2>Recent verdict changes</h2>
+<%= tab_panel "verdicts" do %>
 <p class="muted small">
-  <%= link_to "Everything that changed since the last check of all tracked companies", changes_path %>: suggestions, careers pages, lists that changed a lot, and more.
-  <%= link_to "Every write on record, searchable", audit_path %>: the audit log.
+  The latest <%= Overview::RECENT_CHANGES %>. <%= link_to "See all", audit_path(kind: "Posting", attribute: "verification_state") %>, in the audit log;
+  <%= link_to "what changed since the last check of all tracked companies", changes_path %>: suggestions, careers pages, lists that changed a lot, and more.
 </p>
 <% if @changes.any? %>
   <div class="table-wrap">
@@ -173,3 +189,5 @@
 <% else %>
   <p class="empty">No verdict has changed yet.</p>
 <% end %>
+<% end %>
+</div>

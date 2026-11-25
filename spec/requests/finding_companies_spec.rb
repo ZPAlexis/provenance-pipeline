@@ -91,7 +91,7 @@ RSpec.describe "Finding companies", type: :request do
       expect([ contoso.reload.tracking, litware.reload.tracking ]).to eq(%w[tracked tracked])
       expect(CheckRun.sole).to have_attributes(company: contoso, kind: "company", request: { "read" => "board" }, ceiling_usd: 0)
       expect(AuditEvent.where(target: litware).order(:occurred_at).last.reasoning)
-        .to eq("Tracked by hand: proposed by the operator's own Claude client. Both fit.")
+        .to eq("Tracked by hand: proposed by the operator's own AI assistant. Both fit.")
       expect(DatabaseBackup).to have_received(:daily)
 
       patch track_many_companies_path, params: { ids: [ contoso.id ], note: "Again." }
@@ -195,7 +195,7 @@ RSpec.describe "Finding companies", type: :request do
 
       bare = create(:posting, company: create(:company, :resolved, name: "Woodgrove"), role_title: "Deal Desk Analyst")
       get role_path(bare)
-      expect(response.body).to include("not reviewed", "your own Claude client reviews a company only when you ask")
+      expect(response.body).to include("not reviewed", "your AI assistant reviews a company only when you ask")
     end
   end
 
@@ -221,7 +221,7 @@ RSpec.describe "Finding companies", type: :request do
                                        "What you avoid:", "Tracking people for ads.", ">missed<", "Its ad product profiles visitors.",
                                        "fabrikam.example", "Where you can work:", ">unknown<", "Last funding:", "A Series B in 2026.",
                                        "news.example", "An ad product beside the main one.", "Is the ad product growing?",
-                                       "1 source checked", "your Claude client, through MCP", "model reported: claude-opus-5-5",
+                                       "1 source checked", "your AI assistant, through MCP", "model reported: claude-opus-5-5",
                                        "It knows less than it doesn't", "Before: 58 on")
       expect(response.body).not_to include("changed since it was reviewed")
 
@@ -232,7 +232,7 @@ RSpec.describe "Finding companies", type: :request do
 
     it "says why it has no review: no preferences yet, or none asked for" do
       get company_path(company)
-      expect(response.body).to include("Not reviewed yet. Your own Claude client reviews a company only when you ask it to")
+      expect(response.body).to include("Not reviewed yet. Your AI assistant reviews a company only when you ask it to")
 
       profile.update!(company_wants: nil, company_models: [], company_industries: [])
       get company_path(company)

@@ -13,7 +13,7 @@ FactoryBot.define do
       careers_page_url { "https://#{domain || 'careers.example'}/careers" }
     end
 
-    # Proposed by the operator's own Claude client (4b): not tracked, with why and the board it named.
+    # Proposed by the operator's own AI assistant (4b): not tracked, with why and the board it named.
     trait :proposed do
       tracking { "suggested" }
       proposal do

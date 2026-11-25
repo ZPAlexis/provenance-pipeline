@@ -1,7 +1,7 @@
 module ProvenanceMcp
   # The four kinds of writing about an application (2d), as prompts the operator picks in their client: each
   # carries the writing rules the in-app drafter keeps, and the application's materials, so the operator's own
-  # Claude client writes on their subscription. Nothing is sent; the client saves it back when the operator says
+  # AI assistant writes on their subscription. Nothing is sent; the client saves it back when the operator says
   # so. An outreach note may be to one of the company's contacts (2e). The base sits outside Prompts, so only the
   # four below are served.
   class WritingPrompt < Prompt

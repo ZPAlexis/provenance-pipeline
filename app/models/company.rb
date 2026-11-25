@@ -51,7 +51,7 @@ class Company < ApplicationRecord
 
   # Whether the operator follows the company (4a), as with a role: tracked, or archived ("dismissed", the stored word
   # for it, as for roles). Only a tracked company is watched; archiving one archives its roles in play with it. Since 4b
-  # a company may also be "suggested": proposed by the operator's own Claude client (companies:suggest), with why in
+  # a company may also be "suggested": proposed by the operator's own AI assistant (companies:suggest), with why in
   # `proposal`, and not watched until the operator, or the client on their word, tracks it. Archiving a proposal
   # declines it, for good: it is never proposed again.
   TRACKING = %w[tracked suggested dismissed].freeze
@@ -114,7 +114,7 @@ class Company < ApplicationRecord
   # Followed by the operator: the only state in which a company is checked, suggested from, or reviewed (4a).
   def tracked? = tracking == "tracked"
 
-  # Proposed by the operator's own Claude client (4b), not yet tracked or declined.
+  # Proposed by the operator's own AI assistant (4b), not yet tracked or declined.
   def suggested? = tracking == "suggested"
 
   # Archived by the operator: never watched, suggested from or reviewed until tracked again.

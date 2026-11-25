@@ -1,5 +1,5 @@
 # Writing for an application, for the operator to edit and approve: a cover letter or an outreach note
-# (Stage 2c), written by the in-app drafter or by the operator's own Claude client through MCP (2d), or a
+# (Stage 2c), written by the in-app drafter or by the operator's own AI assistant through MCP (2d), or a
 # resume tailored to the role (2d, through MCP). Nothing is ever sent: the operator copies it out. A
 # polished version is a new draft that revises the one before. Written and changed through Drafts, which
 # audits each by its size and hash, never its text.
@@ -10,7 +10,7 @@ class Draft < ApplicationRecord
   STATUSES = %w[draft approved].freeze
   LABELS = { "cover_letter" => "Cover letter", "outreach" => "Outreach note", "tailored_resume" => "Tailored resume" }.freeze
   A_LABEL = { "cover_letter" => "a cover letter", "outreach" => "an outreach note", "tailored_resume" => "a tailored resume" }.freeze
-  WRITERS = { "agent:drafter" => "the in-app drafter", "agent:assistant" => "your Claude client, through MCP" }.freeze
+  WRITERS = { "agent:drafter" => "the in-app drafter", "agent:assistant" => "your AI assistant, through MCP" }.freeze
 
   belongs_to :application
   belongs_to :resume, optional: true # nil once the resume is deleted; resume_hash still names it

@@ -112,7 +112,7 @@ RSpec.describe Verifier::BoardRead do
       run = proposed.check_runs.sole
       expect(run).to have_attributes(kind: "company", request: { "read" => "board" }, ceiling_usd: 0, requested_by: "human:operator", status: "queued")
       expect(run).to be_board_read
-      expect(AuditEvent.where(target: proposed).last.reasoning).to eq("Tracked by hand: proposed by the operator's own Claude client. It fits.")
+      expect(AuditEvent.where(target: proposed).last.reasoning).to eq("Tracked by hand: proposed by the operator's own AI assistant. It fits.")
 
       allow(DatabaseBackup).to receive(:daily)
       allow(described_class).to receive(:run!).and_return(Verifier::CheckNow::Outcome.new(summary: "Read.", tally: {}, cost_usd: 0.0))
@@ -138,7 +138,7 @@ RSpec.describe Verifier::BoardRead do
 
       expect(proposed.reload.tracking).to eq("dismissed")
       expect(AuditEvent.where(target: proposed).last.reasoning)
-        .to eq("Declined by hand: proposed by the operator's own Claude client, archived, and never proposed again. Not my market.")
+        .to eq("Declined by hand: proposed by the operator's own AI assistant, archived, and never proposed again. Not my market.")
     end
   end
 end

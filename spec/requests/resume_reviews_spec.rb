@@ -19,7 +19,7 @@ RSpec.describe "What the client saved, on the application's page", type: :reques
   it "offers a resume review in the app or from your own client, and only the drafter's kinds of draft" do
     get application_path(application)
 
-    expect(response.body).to include("Resume reviews", "Or ask your own Claude client for one through MCP (the Resume review prompt)")
+    expect(response.body).to include("Resume reviews", "Or ask your AI assistant for one through MCP (the Resume review prompt)")
     expect(response.body).to include("<option value=\"cover_letter\">Cover letter</option>", "<option value=\"outreach\">Outreach note</option>")
     expect(response.body).not_to include("<option value=\"tailored_resume\">")
   end
@@ -73,7 +73,7 @@ RSpec.describe "What the client saved, on the application's page", type: :reques
     get application_path(application)
 
     expect(response.body).to include("1 resume review", "Discovery at volume", "· line 3", "Spanish", "Lead with discovery", "· lines 3, 1",
-                                     "A close fit.", "Written by your Claude client, through MCP (it reports claude-opus-5-5)", "its credential")
+                                     "A close fit.", "Written by your AI assistant, through MCP (it reports claude-opus-5-5)", "its credential")
   end
 
   it "shows what the client saved as a draft: who wrote it, a tailored resume's changes, a revision's link" do
@@ -89,7 +89,7 @@ RSpec.describe "What the client saved, on the application's page", type: :reques
 
     get application_path(application)
 
-    expect(response.body).to include("Written by your Claude client and saved through MCP (it reports claude-opus-5-5), on your subscription",
+    expect(response.body).to include("Written by your AI assistant and saved through MCP (it reports claude-opus-5-5), on your subscription",
                                      "A revision of the", "href=\"#draft_#{first.id}\"", "Tailored resume", "What it changed: 1 change",
                                      "Discovery first", "Copy resume", "3 drafts")
     expect(second.revises).to eq(first)

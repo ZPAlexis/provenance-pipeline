@@ -1,5 +1,5 @@
 module Verifier
-  # Companies the operator's own Claude client proposes, as they may fit the operator (4b): each added as
+  # Companies the operator's own AI assistant proposes, as they may fit the operator (4b): each added as
   # "suggested", with why in `proposal`, and watched only once the operator, or the client on their word, tracks it.
   # Written as the client (agent:assistant), under a credential holding companies:suggest: a new company with its
   # name, domain and why, never a careers page; a proposal already on record has its why refreshed. A company tracked
@@ -172,7 +172,7 @@ module Verifier
       ApplicationRecord.transaction do
         company.save!
         AuditEvent.record_write!(company, actor: ACTOR, digest: %w[proposal.why],
-                                          reasoning: "#{found ? 'Proposal refreshed' : 'Proposed'} by the operator's own Claude client, " \
+                                          reasoning: "#{found ? 'Proposal refreshed' : 'Proposed'} by the operator's own AI assistant, " \
                                                      "found by #{SOURCES.fetch(candidate.source)}. Why it may fit is kept on the company alone.")
       end
       Outcome.new(candidate: candidate, company: company, status: found ? "refreshed" : "created",
