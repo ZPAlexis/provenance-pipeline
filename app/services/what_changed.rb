@@ -15,7 +15,7 @@ class WhatChanged
   # The points to compare from, newest first: the latest run's start, then each earlier run's end.
   def self.points
     runs = CheckRun.where(kind: "all", status: %w[done failed]).where.not(finished_at: nil).order(started_at: :desc).to_a
-    return [ Point.new(key: "week", label: "The last 7 days (no check of everything yet)", at: 7.days.ago) ] if runs.empty?
+    return [ Point.new(key: "week", label: "The last 7 days (no check of all tracked companies yet)", at: 7.days.ago) ] if runs.empty?
 
     latest, *earlier = runs
     [ Point.new(key: latest.id, label: "What the check of #{latest.started_at.to_date.to_fs(:long)} found, and since",
@@ -56,11 +56,13 @@ class WhatChanged
 
   def lists = @lists ||= Verifier::ListChange.since(@from)
 
-  # Descriptions that changed (a role edited or reposted): each new version of a role read before.
+  # Descriptions that changed (a role edited or reposted): each new version of a role read before, whose text is not the
+  # version before's (the same text read from its own page when it moved, 4e, is a version but no change).
   def descriptions
     @descriptions ||= RoleDescription.where(first_read_at: @from..)
-                                     .where("EXISTS (SELECT 1 FROM role_descriptions earlier WHERE earlier.posting_id = " \
-                                            "role_descriptions.posting_id AND earlier.first_read_at < role_descriptions.first_read_at)")
+                                     .where("(SELECT earlier.content_hash FROM role_descriptions earlier WHERE earlier.posting_id = " \
+                                            "role_descriptions.posting_id AND earlier.first_read_at < role_descriptions.first_read_at " \
+                                            "ORDER BY earlier.first_read_at DESC LIMIT 1) <> role_descriptions.content_hash")
                                      .order(first_read_at: :desc).preload(posting: :company).to_a
   end
 

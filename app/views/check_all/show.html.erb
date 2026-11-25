@@ -1,20 +1,25 @@
-<%# The dashboard's "Check everything": the run under way, or the plan, its ceiling, and the button. %>
+<%# "Check all tracked companies", on the Roles page (4e): the run under way, or the plan, its ceiling, how old the lists
+    are, and the button. %>
 <%= turbo_frame_tag "check_all" do %>
-  <section class="check-now">
+  <section class="check-now check-all">
     <% if @run&.active? %>
       <%= render "check_runs/run", run: @run, poll: false %>
     <% elsif @plan.companies.zero? %>
-      <p class="muted small">No watched company has a role on record yet: add one, or track a role.</p>
+      <p class="muted small">No company is tracked with a careers page to read yet: add one, or track one.</p>
     <% else %>
-      <% confirm = "Check everything: the careers pages of #{pluralize(@plan.companies, 'company')}, for " \
-                   "#{pluralize(@plan.roles, 'role')}, at most #{cost(@plan.ceiling)}. Go?" %>
+      <% confirm = "Check all tracked companies: the careers pages of #{pluralize(@plan.companies, 'company')}, for the " \
+                   "#{pluralize(@plan.roles, 'role')} you track and new roles that fit your profile, " \
+                   "#{check_cost(@plan.ceiling, known: @plan.known_cost?)}. Go?" %>
       <%= form_with url: check_all_path, class: "check-form", data: { turbo_frame: "_top", turbo_confirm: confirm } do |form| %>
-        <%= form.submit "Check everything", class: "btn primary" %>
+        <%= form.submit "Check all tracked companies", class: "btn" %>
         <span class="muted small">
-          Reads the careers pages of <%= pluralize(@plan.companies, "company") %>, for <%= pluralize(@plan.roles, "role") %>:
-          <%= @plan.via_board %> through free boards, <%= @plan.reusable %> with earlier reads reused where their roles are
-          unchanged. At most <%= cost(@plan.ceiling) %>, what these pages cost when last read in full; less for every page
-          whose roles are unchanged.
+          Reads the careers pages of <%= pluralize(@plan.companies, "company") %><%= " (#{@plan.without_roles} with no role of yours yet)" if @plan.without_roles.positive? %>:
+          confirms the <%= pluralize(@plan.roles, "role") %> you track, and finds new ones that fit your profile.
+          <%= @plan.via_board %> through free boards, <%= @plan.reusable %> with earlier reads reused where their roles are unchanged;
+          <%= check_cost(@plan.ceiling, known: @plan.known_cost?) %><%= " (#{pluralize(@plan.unread, 'page')} never read, priced at an average list: a long list costs more)" if @plan.unread.positive? %>.
+          <% if @ages.stale.positive? || @ages.never.positive? %>
+            Lists last read: <%= @ages.stale %> more than <%= Overview::STALE_AFTER.inspect %> ago<%= ", the oldest " if @ages.oldest %><%= ago(@ages.oldest) if @ages.oldest %>; <%= @ages.never %> never.
+          <% end %>
         </span>
       <% end %>
       <%= render "check_runs/run", run: @run, poll: false if @run %>

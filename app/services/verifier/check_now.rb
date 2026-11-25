@@ -44,11 +44,28 @@ module Verifier
       naming = record.is_a?(Posting) && record.title_pending? && !Capture.board(record.job_url.to_s) ? average_read : 0.0
       return naming if company.board_in_use
 
-      read = Targets.full_read_cost(company) || average_read
+      read = Targets.full_read_cost(company) || average_full_read
       naming + (company.resolution_status == "resolved" ? read : read + finding_cost)
     end
 
+    # What one LLM read of one page costs on average: naming a role from its own page.
     def average_read = LlmCall.where(purpose: "extract").average(:cost_usd).to_f
+
+    # What reading a careers page in full costs on average, every page of its list (4e): the estimate for a company
+    # never read, in place of one call's average, which a check of all tracked companies found too low (2026-11-24: a
+    # never-read list of many pages cost nine times one call). A list longer than most still costs more: hence "about".
+    def average_full_read
+      reads = LlmCall.joins(:page_check).where(purpose: "extract", page_checks: { purpose: "verification" })
+                     .group("page_checks.company_id", "page_checks.run_id").sum(:cost_usd).values.map(&:to_f).select(&:positive?)
+      reads.any? ? reads.sum / reads.size : average_read
+    end
+
+    # Whether what a check costs can be known from the record ("at most") or only estimated ("about"): known once its
+    # company's page has been read in full, or is read through a free board.
+    def known_cost?(record)
+      company = record.is_a?(Posting) ? record.company : record
+      company.board_in_use || Targets.full_read_cost(company).present?
+    end
 
     # What finding a careers page has cost per company, on average, from the record.
     def finding_cost

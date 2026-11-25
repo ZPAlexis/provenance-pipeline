@@ -91,7 +91,7 @@ module ProvenanceMcp
         def role(posting, description, review, profile, background)
           said = "Role id #{posting.id}: #{posting.role_title} at #{posting.company.name}#{", #{posting.location}" if posting.location} " \
                  "(#{posting.tracking}#{"; #{Writing.company_fit(review)}, a separate score: never weigh it in" if review}).\n" +
-                 Writing.fence("role_description", description.text, read: description.first_read_at.utc.to_date, words: description.words)
+                 Writing.description_part(posting, description)
           links = Writing.links(ProfileLinks.reading(background, profile, description))
           links ? "#{said}\n#{links}" : said
         end

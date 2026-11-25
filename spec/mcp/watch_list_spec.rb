@@ -144,6 +144,17 @@ RSpec.describe "The watch list through MCP" do
       expect(said(response)).to include("Its own page is now https://acme.example/careers/jobs/1 (was https://acme.example/jobs/1)")
       expect(assistant_events(role).sole.reasoning).to eq("Its own page set on the operator's word. The old link moved.")
       expect(said(call(:SetRolePage, role: role.id, link: "https://www.linkedin.com/jobs/view/1", reason: "x"))).to start_with("Not saved: that link is on linkedin.com")
+      expect(said(response)).not_to include("read_descriptions")
+    end
+
+    # 4e: what the page before said may not be this role's description; the client is told to read it again.
+    it "says when the role's description was read from the page before" do
+      role.role_descriptions.create!(text: "Join us.", content_hash: "h1", read_via: "render", url: role.job_url, run_id: "r1",
+                                     first_read_at: 1.day.ago, last_read_at: 1.day.ago)
+
+      response = call(:SetRolePage, role: role.id, link: "https://acme.example/careers/jobs/1", reason: "Its own posting.")
+
+      expect(said(response)).to end_with("Role id #{role.id}.\n#{ProvenanceMcp::Writing::READ_ELSEWHERE}")
     end
   end
 

@@ -80,7 +80,44 @@ module Verifier
 
     NO_PAGE = "No page of its own on record: add its link to read its description.".freeze
 
-    # One result through the contract, then kept: a new version, or the same text seen again.
+    # Whether `description` was read from a page that is no longer `posting`'s own (4e): a check that finds a role's own
+    # posting moves its link there (a role added from a careers page, say, found on its ATS), and what the page before
+    # said may describe another role, or none.
+    def elsewhere?(posting, description)
+      description.present? && posting.job_url.present? && !same_page?(description.url, posting.job_url)
+    end
+
+    def same_page?(one, other) = Capture.link_key(one) == Capture.link_key(other)
+
+    # Those of `postings` whose newest description was read elsewhere (elsewhere?).
+    def moved(postings)
+      postings = Array(postings).select { |posting| posting.job_url.present? }
+      return [] if postings.empty?
+
+      newest = RoleDescription.where(posting_id: postings.map(&:id)).select("DISTINCT ON (posting_id) posting_id, url")
+                              .order(:posting_id, first_read_at: :desc, created_at: :desc).to_h { |read| [ read.posting_id, read.url ] }
+      postings.select { |posting| newest[posting.id] && !same_page?(newest[posting.id], posting.job_url) }
+    end
+
+    # Reads again, from their own page now, the descriptions of those of `postings` read elsewhere (4e): after each
+    # check, which may have moved them; free. What it found, in a sentence; nil when none moved.
+    def reread_moved!(postings, issued_by: AuditEvent::OPERATOR, worker: nil)
+      moved = moved(postings)
+      return if moved.empty?
+
+      before = RoleDescription.where(posting: moved).select("DISTINCT ON (posting_id) posting_id, content_hash")
+                              .order(:posting_id, first_read_at: :desc, created_at: :desc).to_h { |read| [ read.posting_id, read.content_hash ] }
+      reads = read!(moved, purpose: "own page moved: descriptions read again", issued_by: issued_by, **{ worker: worker }.compact)
+      read, unread = reads.partition { |each| each.outcome == "ok" }
+      changed = read.count { |each| each.version.content_hash != before[each.posting.id] }
+      found = { "another text" => changed, "the same text" => read.size - changed, "not read (see the role's page)" => unread.size }
+      lead = moved.one? ? "One role's own page moved, so its description was read again from it" :
+                          "#{moved.size} roles' own pages moved, so their descriptions were read again from them"
+      "#{lead} (free): #{found.select { |_, count| count.positive? }.map { |what, count| "#{count} #{what}" }.join(', ')}."
+    end
+
+    # One result through the contract, then kept: a new version, or the same text seen again on the same page. The same
+    # text read from another page (its own page moved, 4e) is kept as a version too: each one names the page it is from.
     def record(result, by_id, run_id)
       errors = ResultContract.description_errors(result)
       posting = by_id[result.try(:[], "target_id")]
@@ -90,7 +127,8 @@ module Verifier
 
       at = Time.iso8601(result["checked_at"])
       latest = posting.role_descriptions.newest_first.first
-      if latest&.content_hash == result["content_hash"]
+      same_text = latest&.content_hash == result["content_hash"]
+      if same_text && same_page?(latest.url, result["url"])
         latest.update!(last_read_at: at)
         return Read.new(posting:, outcome: "ok", summary: "Read again: the same text as on #{latest.first_read_at.to_date}.",
                         version: latest, new_version: false)
@@ -100,7 +138,11 @@ module Verifier
         text: result["text"], content_hash: result["content_hash"], read_via: result["read_via"], url: result["url"],
         run_id: run_id, first_read_at: at, last_read_at: at
       )
-      lead = latest ? "Changed since it was read on #{latest.first_read_at.to_date}" : "Read"
+      lead = if latest.nil? then "Read"
+      elsif same_text then "Read from its own page, which moved: the same text as read from the page before on #{latest.first_read_at.to_date}"
+      elsif !same_page?(latest.url, result["url"]) then "Read from its own page, which moved: not what the page before said on #{latest.first_read_at.to_date}"
+      else "Changed since it was read on #{latest.first_read_at.to_date}"
+      end
       cut = " (cut at the limit)" if result["reason"] == "cut_at_limit"
       Read.new(posting:, outcome: "ok", new_version: true, version: version,
                summary: "#{lead}: #{version.words} words through #{version.read_through}#{cut}.")

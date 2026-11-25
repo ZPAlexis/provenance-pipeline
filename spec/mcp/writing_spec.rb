@@ -23,6 +23,17 @@ RSpec.describe "Writing about an application through MCP" do
 
   def call(tool, **arguments) = ProvenanceMcp::Tools.const_get(tool).call(**arguments, server_context: nil)
 
+  # 4e: read from its company's careers page when it was added; a check found its own posting on the ATS since.
+  it "says when the role's description was read from a page that is no longer its own" do
+    role.update!(job_url: "https://job-boards.greenhouse.io/acme/jobs/4012345")
+    describe_role
+
+    text = said(call(:ApplicationMaterials, application: "acme sales"))
+
+    expect(text).to include("</role_description>\nIts description on record was read from a page that is no longer the role's own: " \
+                            "it may describe another role, or none. read_descriptions reads it from its own page, free")
+  end
+
   describe "the resume, numbered by line" do
     it "numbers its non-blank lines from 1, stripped, as the worker's draft does" do
       resume = Resume.new(text: "Jordan Sample\r\n\r\n  Sales engineer. \n\t- Discovery.\n\n")

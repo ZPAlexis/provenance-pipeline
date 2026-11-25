@@ -17,7 +17,7 @@
   <% when "no_careers_page" %>
     <%= button_to "Find it again", url, method: :patch, params: { decision: "find_again" },
                                         class: [ "btn", "small", "check-button", ("primary" if proposed == "find_again") ],
-                                        data: { turbo_confirm: "Finding its careers page and reading it: at most #{cost(Verifier::CheckNow.ceiling(item.company))}. Go?" } %>
+                                        data: { turbo_confirm: "Finding its careers page and reading it: #{check_cost(Verifier::CheckNow.ceiling(item.company), item.company)}. Go?" } %>
   <% when "page_changed" %>
     <%= outside_link(item.company.careers_page_url, label: "Open the page") %>
     <%= button_to "Still its list", url, method: :patch, params: { decision: "leave", note: "Still this company's own list of roles." },
@@ -27,7 +27,7 @@
       <%= outside_link(role.job_url, label: "Open its page") if role.job_url %>
       <%= button_to "Check it again", url, method: :patch, params: { decision: "check_again" },
                                            class: [ "btn", "small", "check-button", ("primary" if proposed == "check_again") ],
-                                           data: { turbo_confirm: "Checking it now: its own page first; at most #{cost(Verifier::CheckNow.ceiling(role))}. Go?" } %>
+                                           data: { turbo_confirm: "Checking it now: its own page first; #{check_cost(Verifier::CheckNow.ceiling(role), role)}. Go?" } %>
     <% end %>
   <% end %>
 </div>

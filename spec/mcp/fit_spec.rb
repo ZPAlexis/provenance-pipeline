@@ -57,6 +57,21 @@ RSpec.describe "Finding and weighing roles through MCP" do
       expect(text).not_to include("- Sales Engineer at Acme")
     end
 
+    # 4e step 7: the lists are as last read, so it says how old they are, and where to read them all again.
+    it "says how old the tracked companies' lists are when some are old or never read, and where to read them again" do
+      old = create(:company, :resolved, name: "Beta", domain: "beta.example")
+      create(:page_check, company: old, purpose: "verification", step: nil, url: old.careers_page_url, checked_at: 20.days.ago)
+      create(:company, :resolved, name: "Gamma", domain: "gamma.example") # never read
+      allow(Verifier::Suggestions).to receive(:preview).and_return(
+        Verifier::Suggestions::Preview.new(companies: 3, unread: 1, weighed: 3, read_between: [ 20.days.ago, 1.day.ago ], problems: [],
+                                           fits: [ fit("Customer Engineer", 0) ])
+      )
+
+      expect(said(call(:FindRoles, titles: [ "Customer Engineer" ])))
+        .to include("Of 3 tracked companies, 1 last read more than 14 days ago (the oldest on #{20.days.ago.utc.to_date}) and 1 never",
+                    "\"Check all tracked companies\", on the Roles page, reads them all again.")
+    end
+
     it "narrows to one company and a limit, and says what it needs" do
       allow(Verifier::Suggestions).to receive(:preview).and_return(
         Verifier::Suggestions::Preview.new(companies: 1, unread: 0, weighed: 2, read_between: [ nil, nil ], problems: [],
@@ -143,6 +158,18 @@ RSpec.describe "Finding and weighing roles through MCP" do
                               "<role_description read=\"2026-10-25\"", "You will run discovery with enterprise buyers.")
       expect(text).not_to include("Recruiter")
       expect(asked).to include("No description read yet (read_descriptions reads them, free): Recruiter at Acme (#{unread.id})")
+      expect(text).not_to include(ProvenanceMcp::Writing::READ_ELSEWHERE)
+    end
+
+    # 4e: the careers page it was added from said only the company's own text; a check found its posting on the ATS since.
+    it "says when a role's description was read from a page that is no longer its own" do
+      moved = create(:posting, company: company, role_title: "Customer Engineer", job_url: "https://jobs.ashbyhq.com/acme/1b2c")
+      moved.role_descriptions.create!(text: "Join us.", content_hash: "h1", read_via: "render", url: "https://acme.example/careers/",
+                                      run_id: "r1", first_read_at: 1.day.ago, last_read_at: 1.day.ago)
+
+      text = said(call(:RolesToWeigh, roles: [ moved.id ]))
+
+      expect(text).to include("Join us.\n</role_description>\n#{ProvenanceMcp::Writing::READ_ELSEWHERE}")
     end
 
     it "saves a score as the assistant, under a credential holding fit:write, its lines read against the resume version it saw" do

@@ -30,7 +30,8 @@ module ProvenanceMcp
           Verifier::Capture.own_page!(found, link, note: reason, actor: ASSISTANT)
           ProvenanceMcp.text(Writing.fence("record", "#{found.company.name} / #{found.role_title}"),
                              "Its own page is now #{found.job_url}#{" (was #{before})" if before}: each check looks for it there first. " \
-                             "Role id #{found.id}.")
+                             "Role id #{found.id}.",
+                             (Writing::READ_ELSEWHERE if Verifier::Descriptions.moved([ found ]).any?))
         end
       end
     end

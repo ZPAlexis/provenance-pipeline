@@ -23,7 +23,7 @@
     </p>
   <% end %>
   <div class="decide">
-    <% confirm = ("#{ReviewRecommendations.said(recommendation)}: at most #{cost(Verifier::CheckNow.ceiling(record))}. Go?" if record) %>
+    <% confirm = ("#{ReviewRecommendations.said(recommendation)}: #{check_cost(Verifier::CheckNow.ceiling(record), record)}. Go?" if record) %>
     <%= button_to accept_label(recommendation), accept_review_item_path(item), method: :patch,
                             class: [ "btn", "primary", "small", ("check-button" if record) ], data: { turbo_confirm: confirm } %>
     <span class="muted small">

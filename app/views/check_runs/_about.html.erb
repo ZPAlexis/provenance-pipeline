@@ -1,10 +1,11 @@
-<%# What "Check now" reads, and the most it could cost. %>
+<%# What "Check now" reads, and what it could cost: at most what its page cost when last read in full, or about an
+    average list's cost for a page never read (4e). %>
 <% if role && record.company.resolution_status != "resolved" %>
-  Finds <%= record.company.name %>'s careers page first, then checks the role, its own page first: at most <%= cost(ceiling) %>.
+  Finds <%= record.company.name %>'s careers page first, then checks the role, its own page first: <%= check_cost(ceiling, record) %>.
 <% elsif role %>
-  Its own page first, free. <%= ceiling.positive? ? "At most #{cost(ceiling)} if its company's careers page must be read again." : "Its company's careers page is free to read too." %>
+  Its own page first, free. <%= ceiling.positive? ? "#{check_cost(ceiling, record).upcase_first} if its company's careers page must be read again." : "Its company's careers page is free to read too." %>
 <% elsif record.resolution_status != "resolved" %>
-  Finds its careers page first<%= ", trying #{record.careers_page_url}" if record.careers_page_url %>, then reads its roles: at most <%= cost(ceiling) %>.
+  Finds its careers page first<%= ", trying #{record.careers_page_url}" if record.careers_page_url %>, then reads its roles: <%= check_cost(ceiling, record) %>.
 <% else %>
-  <%= ceiling.positive? ? "At most #{cost(ceiling)}, if its careers page changed since the last read; free if not." : "Free: read through its own board or an ATS." %>
+  <%= ceiling.positive? ? "#{check_cost(ceiling, record).upcase_first}, if its careers page changed since the last read; free if not." : "Free: read through its own board or an ATS." %>
 <% end %>

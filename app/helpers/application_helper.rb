@@ -74,6 +74,13 @@ module ApplicationHelper
                                                class: "nowrap")
   end
 
+  # What a check could cost, said as surely as the record knows it (4e): "at most $0.02" once its page was read in full
+  # (or is read through a free board), "about $0.03" for a page never read, priced at an average list. A check of all
+  # tracked companies on 2026-11-24 asked "at most $0.15" and spent $0.28: one list never read cost nine times one call.
+  def check_cost(amount, record = nil, known: Verifier::CheckNow.known_cost?(record))
+    "#{known ? 'at most' : 'about'} #{cost(amount)}"
+  end
+
   # How long ago, in the fewest characters, for a list's narrow column (4e): "3d", "5w", "2mo"; in full on hover.
   def short_ago(time)
     return tag.span("never", class: "muted") if time.nil?

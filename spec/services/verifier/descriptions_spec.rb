@@ -106,4 +106,68 @@ RSpec.describe Verifier::Descriptions do
 
     expect(RoleDescription.count).to eq(0)
   end
+
+  # 4e: a role added from its company's careers page, whose own posting a check found on its ATS since. What the
+  # careers page said is the page's own text, not the role's: read again from its own page, kept as a version naming it.
+  describe "a role whose own page moved" do
+    let(:careers) { "https://acme.example/careers/" }
+
+    def read_on(url, text, at: "2026-10-16T12:00:00+00:00")
+      role.role_descriptions.create!(text: text, content_hash: "sha256:#{Digest::SHA256.hexdigest(text)}", read_via: "render", url: url,
+                                     run_id: "r0", first_read_at: Time.iso8601(at), last_read_at: Time.iso8601(at))
+    end
+
+    it "is found by its description's page, a link's tracking aside, and read again from its own page" do
+      read_on(careers, "Join us. We are hiring across teams.")
+      same = create(:posting, company: company, role_title: "Recruiter", job_url: "https://acme.example/jobs/7")
+      same.role_descriptions.create!(text: "Hire people.", content_hash: "h7", read_via: "render", url: "https://acme.example/jobs/7?utm_source=board",
+                                     run_id: "r0", first_read_at: 1.day.ago, last_read_at: 1.day.ago)
+      unread = create(:posting, company: company, role_title: "Designer", job_url: "https://acme.example/jobs/8")
+
+      expect(described_class.moved([ role, same, unread ])).to eq([ role ])
+      expect(described_class.elsewhere?(role, role.role_descriptions.sole)).to be(true)
+      expect(described_class.elsewhere?(same, same.role_descriptions.sole)).to be(false)
+
+      worker = worker_class.new([ described("You will run technical discovery.", at: "2026-10-18T09:00:00+00:00") ])
+      said = described_class.reread_moved!([ role, same, unread ], worker: worker)
+
+      expect(worker.asked[:targets]).to eq([ { id: role.id, url: role.job_url, label: "Acme / Sales Engineer" } ])
+      expect(said).to eq("One role's own page moved, so its description was read again from it (free): 1 another text.")
+      expect(role.role_descriptions.newest_first.pluck(:url)).to eq([ role.job_url, careers ])
+      expect(described_class.moved([ role ])).to be_empty
+      expect(AgentCredential.sole).to have_attributes(scopes: %w[evidence:write], purpose: "own page moved: descriptions read again")
+      expect(described_class.reread_moved!([ role, same, unread ], worker: worker_class.new([]))).to be_nil
+    end
+
+    it "keeps the same text, read from its own page, as a version naming that page; says what it couldn't read" do
+      read_on(careers, "You will run technical discovery.")
+      other = create(:posting, company: company, role_title: "Solutions Engineer", job_url: "https://job-boards.greenhouse.io/acme/jobs/4012399")
+      other.role_descriptions.create!(text: "Old.", content_hash: "h-old", read_via: "render", url: careers, run_id: "r0",
+                                      first_read_at: 2.days.ago, last_read_at: 2.days.ago)
+      worker = worker_class.new([ described("You will run technical discovery.", at: "2026-10-18T09:00:00+00:00"),
+                                  { "kind" => "description", "target_id" => other.id, "outcome" => "gone", "reason" => "http_404" } ])
+
+      said = described_class.reread_moved!([ role, other ], worker: worker)
+
+      expect(said).to eq("2 roles' own pages moved, so their descriptions were read again from them (free): 1 the same text, " \
+                         "1 not read (see the role's page).")
+      newest = role.role_descriptions.newest_first.first
+      expect(newest).to have_attributes(url: role.job_url, text: "You will run technical discovery.", first_read_at: Time.utc(2026, 10, 18, 9))
+      expect(role.role_descriptions.count).to eq(2)
+      expect(described_class.moved([ role, other ])).to eq([ other ]) # not read: the next check tries again
+
+      again, = read(described("You will run technical discovery.", at: "2026-10-20T09:00:00+00:00"))
+      expect(again.sole.summary).to eq("Read again: the same text as on 2026-10-18.")
+    end
+
+    it "says what a read from its moved page found, against what the page before said" do
+      read_on(careers, "You will run technical discovery.")
+      reads, = read(described("You will run technical discovery."))
+      expect(reads.sole.summary).to start_with("Read from its own page, which moved: the same text as read from the page before on 2026-10-16: 5 words")
+
+      read_on(careers, "Join us.", at: "2026-10-19T12:00:00+00:00")
+      reads, = read(described("Discovery, and demos too.", at: "2026-10-20T09:00:00+00:00"))
+      expect(reads.sole.summary).to start_with("Read from its own page, which moved: not what the page before said on 2026-10-19: 4 words")
+    end
+  end
 end

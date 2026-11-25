@@ -9,7 +9,7 @@
   <% elsif !run&.active? %>
     <% ceiling = Verifier::CheckNow.ceiling(record) %>
     <% about = render("check_runs/about", record: record, role: role, ceiling: ceiling) %>
-    <%= form_with url: check_runs_path, class: "check-form", data: { turbo_confirm: ("This check may read the careers page with the LLM: at most #{cost(ceiling)}. Check now?" if ceiling.positive?) } do |form| %>
+    <%= form_with url: check_runs_path, class: "check-form", data: { turbo_confirm: ("This check may read the careers page with the LLM: #{check_cost(ceiling, record)}. Check now?" if ceiling.positive?) } do |form| %>
       <%= hidden_field_tag(role ? :posting_id : :company_id, record.id) %>
       <%= form.submit "Check now", class: "btn", title: strip_tags(about).squish %>
     <% end %>
@@ -20,7 +20,7 @@
     <p class="muted small"><%= why_not %></p>
   <% elsif !run&.active? %>
     <% ceiling = Verifier::CheckNow.ceiling(record) %>
-    <% confirm = ("This check may read the careers page with the LLM: at most #{cost(ceiling)}. Check now?" if ceiling.positive?) %>
+    <% confirm = ("This check may read the careers page with the LLM: #{check_cost(ceiling, record)}. Check now?" if ceiling.positive?) %>
     <%= form_with url: check_runs_path, class: "check-form", data: { turbo_confirm: confirm } do |form| %>
       <%= hidden_field_tag(role ? :posting_id : :company_id, record.id) %>
       <%= form.submit "Check now", class: "btn primary" %>

@@ -45,7 +45,10 @@
   <dt>Description</dt>
   <dd>
     <% if (description = role.role_descriptions.newest_first.first) %>
-      <%= number_with_delimiter(description.words) %> words, read <%= description.first_read_at.to_date %> · <%= link_to "read it on the role's page", role_path(role) %>
+      <%= number_with_delimiter(description.words) %> words, read <%= description.first_read_at.to_date %> · <%= link_to "read it on the role's page", role_path(role, anchor: "description") %>
+      <% if Verifier::Descriptions.elsewhere?(role, description) %>
+        <br><span class="small warn">Read from a page that is no longer the role's own: it may describe another role. Read it again on the role's page before writing from it.</span>
+      <% end %>
     <% else %>
       <span class="muted">not read yet</span> · <%= link_to "the role's page", role_path(role) %> reads it
     <% end %>

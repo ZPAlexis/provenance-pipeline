@@ -213,6 +213,17 @@ module ProvenanceMcp
     # (names, titles, places, notes, bodies, reasoning) inside.
     FENCES = %w[role_description resume background links profile notes contacts contact review evidence record draft].freeze
 
+    # Said after a description read from a page that is no longer its role's own (4e): a check found the role's own
+    # posting since, and the page before may have described another role, or none.
+    READ_ELSEWHERE = "Its description on record was read from a page that is no longer the role's own: it may describe " \
+                     "another role, or none. read_descriptions reads it from its own page, free; weigh or write from it after.".freeze
+
+    # A role's newest description, fenced as data, with READ_ELSEWHERE after it when it was read elsewhere.
+    def description_part(posting, description)
+      said = fence("role_description", description.text, read: description.first_read_at.utc.to_date, words: description.words)
+      Verifier::Descriptions.elsewhere?(posting, description) ? "#{said}\n#{READ_ELSEWHERE}" : said
+    end
+
     # An application's materials, as the drafter reads them: the role and where it stands, its newest description,
     # the newest resume numbered by line, the profile, the notes, its contacts, the one it is to (when the writing is to
     # someone), and what is already written for it.
@@ -226,8 +237,7 @@ module ProvenanceMcp
                         "Stage: #{Application.stage_label(application.stage).downcase}, since #{application.stage_changed_on}. " \
                         "The role: #{Posting::ANSWER_LABELS.fetch(role.verification_state, role.verification_state).downcase}" \
                         "#{", checked #{role.last_checked_at.utc.to_date}" if role.last_checked_at}."),
-        description ? fence("role_description", description.text, read: description.first_read_at.utc.to_date, words: description.words)
-                    : "The role's description: not read yet (it is read from the role's page in the app).",
+        description ? description_part(role, description) : "The role's description: not read yet (it is read from the role's page in the app).",
         resume ? fence("resume", resume.numbered_lines.map { |number, line| "[#{number}] #{line}" }.join("\n"),
                        saved: resume.created_at.utc.to_date, lines: resume.numbered_lines.size, version: resume.version)
                : "The resume: none saved yet (it is pasted on the Profile page in the app).",

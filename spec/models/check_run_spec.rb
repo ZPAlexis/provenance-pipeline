@@ -43,15 +43,15 @@ RSpec.describe CheckRun do
     expect(current.reload.status).to eq("running")
   end
 
-  describe "a check of everything" do
+  describe "a check of all tracked companies" do
     it "needs no company, and is one at a time" do
-      allow(Verifier::CheckAll).to receive(:plan).and_return(Verifier::CheckAll::Plan.new(targets: [], via_board: 0, reusable: 0, ceiling: 0.42))
+      allow(Verifier::CheckAll).to receive(:plan).and_return(Verifier::CheckAll::Plan.new(targets: [], via_board: 0, reusable: 0, ceiling: 0.42, unread: 0))
 
       first = described_class.start_all!
 
       expect(first).to have_attributes(kind: "all", company: nil, ceiling_usd: 0.42, status: "queued")
       expect(described_class.start_all!).to eq(first)
-      expect(first.target_name).to eq("everything")
+      expect(first.target_name).to eq("all tracked companies")
     end
 
     it "counts its progress from its results file as the worker writes it" do

@@ -44,7 +44,7 @@
         </label>
         <%= form.submit "Add", class: "btn primary" %>
         <%= form.button "Add and read", name: "read", value: "1", class: "btn",
-                        data: { turbo_confirm: "Reading it finds its careers page if it has none, and reads its roles: at most #{cost(ceiling)}, " \
+                        data: { turbo_confirm: "Reading it finds its careers page if it has none, and reads its roles: #{check_cost(ceiling, known: false)}, " \
                                                "free on an ATS board. Add and read it?" } %>
         <p class="muted small">
           "Add" reads nothing and costs nothing. Given a careers page, it is watched at that page from now on, as if you set

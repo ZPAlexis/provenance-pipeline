@@ -53,6 +53,30 @@ RSpec.describe CheckNowJob do
     expect(DatabaseBackup).not_to have_received(:daily)
   end
 
+  # 4e: a check that found a role's own posting moved its link there; what the page before said is read again from it.
+  it "reads again the descriptions of the roles a check read whose own page moved, and says so after what it found" do
+    allow(Verifier::CheckNow).to receive(:role).with(run.posting).and_return(outcome)
+    allow(Verifier::Descriptions).to receive(:reread_moved!)
+      .and_return("One role's own page moved, so its description was read again from it (free): 1 another text.")
+
+    described_class.perform_now(run)
+
+    expect(Verifier::Descriptions).to have_received(:reread_moved!).with([ run.posting ], issued_by: "human:operator")
+    expect(run.reload).to have_attributes(status: "done", summary: "None of the 12 roles on the page is it. One role's own page moved, " \
+                                                                   "so its description was read again from it (free): 1 another text.")
+
+    company_run = create(:check_run, company: company)
+    kept = create(:posting, company: company, tracking: "tracked")
+    create(:posting, company: company, tracking: "dismissed")
+    allow(Verifier::CheckNow).to receive(:company).and_return(outcome)
+    allow(Verifier::Descriptions).to receive(:reread_moved!).and_raise(Verifier::Worker::Error, "the description worker exited with status 1")
+
+    described_class.perform_now(company_run)
+
+    expect(Verifier::Descriptions).to have_received(:reread_moved!).with(contain_exactly(run.posting, kept), issued_by: "human:operator")
+    expect(company_run.reload).to have_attributes(status: "done", summary: end_with("were not read again (Error)."))
+  end
+
   it "reads a role's description for a description run, free, and says what it found" do
     described = create(:check_run, kind: "describe", company: company, posting: create(:posting, company: company))
     read = Verifier::Descriptions::Read.new(posting: described.posting, outcome: "ok", summary: "Read: 480 words through Ashby's job API.",

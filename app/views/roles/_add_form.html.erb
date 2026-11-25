@@ -25,7 +25,7 @@
   <% end %>
   <%= form.submit "Add", class: "btn primary" %>
   <%= form.button "Add and check", name: "check", value: "1", class: "btn", formnovalidate: true,
-                  data: { turbo_confirm: "Checking it reads its own page first, free on an ATS; at most #{cost(ceiling)} when its " \
+                  data: { turbo_confirm: "Checking it reads its own page first, free on an ATS; #{check_cost(ceiling, known: company.present? && Verifier::CheckNow.known_cost?(company))} when its " \
                                          "title must be read by the AI#{' or its company is new' unless company}. Add and check it?" } %>
   <p class="muted small">
     Tracked: pasting a role is choosing it, even one you archived<%= ", at a company you archived too" unless company %>.

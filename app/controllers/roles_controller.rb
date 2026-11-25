@@ -52,7 +52,10 @@ class RolesController < ApplicationController
   def own_page
     role = Posting.find(params[:id])
     Verifier::Capture.own_page!(role, params[:link], note: params[:note])
-    redirect_to role_path(role), notice: "Its own page is now #{role.job_url}.", status: :see_other
+    # Its description, read from the page before, is read again from this one (4e): free, in the background.
+    reread = (" Its description was read from the page before: reading it again from this one, free." if
+      Verifier::Descriptions.moved([ role ]).any? && CheckRun.start_describe!(role))
+    redirect_to role_path(role), notice: "Its own page is now #{role.job_url}.#{reread}", status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     redirect_to role_path(role, own_page: 1), alert: "#{e.message.upcase_first.delete_suffix('.')}.", status: :see_other
   end

@@ -196,7 +196,7 @@ RSpec.describe "Accepting a recommended decision", type: :request do
   it "accepts leaving it with its reasoning as the note, and asks first for a check, which runs in the background" do
     recommend(decision: "find_again", url: nil, confidence: "medium")
     get review_path
-    expect(response.body).to include("Find its careers page again: at most", "medium confidence", ">Accept: find it again<",
+    expect(response.body).to include("Find its careers page again: about", "medium confidence", ">Accept: find it again<",
                                      "Looks for Acme&#39;s careers page again, in the background")
 
     expect { patch accept_review_item_path(item) }.to have_enqueued_job(CheckNowJob)

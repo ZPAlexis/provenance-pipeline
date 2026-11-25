@@ -56,7 +56,7 @@ RSpec.describe "Page views", type: :request do
     expect(response.body).to include("Didn't finish").and not_include("Checking…")
 
     get check_all_path
-    expect(response.body).to include("Cut off: the server stopped", "Check everything")
+    expect(response.body).to include("Cut off: the server stopped", "Check all tracked companies")
 
     get check_run_path(lost, poll: 1) # a page left open as its time ran out reloads once, then stops
     expect(response.body).to include('data-controller="refresh"').and not_include('data-controller="poll"')

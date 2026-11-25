@@ -28,15 +28,16 @@ RSpec.describe Verifier::CheckAll do
   end
 
   describe ".plan" do
-    it "reads every watched company with a role on record: free through a board, otherwise at most what its pages cost" do
+    # Since 4e, a tracked company with no role on record is read too: a check finds new roles there.
+    it "reads every tracked company, a role on record or not: free through a board, otherwise at most what its pages cost" do
       on_board = create(:company, :resolved, board_vendor: "greenhouse", board_token: "beta", board_overlap: 1.0,
                                              board_evidence: "Lists the roles.", board_confirmed_at: 1.day.ago)
       create(:posting, company: on_board)
-      create(:company, :resolved) # no role on record: nothing to read
+      create(:company, :resolved) # no role on record: read for new ones, at an average read's cost (never read)
       read = create(:page_check, company: company, purpose: "verification", step: nil, url: company.careers_page_url)
       create(:llm_call, page_check: read, cost_usd: 0.02)
 
-      expect(described_class.plan).to have_attributes(companies: 2, roles: 2, via_board: 1, reusable: 1, ceiling: 0.02)
+      expect(described_class.plan).to have_attributes(companies: 3, roles: 2, without_roles: 1, via_board: 1, reusable: 1, ceiling: 0.04)
     end
   end
 
@@ -58,7 +59,7 @@ RSpec.describe Verifier::CheckAll do
                                          summary: "1 company read. Verdicts: 1 changed, 0 confirmed, 0 without an answer.")
       expect(role.reload.verification_state).to eq("verified_live")
       expect(AuditEvent.find_by!(target: role, action: "update").credential.reload).to have_attributes(
-        purpose: "check everything", scopes: %w[postings:verify evidence:write], issued_by: "human:operator", status: "revoked"
+        purpose: "check all tracked companies", scopes: %w[postings:verify evidence:write], issued_by: "human:operator", status: "revoked"
       )
     end
 

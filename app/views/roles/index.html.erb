@@ -36,6 +36,11 @@
     <% end %>
   </div>
 </div>
+<% unless @tab == "dismissed" %>
+  <%= turbo_frame_tag "check_all", src: check_all_path do %>
+    <p class="muted small"><span class="spinner" aria-hidden="true"></span> Working out what a check of all tracked companies would read and cost…</p>
+  <% end %>
+<% end %>
 <%= render "check_runs/run", run: @fit_run, poll: false if @fit_run %>
 
 <%# One row (4e): the tabs, then finding and adding; the filters and the order below, applied as soon as one changes. %>

@@ -322,6 +322,9 @@ namespace :verifier do
     puts "Backed up to #{DatabaseBackup.call}"
     Verifier::Capture.own_page!(posting, url, note: ENV["NOTE"])
     puts "#{posting.company.name} / #{posting.role_title}: its own page is #{posting.job_url}"
+    if Verifier::Descriptions.moved([ posting ]).any?
+      puts "Its description was read from the page before: \"Read it again\" on its page reads it from this one, free (each check does too)."
+    end
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
   end
@@ -483,11 +486,13 @@ namespace :verifier do
     report_stop.call(run)
   end
 
-  desc "Verify postings against their company's watched page and record the verdicts. Shows the plan and its " \
-       "estimated cost; runs only with GO=1, backing up first. RESULTS=dir records a passing Test B run's reads " \
-       "instead of reading those pages again. [COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
+  desc "Check all tracked companies, as the Roles page does: each one's watched page read, the verdicts on its postings " \
+       "recorded, and suggestions brought up to date. Shows the plan and its estimated cost; runs only with GO=1, " \
+       "backing up first. RESULTS=dir records a passing Test B run's reads instead of reading those pages again. " \
+       "[COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
   task verify: :environment do
-    companies = select_companies.call(Company.watched.where(id: Posting.not_dismissed.select(:company_id))).to_a
+    # Every tracked company (4e), a role on record or not, as the Roles page's check reads them.
+    companies = select_companies.call(Verifier::CheckAll.companies).to_a
     abort "No resolved company has postings to verify." if companies.empty?
 
     # Pages already read (a passing fresh Test B run): recorded as they are, never paid for twice.
@@ -511,13 +516,15 @@ namespace :verifier do
       to_read = companies.reject { |company| reused.include?(company.id) }
     end
 
-    # The plan and its ceiling from the record, as the dashboard's "Check everything" shows them.
+    # The plan and its ceiling from the record, as the Roles page's "Check all tracked companies" shows them.
     plan = Verifier::CheckAll.plan(to_read)
     targets = plan.targets
-    puts "Plan: verify #{plan.roles} postings at #{plan.companies} companies' watched pages."
+    puts "Plan: verify #{plan.roles} postings at #{plan.companies} companies' watched pages" \
+         "#{" (#{plan.without_roles} with no role on record yet, read for new ones)" if plan.without_roles.positive?}."
     puts "  #{plan.via_board} read through a confirmed board (free); #{plan.reusable} have earlier reads to reuse where " \
          "their role links are unchanged (free when they are, a full read every 14 days)."
-    puts format("Estimated cost: at most $%.2f, what these pages cost when last read in full; less for every page " \
+    puts format("Estimated cost: #{plan.known_cost? ? 'at most' : 'about'} $%.2f, what these pages cost when last read in full" \
+                "#{" (#{plan.unread} never read, priced at an average list: a long list costs more)" if plan.unread.positive?}; less for every page " \
                 "whose roles are unchanged, plus about a cent for near-miss checks.", plan.ceiling)
     next puts("\nNothing run. Run it with GO=1.") unless ENV["GO"].present?
 
@@ -547,6 +554,10 @@ namespace :verifier do
     end
     puts "Cost of the pages read now: est. $#{format('%.4f', cost)}#{"   (details: #{run.dir})" if run}"
     report_stop.call(run) if run
+
+    # A role whose own page a check moved has its description read again from the new page, free (4e).
+    moved = Verifier::Descriptions.reread_moved!(Posting.not_dismissed.where(company: companies).preload(:company))
+    puts moved if moved
 
     # The lists just read, weighed against the search profile: suggestions brought up to date, at no cost.
     if SearchProfile.current

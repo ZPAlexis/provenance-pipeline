@@ -36,14 +36,31 @@ class CheckNowJob < ApplicationJob
       when "role" then Verifier::CheckNow.role(check_run.posting)
       else check_run.board_read? ? Verifier::BoardRead.run!(check_run.company) : Verifier::CheckNow.company(check_run.company)
       end
+    moved = reread_moved(check_run) if check_run.kind.in?(%w[all role company])
     check_run.update!(
       status: outcome.finished? ? "done" : "failed", finished_at: Time.current,
-      answer: outcome.answer, summary: outcome.summary, tally: outcome.tally, cost_usd: outcome.cost_usd,
+      answer: outcome.answer, summary: [ outcome.summary, moved ].compact.join(" "), tally: outcome.tally, cost_usd: outcome.cost_usd,
       run_id: outcome.run_id, error: (outcome.summary unless outcome.finished?)
     )
   rescue StandardError => e
     # Whatever went wrong is the run's answer: the page shows it rather than waiting forever.
     Rails.logger.error("CheckNowJob #{check_run.id}: #{e.class}: #{e.message}")
     check_run.update!(status: "failed", finished_at: Time.current, error: "#{e.class.name.demodulize}: #{e.message}".truncate(500))
+  end
+
+  private
+
+  # A check may move a role's own page, to the posting its link or its careers page led to (4e): the descriptions read
+  # from the page before are read again from the new one, free. Never fails the check: a read that breaks is said.
+  def reread_moved(check_run)
+    roles = case check_run.kind
+    when "all" then Posting.not_dismissed.where(company: Verifier::CheckAll.companies).preload(:company)
+    when "role" then Posting.where(id: check_run.posting_id).preload(:company) # as the check left it
+    else check_run.company.postings.not_dismissed.preload(:company)
+    end
+    Verifier::Descriptions.reread_moved!(roles, issued_by: check_run.requested_by)
+  rescue StandardError => e
+    Rails.logger.error("CheckNowJob #{check_run.id}, descriptions read again: #{e.class}: #{e.message}")
+    "The descriptions read from a page no longer their role's own were not read again (#{e.class.name.demodulize})."
   end
 end

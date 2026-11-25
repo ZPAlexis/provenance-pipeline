@@ -50,10 +50,17 @@
   <p class="muted small"><%= pluralize(@stale, "tracked role") %> not checked in the last <%= Overview::STALE_AFTER.inspect %>.</p>
 <% end %>
 
-<h2>Check everything</h2>
-<%= turbo_frame_tag "check_all", src: check_all_path do %>
-  <p class="muted small"><span class="spinner" aria-hidden="true"></span> Working out what a check of everything would read and cost…</p>
-<% end %>
+<h2>Tracked companies' lists</h2>
+<p class="small">
+  <% if @list_ages.companies.zero? %>
+    No company is tracked with a careers page to read yet.
+  <% else %>
+    Of <%= pluralize(@list_ages.companies, "tracked company") %>, <%= @list_ages.stale %> last read more than <%= Overview::STALE_AFTER.inspect %>
+    ago<%= ", the oldest " if @list_ages.oldest %><%= ago(@list_ages.oldest) if @list_ages.oldest %>, and <%= @list_ages.never %> never.
+  <% end %>
+  Your AI assistant's role search reads these lists as they were last read: <%= link_to "Check all tracked companies", roles_path %>, on
+  the Roles page, reads them again.
+</p>
 
 <h2>Companies and cost</h2>
 <div class="tiles">
@@ -108,7 +115,7 @@
               <% elsif run.kind == "role" && run.posting %>
                 <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %></span>
               <% elsif run.kind == "all" %>
-                Everything <span class="muted">(<%= run.total ? pluralize(run.total, "company") : "every watched company" %>)</span>
+                <%= link_to "All tracked companies", roles_path %> <span class="muted">(<%= run.total ? pluralize(run.total, "company") : "every tracked company" %>)</span>
               <% elsif run.kind == "links" %>
                 <%= link_to "Your links", profile_path(anchor: "links") %> <span class="muted">(read free)</span>
               <% elsif run.company %>
@@ -139,7 +146,7 @@
 
 <h2>Recent verdict changes</h2>
 <p class="muted small">
-  <%= link_to "Everything that changed since the last check of everything", changes_path %>: suggestions, careers pages, lists that changed a lot, and more.
+  <%= link_to "Everything that changed since the last check of all tracked companies", changes_path %>: suggestions, careers pages, lists that changed a lot, and more.
   <%= link_to "Every write on record, searchable", audit_path %>: the audit log.
 </p>
 <% if @changes.any? %>

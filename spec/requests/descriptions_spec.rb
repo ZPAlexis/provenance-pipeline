@@ -59,4 +59,37 @@ RSpec.describe "Descriptions", type: :request do
 
     expect([ check.kind, CheckRun.active.count ]).to eq([ "role", 2 ])
   end
+
+  # 4e: read from its company's careers page when it was added; a check found its own posting on the ATS since.
+  it "says a description read from a page no longer the role's own, on the role's page and its application's" do
+    role.role_descriptions.create!(text: "Join us.", content_hash: "h1", read_via: "render", url: "https://www.acme.example/careers/",
+                                   run_id: "r1", first_read_at: 1.day.ago, last_read_at: 1.day.ago)
+    create(:application, posting: role, company: company, stage: "applied")
+
+    get role_path(role)
+    expect(response.body).to include("which is no longer its own page", "acme.example ↗", "greenhouse.io ↗", "each check reads it again too")
+
+    get application_path(role.application)
+    expect(response.body).to include("Read from a page that is no longer the role's own")
+
+    role.role_descriptions.create!(text: "Join us.", content_hash: "h1", read_via: "ats_api:greenhouse", url: role.job_url, run_id: "r2",
+                                   first_read_at: 1.hour.ago, last_read_at: 1.hour.ago)
+    get role_path(role)
+    expect(response.body).not_to include("which is no longer its own page")
+    expect(response.body).to include("2 versions, new on", "(the same text, from its own page when it moved)")
+
+    get changes_path # the last 7 days: the same text from its new page is a version, not a change
+    expect(response.body).not_to include("id=\"descriptions-changed\"")
+  end
+
+  it "is read again, in the background, when the operator moves the role's own page" do
+    version("You will run discovery.", at: 1.day.ago)
+
+    expect { patch own_page_role_path(role), params: { link: "https://job-boards.greenhouse.io/acme/jobs/4012399" } }
+      .to have_enqueued_job(CheckNowJob)
+
+    expect(flash[:notice]).to eq("Its own page is now https://job-boards.greenhouse.io/acme/jobs/4012399. Its description was read " \
+                                 "from the page before: reading it again from this one, free.")
+    expect(CheckRun.sole).to have_attributes(kind: "describe", posting: role)
+  end
 end

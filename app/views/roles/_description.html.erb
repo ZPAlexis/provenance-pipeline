@@ -1,24 +1,33 @@
-<%# A role's description (2b): as its own page states it, version by version, read without the LLM. %>
+<%# A role's description (2b): as its own page states it, version by version, read without the LLM. Since 4e, each
+    version names the page it was read from, and one read from a page no longer the role's own is said so. %>
 <% latest = descriptions.first %>
+<% elsewhere = Verifier::Descriptions.elsewhere?(role, latest) %>
 <section class="check-now">
   <% if latest %>
     <p class="muted small">
       <%= number_with_delimiter(latest.words) %> words, read through <%= latest.read_through %> on <%= latest.first_read_at.to_date %>
       <%= "(seen the same on #{latest.last_read_at.to_date})" if latest.last_read_at.to_date != latest.first_read_at.to_date %>
-      · <%= outside_link(latest.url, label: "its page") %>
+      <% unless elsewhere %>· <%= outside_link(latest.url, label: "its page") %><% end %>
     </p>
+    <% if elsewhere %>
+      <p class="small warn">
+        Read from <%= short_link(latest.url) %>, which is no longer its own page (<%= short_link(role.job_url) %>): it may
+        describe another role, or none. Read it again below; each check reads it again too.
+      </p>
+    <% end %>
     <details class="description">
       <summary class="muted small">Show it</summary>
       <div class="description-text"><%= latest.text %></div>
     </details>
     <% if descriptions.size > 1 %>
       <p class="muted small">
-        <%= pluralize(descriptions.size, "version") %>: it changed on <%= descriptions[0...-1].map { |version| version.first_read_at.to_date }.join(", ") %>.
+        <%= pluralize(descriptions.size, "version") %>, new on
+        <%= descriptions.each_cons(2).map { |version, before| "#{version.first_read_at.to_date}#{' (the same text, from its own page when it moved)' if version.content_hash == before.content_hash}" }.join(", ") %>.
       </p>
       <details class="description">
         <summary class="muted small">Earlier versions</summary>
         <% descriptions.drop(1).each do |version| %>
-          <p class="muted small">Read <%= version.first_read_at.to_date %> (<%= number_with_delimiter(version.words) %> words)</p>
+          <p class="muted small">Read <%= version.first_read_at.to_date %> (<%= number_with_delimiter(version.words) %> words) from <%= short_link(version.url) %></p>
           <div class="description-text"><%= version.text %></div>
         <% end %>
       </details>

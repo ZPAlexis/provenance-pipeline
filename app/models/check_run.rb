@@ -167,7 +167,7 @@ class CheckRun < ApplicationRecord
     when "draft" then "#{Draft::A_LABEL.fetch(request['kind'])} for #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "review" then "a resume review for #{posting&.role_title || 'a withdrawn role'} at #{company.name}"
     when "fit" then posting ? "the fit of #{posting.role_title} at #{company.name}" : "the fit of #{ActionController::Base.helpers.pluralize(fit_size, 'role')}"
-    when "all" then "everything"
+    when "all" then "all tracked companies"
     else company.name
     end
   end
