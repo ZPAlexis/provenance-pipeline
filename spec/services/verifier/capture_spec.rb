@@ -51,15 +51,19 @@ RSpec.describe Verifier::Capture do
   describe ".role!" do
     def add(**fields) = described_class.role!(**{ link: "https://job-boards.greenhouse.io/acme/jobs/4012345", title: "Sales Engineer" }.merge(fields))
 
-    it "tracks a new role as the operator, with its company added from its link, the board to try first" do
+    it "tracks a new role as the operator, with its company added from its link, its board watched at once (4e)" do
       placed = add(location: "São Paulo, Brazil", source: "https://www.linkedin.com/jobs/view/sales-engineer-at-acme-4099887766/?trk=x")
 
-      expect(placed).to have_attributes(created: true, note: "Acme added. Sales Engineer tracked.")
+      expect(placed).to have_attributes(created: true, note: "Acme added. Sales Engineer tracked. Its board, " \
+                                                             "https://job-boards.greenhouse.io/acme, is watched: read free.")
       expect(placed.posting).to have_attributes(
         role_title: "Sales Engineer", location: "São Paulo, Brazil", tracking: "tracked", verification_state: "pending",
         job_url: "https://job-boards.greenhouse.io/acme/jobs/4012345", posting_url: "https://www.linkedin.com/jobs/view/4099887766"
       )
-      expect(placed.posting.company).to have_attributes(name: "Acme", careers_page_url: "https://job-boards.greenhouse.io/acme")
+      expect(placed.posting.company).to have_attributes(name: "Acme", careers_page_url: "https://job-boards.greenhouse.io/acme",
+                                                        resolution_status: "resolved", resolution_method: "manual")
+      expect(AuditEvent.where(target: placed.posting.company).pluck(:reasoning))
+        .to include("Set by hand. Its ATS board, from a role's link (https://job-boards.greenhouse.io/acme/jobs/4012345): watched at once.")
       expect(AuditEvent.find_by!(target: placed.posting)).to have_attributes(
         actor: "human:operator", reasoning: "Added by URL: https://job-boards.greenhouse.io/acme/jobs/4012345 " \
                                             "(found at https://www.linkedin.com/jobs/view/4099887766)."
@@ -73,7 +77,7 @@ RSpec.describe Verifier::Capture do
       placed = add(source: "https://www.linkedin.com/jobs/search/?currentJobId=4099887766&keywords=sales")
 
       expect(placed).to have_attributes(posting: clay, created: false)
-      expect(placed.note).to end_with("was archived: tracked again.")
+      expect(placed.note).to include("was archived: tracked again.")
       expect(clay.reload).to have_attributes(tracking: "tracked", job_url: "https://job-boards.greenhouse.io/acme/jobs/4012345")
       expect(AuditEvent.where(target: clay).sole.reasoning).to start_with("Tracked by hand. Added by URL:")
       expect(Company.count).to eq(1) # its own company: none added
@@ -166,6 +170,92 @@ RSpec.describe Verifier::Capture do
     end
   end
 
+  # 4e, add by link: the company's website beside an ATS link, its board watched at once, and an ATS posting shown on a
+  # careers page added as that posting.
+  describe ".role!, adding by link" do
+    def add(**fields) = described_class.role!(**{ link: "https://job-boards.greenhouse.io/acmeinc/jobs/4012345", check: true }.merge(fields))
+
+    it "names a new company by the website given beside an ATS link, and keeps it as its domain" do
+      placed = add(website: "https://www.acme.com/about")
+
+      expect(placed.posting.company).to have_attributes(name: "Acme", domain: "acme.com", careers_page_url: "https://job-boards.greenhouse.io/acmeinc",
+                                                        resolution_status: "resolved")
+      expect(placed.note).to start_with("Acme added. Role tracked")
+    end
+
+    it "finds the company by the website's domain, or by its board, the website then kept as its domain" do
+      by_domain = create(:company, :resolved, name: "Acme Inc", domain: "acme.com")
+      expect(add(website: "acme.com").posting.company).to eq(by_domain)
+      expect(by_domain.reload.careers_page_url).to eq("https://acme.com/careers") # watched already: kept
+
+      by_board = create(:company, :without_domain, name: "Contoso", careers_page_url: "https://jobs.ashbyhq.com/contoso")
+      placed = add(link: "https://jobs.ashbyhq.com/contoso/7d1e2f3a-0b4c-4d5e-9f60-1a2b3c4d5e6f", website: "contoso.com")
+      expect(placed.posting.company).to eq(by_board)
+      expect(placed.note).to include("Its website: contoso.com.")
+      expect(by_board.reload.domain).to eq("contoso.com")
+      expect(AuditEvent.where(target: by_board).pluck(:reasoning)).to include("Its website, given with a role's link: contoso.com.")
+    end
+
+    it "sets the website aside for a link on the company's own site, and refuses one that isn't a company's site" do
+      expect(add(link: "https://careers.fabrikam.com/jobs/1", website: "fabrikam.io").posting.company.domain).to eq("fabrikam.com")
+      expect { add(website: "https://jobs.lever.co/acme") }.to raise_error(ArgumentError, /give the company's own website: jobs\.lever\.co hosts/)
+      expect { add(website: "linkedin.com/company/acme") }.to raise_error(ArgumentError, /a job board/)
+    end
+
+    it "refuses a board on record as another company's, with the website of a company it isn't" do
+      create(:company, :resolved, name: "Contoso", domain: "contoso.com", careers_page_url: "https://job-boards.greenhouse.io/acmeinc")
+      create(:company, name: "Acme", domain: "acme.com")
+
+      expect { add(website: "acme.com") }
+        .to raise_error(ArgumentError, "that link is on Contoso's board, on record; the website given is Acme's")
+      expect(Posting.count).to eq(0)
+    end
+
+    it "watches the board only of a company not watched yet, never one waiting for the operator, and never as the assistant" do
+      waiting = create(:company, :resolution_candidate, name: "Litware", domain: "litware.com")
+      expect(add(link: "https://jobs.lever.co/litware/0f1e", company: waiting).note).not_to include("is watched")
+      expect(waiting.reload.resolution_status).to eq("candidate")
+
+      unwatched = create(:company, name: "Northwind", domain: "northwind.com")
+      placed = as_agent("agent:assistant", scopes: %w[watchlist:curate]) do
+        described_class.role!(link: "https://jobs.lever.co/northwind/0f1e", title: "Sales Engineer", company: unwatched,
+                              note: "On the operator's word.", actor: "agent:assistant")
+      end
+      expect(placed.note).not_to include("is watched")
+      expect(unwatched.reload.resolution_status).to be_nil
+    end
+
+    it "adds a posting shown on a careers page as that posting, once its company's board is on record" do
+      company = create(:company, :resolved, name: "Acme", domain: "acme.com", careers_page_url: "https://job-boards.greenhouse.io/acmeinc")
+
+      placed = add(link: "https://www.acme.com/careers/?gh_jid=4012345&gh_src=x", title: "Sales Engineer")
+
+      expect(placed.posting).to have_attributes(company: company, job_url: "https://job-boards.greenhouse.io/acmeinc/jobs/4012345")
+      expect(placed.note).to eq("Sales Engineer tracked. Its link shows a Greenhouse posting: added as that posting, " \
+                                "https://job-boards.greenhouse.io/acmeinc/jobs/4012345.")
+      expect(AuditEvent.find_by!(target: placed.posting).reasoning)
+        .to eq("Added by URL: https://job-boards.greenhouse.io/acmeinc/jobs/4012345. Pasted as https://www.acme.com/careers/?gh_jid=4012345&gh_src=x.")
+      expect(add(link: "https://acme.com/careers?gh_jid=4012345").posting).to eq(placed.posting) # never added twice
+
+      board = create(:company, :resolved, name: "Contoso", domain: "contoso.com", board_vendor: "ashby", board_token: "contoso",
+                                          board_confirmed_at: 1.day.ago)
+      shown = add(link: "https://contoso.com/careers?ashby_jid=7d1e2f3a-0b4c-4d5e-9f60-1a2b3c4d5e6f")
+      expect(shown.posting).to have_attributes(company: board, job_url: "https://jobs.ashbyhq.com/contoso/7d1e2f3a-0b4c-4d5e-9f60-1a2b3c4d5e6f")
+    end
+
+    it "keeps a careers-page link whose posting's board isn't on record, its careers page to try first, and says what follows" do
+      placed = add(link: "https://www.fabrikam.com/careers/?ashby_jid=7d1e2f3a-0b4c-4d5e-9f60-1a2b3c4d5e6f&utm_source=x")
+
+      expect(placed.posting.job_url).to eq("https://www.fabrikam.com/careers/?ashby_jid=7d1e2f3a-0b4c-4d5e-9f60-1a2b3c4d5e6f&utm_source=x")
+      expect(placed.posting.company).to have_attributes(domain: "fabrikam.com", careers_page_url: "https://www.fabrikam.com/careers/",
+                                                        resolution_status: nil)
+      expect(placed.note).to end_with("Its link shows an Ashby posting from a board not on record yet: its first check finds the posting " \
+                                      "on the careers page, and its own page moves there; its description is read from there.")
+      expect(described_class.embedded("https://acme.com/careers?gh_jid=abc")).to be_nil # not a Greenhouse id
+      expect(described_class.embedded("https://job-boards.greenhouse.io/acme/jobs/1?gh_jid=4012345")).to be_nil # on the ATS itself
+    end
+  end
+
   # 4a: the role's own page at the employer, set by the operator from the role's page.
   describe ".own_page!" do
     let(:acme) { create(:company, :resolved, name: "Acme", domain: "acme.com") }
@@ -177,6 +267,15 @@ RSpec.describe Verifier::Capture do
       expect(role.reload.job_url).to eq("https://acme.com/careers/jobs/9")
       expect(role.audit_events.sole).to have_attributes(actor: AuditEvent::OPERATOR, changes_made: { "job_url" => [ "https://acme.com/jobs/1", "https://acme.com/careers/jobs/9" ] },
                                                         reasoning: "Its own page set by hand. The old link moved.")
+    end
+
+    # 4e: a careers-page link showing the posting from its ATS is the posting, once the company's board is on record.
+    it "sets the posting a careers-page link shows, from the company's board on record" do
+      acme.update!(board_vendor: "greenhouse", board_token: "acmeinc", board_confirmed_at: 1.day.ago)
+
+      described_class.own_page!(role, "https://acme.com/careers?gh_jid=4012345")
+
+      expect(role.reload.job_url).to eq("https://job-boards.greenhouse.io/acmeinc/jobs/4012345")
     end
 
     it "refuses a job board, another company's site, the page it has, and another role's" do

@@ -25,27 +25,21 @@ class RolesController < ApplicationController
     fits(@roles)
   end
 
-  # "Add a role": its own page at the employer and its title, tracked as the operator's
-  # choice, then checked right away (its company's careers page found first when it has none).
-  # "Add a role" (1.5d; 4a): tracked as the operator, and checked only when they ask ("Add and check"), what that
-  # could cost asked first; without a check its title is needed. From a company's page it is added there, and the
-  # page stays open to add another; otherwise, or to follow its check, the role's page opens.
+  # "Add by link" (4e; 1.5d, 4a): a role's link, tracked as the operator's choice, its company added when new (named
+  # by the website given, or its board), its board watched at once when the link is on one. Checked right after when
+  # that is free, its title read from its page when none was given; a check that could spend is never started here:
+  # the role's page says what it could cost, with Check now. From a company's page it is added there, and the page
+  # stays open to add another; otherwise the role's page opens.
   def create
     company = Company.find(params[:company_id]) if params[:company_id].present?
-    check = params[:check] == "1"
     placed = Verifier::Capture.role!(link: params[:link], title: params[:title], location: params[:location], source: params[:source],
-                                     company_name: params[:company_name], company: company, check: check)
+                                     company_name: params[:company_name], website: params[:website], company: company, check: true)
     role = placed.posting
-    if check
-      why = Verifier::CheckNow.refusal(role)
-      CheckRun.start_for!(role) unless why
-      checked = why ? " Not checked: #{why}" : " Checking it now: its own page first."
-    end
-    back = company && !check ? company_path(company) : role_path(role)
-    redirect_to back, notice: "#{placed.note}#{checked}", status: :see_other
+    redirect_to company ? company_path(company) : role_path(role), notice: "#{placed.note} #{check_after(role)}", status: :see_other
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
-    redirect_to company ? company_path(company, add_role: 1) : roles_path(add: 1), alert: "#{e.message.upcase_first.delete_suffix('.')}.",
-                                                                                 status: :see_other
+    # Refused: back to the form, the link pasted still in it.
+    redirect_to company ? company_path(company) : roles_path, alert: "#{e.message.upcase_first.delete_suffix('.')}.",
+                                                             flash: { link: params[:link].to_s.first(1000) }, status: :see_other
   end
 
   # The role's own page, as the operator gives it (4a): the link each check tries first.
@@ -100,6 +94,26 @@ class RolesController < ApplicationController
   end
 
   private
+
+  # A role added by link, checked right after when that is free (4e): its own page first, and its company's list read
+  # first when it never was (a board just watched, say). A check that could spend is left to Check now on its page,
+  # which asks first. What was done, in a sentence.
+  def check_after(role)
+    if (why = Verifier::CheckNow.refusal(role))
+      return "Not checked: #{why}"
+    end
+
+    unless Verifier::CheckNow.free?(role)
+      return "Not checked: checking it could cost #{helpers.check_cost(Verifier::CheckNow.ceiling(role), role)}; " \
+             "Check now, on its page, asks first."
+    end
+
+    company = role.company
+    listed = Verifier::CheckNow.free?(company) && company.page_checks.where(purpose: "verification").none?
+    CheckRun.start_for!(company) if listed
+    CheckRun.start_for!(role)
+    "Checking it now, free#{": its company's list first, then its own page" if listed}."
+  end
 
   # Each listed role's newest fit (2f), the list narrowed by fit and sorted by it when asked, and what weighing the
   # unscored would take: the roles offered (tracked or suggested) with no current score and a description to weigh.

@@ -89,6 +89,17 @@ RSpec.describe Verifier::Descriptions do
     expect(RoleDescription.count).to eq(0)
   end
 
+  # 4e: a careers page showing the role's posting from its ATS holds the company's text, not the role's.
+  it "reads nothing from a careers page showing a posting from its ATS, and says to check the role first" do
+    shown = create(:posting, company: company, role_title: "Recruiter", job_url: "https://acme.example/careers?gh_jid=4012399")
+
+    reads, worker = read(described("You will run technical discovery."), postings: [ role, shown ])
+
+    expect(worker.asked[:targets].pluck(:id)).to eq([ role.id ])
+    expect(reads.find { |each| each.posting == shown }).to have_attributes(outcome: "no_page", summary: start_with("Its own page is its company's careers page"))
+    expect(shown.role_descriptions).to be_empty
+  end
+
   it "sets aside a result that breaks the contract, and goes on" do
     other = create(:posting, company: company, role_title: "Solutions Engineer", job_url: "https://acme.example/jobs/2")
 

@@ -37,15 +37,25 @@ module Verifier
     # What a check could cost at most: what the company's careers page cost when
     # last read in full (a role's check reads it when its own page cannot answer),
     # or an average page read for a company never verified, plus what finding its
-    # page costs on average when it has none yet. A free board costs nothing.
+    # page costs on average when it has none yet. A free board costs nothing, nor (4e) a watched page on an ATS board,
+    # read never before or not.
     def ceiling(record)
       company = record.is_a?(Posting) ? record.company : record
       # A role added without a title, on the company's own site, may need one LLM read of its page to be named.
       naming = record.is_a?(Posting) && record.title_pending? && !Capture.board(record.job_url.to_s) ? average_read : 0.0
-      return naming if company.board_in_use
+      return naming if Targets.free_read?(company)
 
       read = Targets.full_read_cost(company) || average_full_read
       naming + (company.resolution_status == "resolved" ? read : read + finding_cost)
+    end
+
+    # Whether a check is sure to cost nothing (4e), so adding a role by link may start it unasked: its company's list
+    # read free, or for nothing when last read in full, and the role named with no AI read (its title given, or its own
+    # page on an ATS). An estimate of nothing, from a record with no reads to average, is not enough.
+    def free?(record)
+      return false if record.is_a?(Posting) && record.title_pending? && !Capture.board(record.job_url.to_s)
+
+      known_cost?(record) && ceiling(record).zero?
     end
 
     # What one LLM read of one page costs on average: naming a role from its own page.
@@ -64,7 +74,7 @@ module Verifier
     # company's page has been read in full, or is read through a free board.
     def known_cost?(record)
       company = record.is_a?(Posting) ? record.company : record
-      company.board_in_use || Targets.full_read_cost(company).present?
+      Targets.free_read?(company) || Targets.full_read_cost(company).present?
     end
 
     # What finding a careers page has cost per company, on average, from the record.

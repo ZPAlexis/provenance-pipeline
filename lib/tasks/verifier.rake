@@ -276,8 +276,11 @@ namespace :verifier do
 
   desc "Add a role by its own page at the employer (or its ATS posting), tracked. Audited as you; backs up first. " \
        "Checked only with CHECK=1, when a TITLE left out is read from its page; without it, TITLE is needed. " \
-       "COMPANY_ID adds it at a company on record. Usage: URL=\"https://...\" bin/rails verifier:add_role [TITLE=\"...\"] " \
-       "[LOCATION=\"...\"] [SOURCE=\"where you found it\"] [COMPANY=\"name, if new\" | COMPANY_ID=\"...\"] [CHECK=1]"
+       "COMPANY_ID adds it at a company on record; WEBSITE names a new one's site when its link doesn't (an ATS link). A " \
+       "link on an ATS board has the board watched at once; one showing an ATS posting (gh_jid, ashby_jid) is added as " \
+       "that posting once its company's board is on record. Usage: URL=\"https://...\" bin/rails verifier:add_role " \
+       "[TITLE=\"...\"] [LOCATION=\"...\"] [SOURCE=\"where you found it\"] [COMPANY=\"name, if new\" | COMPANY_ID=\"...\"] " \
+       "[WEBSITE=\"acme.com\"] [CHECK=1]"
   task add_role: :environment do
     url = ENV["URL"].presence or abort "Give the role's own page in URL=\"...\"."
     check = ENV["CHECK"] == "1"
@@ -291,7 +294,7 @@ namespace :verifier do
     since = Time.current
     placed = board_reads_here.call do
       Verifier::Capture.role!(link: url, title: ENV["TITLE"], location: ENV["LOCATION"], source: ENV["SOURCE"],
-                              company_name: ENV["COMPANY"], company: company, check: check)
+                              company_name: ENV["COMPANY"], website: ENV["WEBSITE"], company: company, check: check)
     end
     posting = placed.posting
     puts placed.note

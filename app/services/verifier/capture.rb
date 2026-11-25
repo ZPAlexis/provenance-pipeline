@@ -65,14 +65,24 @@ module Verifier
     # The role the operator pasted, tracked: pasting it is choosing it. Found on record by
     # where it was found (its LinkedIn job), its own link, or its title at the company when
     # that has no link yet; a suggested or dismissed role is tracked, its missing links filled in.
-    # A new role needs its title, unless a check follows (`check:`), which reads one from its own page; till then it
-    # waits, named "(title pending)". From a company's page (`company:`, 4a), the role is added there: refused at an
-    # archived company, or for a link on another company's site or board on record. Nothing is written when
-    # anything is refused.
+    # A new role needs its title, unless a check is to name it (`check:`), reading one from its own page; till then it
+    # waits, named "(title pending)". Since 4e the pages add every role so: checked right after when that is free, its
+    # page offering Check now, with what it could cost, when not. From a company's page (`company:`, 4a), the role is
+    # added there: refused at an archived company, or for a link on another company's site or board on record.
+    # Nothing is written when anything is refused.
     # `note`, the reason given (the client's, on the operator's word), goes on the record after what was added.
-    def role!(link:, title: nil, location: nil, source: nil, company_name: nil, company: nil, check: false, note: nil, actor: ACTOR)
+    # Since 4e ("add by link"): the company's own `website`, given when the link doesn't name it (an ATS posting), finds
+    # it on record or names a new one; a link on its ATS board has the board watched at once, the ATS confirming it,
+    # when the operator adds it to a company not watched yet; and a careers-page link showing an ATS posting (gh_jid,
+    # ashby_jid) is added as that posting when the company's board there is on record.
+    def role!(link:, title: nil, location: nil, source: nil, company_name: nil, company: nil, website: nil, check: false, note: nil,
+              actor: ACTOR)
       title = title.to_s.squish
-      own = parse(link, role: true)
+      pasted = own = parse(link, role: true)
+      domain = website_domain(website)
+      own = with_website(own, domain) if domain && !company
+      embed = embedded(own.url)
+      own = own.with(page: careers_page_of(own.url)) if embed && own.page.nil?
       source = source_link(source)
       at_company!(company, own) if company
       ApplicationRecord.transaction do
@@ -80,14 +90,126 @@ module Verifier
         elsewhere!(known, company) if known && company
         added = company_from(own, company_name, actor) unless known || company
         company ||= known&.company || added.company
+        board_elsewhere!(company, own) if domain && added
+        notes = [ (gave_website!(company, domain, actor) if domain && added) ]
+        notes << watch_board!(company, own, actor) if actor == ACTOR
+        if embed
+          posting = embedded_posting(company, embed)
+          notes << embedded_note(embed, posting)
+          own = parse(posting, role: true) if posting
+        end
         # A role found by where it was found, at a company archived, or a role added at a company proposed (4b).
         again = chosen_again(company, own.url, actor) if known || company.suggested?
-        known ||= by_link(company, own.url) || (by_title(company, title) if title.present?)
-        note = note.to_s.squish.presence
+        known ||= by_link(company, own.url) || (by_link(company, pasted.url) if posting) || (by_title(company, title) if title.present?)
+        note = [ ("Pasted as #{pasted.url}." if posting), note.to_s.squish.presence ].compact.join(" ").presence
         placed = known ? choose!(known, own, source, note, actor) : create_role!(company, own, title.presence, location, source, check, note, actor)
         before = again || (added.note if added&.created || added&.tracked_again)
-        before ? placed.with(note: "#{before} #{placed.note}") : placed
+        placed.with(note: [ before, placed.note, *notes.compact ].compact.join(" "))
       end
+    end
+
+    # --- Adding by link (4e) -------------------------------------------------
+
+    # Query parameters a careers page on the company's own site uses to show one posting of the ATS embedded in it,
+    # by the posting's id on that ATS, and what the id looks like there.
+    EMBEDDED = { "gh_jid" => [ "greenhouse", /\A\d{4,}\z/ ], "ashby_jid" => [ "ashby", /\A[0-9a-f-]{8,}\z/i ] }.freeze
+    VENDOR_NAMES = { "greenhouse" => "Greenhouse", "ashby" => "Ashby" }.freeze
+
+    # [vendor, id] of the ATS posting a careers-page link shows (?gh_jid=, ?ashby_jid=); nil for any other link, a link
+    # on the ATS itself included.
+    def embedded(url)
+      return if board(url)
+
+      query = Rack::Utils.parse_query(URI.parse(url).query)
+      EMBEDDED.each do |param, (vendor, form)|
+        id = query[param].to_s.strip
+        return [ vendor, id ] if id.match?(form)
+      end
+      nil
+    end
+
+    # The careers page a link showing an embedded posting is on: the link without the posting's id or a visit's tracking.
+    def careers_page_of(url)
+      uri = URI.parse(url)
+      query = URI.decode_www_form(uri.query.to_s).reject { |name, _| EMBEDDED.key?(name) || name.downcase.start_with?(*TRACKING) }
+      uri.query = query.empty? ? nil : URI.encode_www_form(query)
+      uri.fragment = nil
+      uri.to_s
+    end
+
+    # The embedded posting's own page on its ATS, built from the company's board there on record (a board found for its
+    # site, or its careers page on that board); nil when it has none of that vendor.
+    def embedded_posting(company, (vendor, id))
+      token = (company.board_token if company.board_vendor == vendor)
+      watched = board(company.careers_page_url.to_s) if company.careers_page_url
+      token ||= watched[1] if watched && watched[0] == vendor
+      return if token.blank?
+
+      vendor == "greenhouse" ? "#{Resolution.board_url(vendor, token)}/jobs/#{id}" : "#{Resolution.board_url(vendor, token)}/#{id}"
+    end
+
+    def embedded_note((vendor, _id), posting)
+      name = VENDOR_NAMES.fetch(vendor)
+      shows = "Its link shows #{name.start_with?(/[AEIOU]/) ? 'an' : 'a'} #{name} posting"
+      return "#{shows}: added as that posting, #{posting}." if posting
+
+      "#{shows} from a board not on record yet: its first check finds the posting on the careers page, and its own page " \
+        "moves there; its description is read from there."
+    end
+
+    # The domain of the company's own website, given beside the link (4e); a job board, an ATS or a hosted careers site
+    # is refused: none of them names the company.
+    def website_domain(input)
+      return if input.to_s.strip.empty?
+
+      site = parse(input)
+      site.domain or raise ArgumentError, "give the company's own website: #{host(site.url).delete_prefix('www.')} hosts careers pages, not its site"
+    end
+
+    # A link that names no domain (an ATS posting, a hosted careers site) takes the website's, and its name; a link on
+    # the company's own site keeps its own, the website set aside.
+    def with_website(link, domain)
+      return link if link.domain
+
+      link.with(domain: domain, name: guessed_name(link.url, nil, domain))
+    end
+
+    # A link on a board on record as another company's, given with a website: the role isn't at the website's company.
+    def board_elsewhere!(company, own)
+      other = board_owner(own)
+      return if other.nil? || other == company
+
+      raise ArgumentError, "that link is on #{other.name}'s board, on record; the website given is #{company.name}'s"
+    end
+
+    # The company on record whose ATS board a link is on: found for its site, or watched at it. Nil for none.
+    def board_owner(link)
+      return unless link.board
+
+      Company.find_by(board_vendor: link.board[0], board_token: link.board[1]) || (Company.find_by(careers_page_url: link.page) if link.page)
+    end
+
+    # The website kept as the company's domain when it has none (a company on record by its board alone); one with
+    # another domain keeps it, and says so. Nil when there is nothing to say.
+    def gave_website!(company, domain, actor)
+      return if company.domain == domain
+      return "#{company.name} keeps its domain, #{company.domain}." if company.domain.present?
+
+      company.update!(domain: domain)
+      AuditEvent.record_write!(company, actor: actor, reasoning: "Its website, given with a role's link: #{domain}.")
+      "Its website: #{domain}."
+    end
+
+    # A role's link on its company's ATS board, added by the operator (4e): the board is the company's careers page,
+    # watched at once (the ATS confirms whose board it is), unless the company is watched already or a page found for
+    # it waits for the operator. Read through the board's API, free. Says so; nil when nothing was set.
+    def watch_board!(company, own, actor)
+      return unless own.board && own.page && company.resolution_status.in?([ nil, "failed" ])
+      owner = board_owner(own)
+      return if company.kind == "aggregator" || (owner && owner != company)
+
+      Candidates.set_page!(company, own.page, reasoning: "Its ATS board, from a role's link (#{own.url}): watched at once.", actor: actor)
+      "Its board, #{own.page}, is watched: read free."
     end
 
     # A role's own page at the employer, as the operator gives it (4a): the link each check tries first to find it.
@@ -95,6 +217,9 @@ module Verifier
     # record, and never another role's there. Audited as theirs, with their note if they give one.
     def own_page!(posting, link, note: nil, actor: ACTOR)
       own = parse(link, role: true)
+      # A careers-page link showing the posting from its ATS (4e): the posting itself, once the company's board is on record.
+      shown = (embedded = embedded(own.url)) && embedded_posting(posting.company, embedded)
+      own = parse(shown, role: true) if shown
       at_company!(posting.company, own, archived: true)
       raise ArgumentError, "that is already its own page" if posting.job_url && link_key(posting.job_url) == link_key(own.url)
       if (other = by_link(posting.company, own.url))
@@ -184,12 +309,17 @@ module Verifier
       "#{company.name} was proposed to you: tracked#{BoardRead.link(company) ? ', and the board it was proposed with is read now, free' : ''}."
     end
 
+    # A link on the company's own site finds it by its domain alone. One on an ATS or a hosted site finds it by its board
+    # or page, then by name; with a website given (4e), by the website's domain first, and by name only a company with no
+    # domain or that one.
     def existing(link, name)
-      return Company.find_by(domain: link.domain) if link.domain
+      by_domain = Company.find_by(domain: link.domain) if link.domain
+      return by_domain if by_domain || (link.domain && !host(link.url).match?(HOSTED))
 
       by_board = link.board && Company.find_by(board_vendor: link.board[0], board_token: link.board[1])
       by_page = link.page && (Company.find_by(careers_page_url: link.page) || Company.find_by(resolution_candidate_url: link.page))
-      by_board || by_page || Company.where("lower(name) = ?", (name.presence || link.name).downcase).first
+      named = Company.where("lower(name) = ?", (name.presence || link.name).downcase)
+      by_board || by_page || (link.domain ? named.where(domain: [ nil, link.domain ]) : named).first
     end
 
     def create!(link, name, actor)

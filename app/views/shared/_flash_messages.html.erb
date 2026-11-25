@@ -1,6 +1,6 @@
 <%# A page that keeps the reader's place after a form (content_for :floating_flash) keeps its notices in view. %>
 <div id="flash-messages" class="<%= 'floating' if content_for?(:floating_flash) %>">
-  <% flash.each do |kind, message| %>
+  <% flash.to_hash.slice("notice", "alert").each do |kind, message| %>
     <div class="flash <%= kind %>" role="status"><%= message %></div>
   <% end %>
 </div>

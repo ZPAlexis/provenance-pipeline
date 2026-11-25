@@ -154,6 +154,19 @@ RSpec.describe Verifier::CheckNow do
       expect(described_class.ceiling(untitled)).to be_within(1e-9).of(0.07) # its board's listing names it, free
     end
 
+    # 4e: a board watched at once when a role on it is added is read through its API before it was ever read.
+    it "is nothing for a watched page on an ATS board, never read or not, and only then free for certain" do
+      create(:llm_call, cost_usd: 0.02)
+      expect([ described_class.ceiling(role), described_class.free?(role) ]).to eq([ 0.02, false ])
+
+      company.update!(careers_page_url: "https://job-boards.greenhouse.io/acme")
+      expect([ described_class.ceiling(role), described_class.known_cost?(role), described_class.free?(role) ]).to eq([ 0.0, true, true ])
+
+      untitled = create(:posting, company: company, role_title: Posting::TITLE_PENDING, job_url: "https://acme.example/jobs/7")
+      expect(described_class.free?(untitled)).to be(false) # named by its own page on the company's site: one AI read, maybe
+      expect(described_class.free?(create(:company))).to be(false) # an estimate of nothing is not enough
+    end
+
     it "adds what finding a careers page has cost per company when it has none yet" do
       create(:llm_call, cost_usd: 0.02) # the average read, made while finding a page (the factory's check)
       found = create(:page_check, company: create(:company), purpose: "resolution")

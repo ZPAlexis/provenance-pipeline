@@ -53,7 +53,7 @@ module Verifier
       targets = list.map { |company| Targets.verify(company) }
       by_id = list.index_by(&:id)
       per_page = CheckNow.average_full_read
-      paid = targets.reject { |target| target[:board] }
+      paid = targets.reject { |target| target[:board] || Targets.free_read?(by_id[target[:id]]) } # an ATS board's page is free too
       known = paid.to_h { |target| [ target[:id], Targets.full_read_cost(by_id[target[:id]]) ] }
       Plan.new(targets: targets, via_board: targets.count { |target| target[:board] },
                reusable: paid.count { |target| target[:previous].any? },

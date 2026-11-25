@@ -57,10 +57,7 @@
   <% if @company.dismissed? %>
     <p class="muted small">Track it again to add a role here.</p>
   <% else %>
-    <details class="add" <%= "open" if params[:add_role] %>>
-      <summary class="btn">Add a role here</summary>
-      <%= render "roles/add_form", company: @company %>
-    </details>
+    <div class="add-here"><%= render "roles/add_form", company: @company %></div>
   <% end %>
   <% if @roles.any? %>
     <div class="table-wrap">

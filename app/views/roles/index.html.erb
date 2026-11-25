@@ -55,10 +55,7 @@
   <div class="toolbar-tools">
     <%= render "shared/find", url: roles_path, keep: { tab: @tab, answer: @answer, fit: @fit, sort: @sort }, value: @q,
                               clear: roles_path(tab: @tab, answer: @answer, fit: @fit, sort: @sort), placeholder: "Title, company, or place" %>
-    <details class="add" <%= "open" if params[:add] %>>
-      <summary class="btn primary">Add a role</summary>
-      <%= render "roles/add_form", company: nil %>
-    </details>
+    <%= render "roles/add_form", company: nil %>
   </div>
 </div>
 

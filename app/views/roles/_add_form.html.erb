@@ -1,38 +1,43 @@
-<%# "Add a role" (1.5d; 4a), on the Roles page and on a company's page (`company`, filled in). Tracked, and read
-    nothing unless asked: "Add and check" checks it right away, what that could cost asked first; without it, its
-    title is needed. %>
-<% ceiling = Verifier::CheckNow.ceiling(company || Company.new) + Verifier::CheckNow.average_read %>
-<%= form_with url: roles_path, class: "add-form" do |form| %>
+<%# "Add by link" (4e; 1.5d, 4a), in the Roles page's toolbar and on a company's page (`company`, filled in): the role's
+    link, and the rest under "More" when it helps. Tracked; checked right after when that is free, and never a check
+    that could spend unasked: its page says what it could cost, with Check now. %>
+<%= form_with url: roles_path, class: "add-link", "aria-label": "Add a role by its link" do |form| %>
   <%= hidden_field_tag :company_id, company.id if company %>
-  <label>Its own page <%= form.text_field :link, required: true, placeholder: company ? "Its page at #{company.name}, or its ATS posting" : "acme.com/careers/jobs/123, or its ATS posting" %></label>
-  <label>
-    <span>Title <span class="muted">(read from its page only when you check it)</span></span>
-    <%= form.text_field :title, required: true, placeholder: "Solutions Engineer" %>
-  </label>
-  <label>
-    <span>Location <span class="muted">(optional)</span></span>
-    <%= form.text_field :location, placeholder: "São Paulo, Brazil" %>
-  </label>
-  <label>
-    <span>Where you found it <span class="muted">(optional)</span></span>
-    <%= form.text_field :source, placeholder: "linkedin.com/jobs/view/…" %>
-  </label>
-  <% unless company %>
-    <label>
-      <span>Company <span class="muted">(optional, if new)</span></span>
-      <%= form.text_field :company_name, placeholder: "Acme" %>
-    </label>
-  <% end %>
-  <%= form.submit "Add", class: "btn primary" %>
-  <%= form.button "Add and check", name: "check", value: "1", class: "btn", formnovalidate: true,
-                  data: { turbo_confirm: "Checking it reads its own page first, free on an ATS; #{check_cost(ceiling, known: company.present? && Verifier::CheckNow.known_cost?(company))} when its " \
-                                         "title must be read by the AI#{' or its company is new' unless company}. Add and check it?" } %>
-  <p class="muted small">
-    Tracked: pasting a role is choosing it, even one you archived<%= ", at a company you archived too" unless company %>.
-    "Add" reads nothing and costs nothing: give its title, and every check from then on looks for it. "Add and check"
-    checks it now, its own page first<%= ", its company's careers page found first if it has none" unless company %>; a
-    title left blank is then read from its page, free on an ATS, elsewhere its heading, and one AI read only when that is
-    unclear. A job board's link (LinkedIn, Indeed) is never read: keep it in "Where you found it", where it also finds a
-    role already on record.
-  </p>
+  <%= form.text_field :link, required: true, "aria-label": "The role's link", autocomplete: "off", value: flash[:link],
+                             placeholder: company ? "Its page at #{company.name}, or its ATS posting" : "Paste a role's link" %>
+  <%= form.submit company ? "Add" : "Add by link", class: "btn primary" %>
+  <details class="add-more" data-controller="menu">
+    <summary class="btn">More</summary>
+    <div class="add-form">
+      <label>
+        <span>Title <span class="muted">(read from its page when left out)</span></span>
+        <%= form.text_field :title, placeholder: "Solutions Engineer" %>
+      </label>
+      <label>
+        <span>Location <span class="muted">(optional)</span></span>
+        <%= form.text_field :location, placeholder: "São Paulo, Brazil" %>
+      </label>
+      <label>
+        <span>Where you found it <span class="muted">(optional)</span></span>
+        <%= form.text_field :source, placeholder: "linkedin.com/jobs/view/…" %>
+      </label>
+      <% unless company %>
+        <label>
+          <span>Company website <span class="muted">(optional: an ATS link doesn't name it)</span></span>
+          <%= form.text_field :website, placeholder: "acme.com" %>
+        </label>
+        <label>
+          <span>Company name <span class="muted">(optional, if new)</span></span>
+          <%= form.text_field :company_name, placeholder: "Acme" %>
+        </label>
+      <% end %>
+      <p class="muted small">
+        Tracked: pasting a role is choosing it, even one you archived. A link on an ATS board (Greenhouse, Lever, Ashby,
+        Workday, Oracle) has the board watched at once, read free. The role is checked right after when that costs nothing;
+        otherwise Check now, on its page, says what it could cost first. A careers-page link with <code>gh_jid</code> or
+        <code>ashby_jid</code> is added as that posting once the board is on record. LinkedIn and other job boards are
+        never read: put their link in "Where you found it".
+      </p>
+    </div>
+  </details>
 <% end %>

@@ -80,6 +80,12 @@ module Verifier
       [ check, JobUrls.listed(pages.drop_while { |page| page.id != check.id }) ]
     end
 
+    # Whether a company's list is read free (4e): through a board confirmed for its own site, or because its watched page
+    # is an ATS board, read through the board's API, never the LLM (a board watched at once when a role on it is added).
+    def free_read?(company)
+      company.board_in_use.present? || (company.resolution_status == "resolved" && Capture.board(company.careers_page_url.to_s).present?)
+    end
+
     # What reading a company's watched page in full cost the last time: the LLM
     # calls behind every page of its latest verification, counting a reused page
     # at what the read it reused cost. Nil when it has never been verified.

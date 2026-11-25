@@ -26,11 +26,15 @@ module Verifier
 
     def target(posting) = { id: posting.id, url: posting.job_url, label: "#{posting.company.name} / #{posting.role_title}" }
 
-    # Reads `postings`' descriptions in one run; a role with no page of its own is said so without one.
+    # Reads `postings`' descriptions in one run; a role with no page of its own is said so without one, and so (4e) is
+    # one whose own page is still a careers page showing its posting from an ATS (?gh_jid=, ?ashby_jid=): that page's
+    # text is the company's, not the role's.
     def read!(postings, purpose:, worker: Worker.new(run_dir: Worker.dir_for("describe")), issued_by: AuditEvent::OPERATOR)
       postings = Array(postings)
       without, with = postings.partition { |posting| posting.job_url.blank? }
-      reads = without.map { |posting| Read.new(posting:, outcome: "no_page", summary: NO_PAGE, version: nil, new_version: false) }
+      held, with = with.partition { |posting| Capture.embedded(posting.job_url) }
+      reads = without.map { |posting| Read.new(posting:, outcome: "no_page", summary: NO_PAGE, version: nil, new_version: false) } +
+              held.map { |posting| Read.new(posting:, outcome: "no_page", summary: EMBEDDED_PAGE, version: nil, new_version: false) }
       return reads if with.empty?
 
       Authority.run(Ingest::ACTOR, scopes: SCOPES, purpose: purpose, ttl: with.one? ? Authority::ONE : Authority::BATCH,
@@ -79,6 +83,8 @@ module Verifier
     end
 
     NO_PAGE = "No page of its own on record: add its link to read its description.".freeze
+    EMBEDDED_PAGE = "Its own page is its company's careers page, showing its posting from an ATS: check it first, which " \
+                    "finds the posting's own page; its description is read from there.".freeze
 
     # Whether `description` was read from a page that is no longer `posting`'s own (4e): a check that finds a role's own
     # posting moves its link there (a role added from a careers page, say, found on its ATS), and what the page before

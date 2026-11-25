@@ -591,6 +591,42 @@ td form.button_to { display: inline-block; }
 .list-toolbar .find-form { margin: 0; }
 .list-toolbar details.add { margin: 0; }
 .list-toolbar details.add[open] { flex-basis: 100%; }
+
+/* Add by link (4e): the link and its button in a row; "More" opens the rest in a panel under it, as the Record menu
+   does, so the toolbar keeps its row. */
+.add-link { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin: 0; }
+.add-link input[name="link"] {
+  width: 260px;
+  max-width: 100%;
+  padding: 4px 8px;
+  font: 13px var(--font);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.add-more { position: relative; }
+.add-more > summary { list-style: none; cursor: pointer; }
+.add-more > summary::-webkit-details-marker { display: none; }
+.add-more > .add-form {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(680px, calc(100vw - 32px));
+  max-width: none;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.add-more > .add-form input[type="text"] { width: 280px; }
+.add-here { margin: 4px 0 14px; }
+.add-here .add-link { justify-content: flex-start; position: relative; }
+.add-here .add-more { position: static; } /* the panel opens under the form's left edge, never past the page's right */
+.add-here .add-more > .add-form { right: auto; left: 0; }
 .list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 4px 0 12px; }
 .list-filters label { display: flex; align-items: center; gap: 6px; }
 .list-filters select {
