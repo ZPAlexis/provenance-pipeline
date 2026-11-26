@@ -53,11 +53,14 @@ module RecordHistory
   end
 
   # Those changes in a sentence for the page's banner; nil when there are none. The page's own record is "this role"
-  # (or company, or application); the rest are counted by kind: "2 fit scores and this role".
+  # (or company, or application), said first; the rest are counted by kind, in the order they first happened:
+  # "this role and 2 fit scores". Always in that order, whatever order the changes came in.
   def said(changes, record)
     return if changes.empty?
 
-    parts = changes.group_by { |event| event.target_type == record.class.name && event.target_id == record.id ? :own : event.target_type }
+    ordered = changes.sort_by { |event| [ event.occurred_at, event.id ] }
+    parts = ordered.group_by { |event| event.target_type == record.class.name && event.target_id == record.id ? :own : event.target_type }
+                   .sort_by { |kind, _| kind == :own ? 0 : 1 }
                    .map do |kind, events|
       next "this #{KINDS.key(record.class.name)}" if kind == :own
 

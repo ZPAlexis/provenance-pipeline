@@ -138,13 +138,14 @@
         you marked.
       </li>
       <li>
-        <strong>Analytics:</strong> how far applications get, how long roles stay listed, and what the AI cost. A rate
+        <strong>The dashboard:</strong> where things stand now, and how they have gone: how far applications get, how
+        long roles stay listed, what the AI cost, and the runs asked for lately, by you or your AI assistant. A rate
         needs at least <%= Analytics::FLOOR %> to go on, and says so when it hasn't.
       </li>
     </ul>
     <p class="pages">
       <%= link_to "Review", review_path %> · <%= link_to "Agents", agents_path %> · <%= link_to "Audit log", audit_path %> ·
-      <%= link_to "Check results", audit_path(view: "checks") %> · <%= link_to "Analytics", analytics_path %>
+      <%= link_to "Check results", audit_path(view: "checks") %> · <%= link_to "Dashboard", root_path %>
     </p>
   </section>
 

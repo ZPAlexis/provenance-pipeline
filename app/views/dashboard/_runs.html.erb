@@ -1,0 +1,63 @@
+<%# The runs asked for lately (4e step 12, the dashboard's Agents tab; was "Checks you asked for"): a check, a
+    description read, a draft or a review written, fits weighed, links read. Who asked (you, or your AI assistant on
+    your word), what it did, how it ended, and what it cost. A run is not itself an audit event: its writes are. %>
+<h3>Runs</h3>
+<% if runs.any? %>
+  <p class="muted small">
+    The latest <%= Overview::RECENT_RUNS %>: done by the app's agents, asked for by you or your AI assistant. What each wrote is
+    in the <%= link_to "audit log", audit_path %>, under its credential.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Asked</th><th>Asked by</th><th>What</th><th>Result</th><th class="num">Cost</th></tr></thead>
+      <tbody>
+        <% runs.each do |run| %>
+          <tr>
+            <td class="nowrap"><%= ago(run.created_at) %></td>
+            <td><%= actor_badge(run.requested_by) %></td>
+            <td>
+              <% if run.kind == "describe" && run.posting %>
+                <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %> (its description)</span>
+              <% elsif run.kind == "review" && run.posting&.application %>
+                <%= link_to run.posting.role_title, application_path(run.posting.application, anchor: "reviews") %>
+                <span class="muted">at <%= run.company.name %> (a resume review)</span>
+              <% elsif run.kind == "draft" && run.posting&.application %>
+                <%= link_to run.posting.role_title, application_path(run.posting.application, anchor: "drafts") %>
+                <span class="muted">at <%= run.company.name %> (<%= Draft::A_LABEL.fetch(run.request["kind"], "a draft") %>)</span>
+              <% elsif run.kind == "fit" && run.posting %>
+                <%= link_to run.posting.role_title, role_path(run.posting, anchor: "fit") %> <span class="muted">at <%= run.company.name %> (its fit)</span>
+              <% elsif run.kind == "fit" %>
+                <%= link_to "Roles by fit", roles_path(sort: "fit") %> <span class="muted">(the fit of <%= pluralize(run.fit_size, "role") %>)</span>
+              <% elsif run.kind == "role" && run.posting %>
+                <%= link_to run.posting.role_title, role_path(run.posting) %> <span class="muted">at <%= run.company.name %></span>
+              <% elsif run.kind == "all" %>
+                <%= link_to "All tracked companies", roles_path %> <span class="muted">(<%= run.total ? pluralize(run.total, "company") : "every tracked company" %>)</span>
+              <% elsif run.kind == "links" %>
+                <%= link_to "Your links", profile_path(anchor: "links") %> <span class="muted">(read free)</span>
+              <% elsif run.board_read? && run.company %>
+                <%= link_to run.company.name, company_path(run.company) %> <span class="muted">(its board, read free)</span>
+              <% elsif run.company %>
+                <%= link_to run.company.name, company_path(run.company) %> <span class="muted">(its careers page)</span>
+              <% else %>
+                <span class="muted"><%= run.kind.humanize %></span>
+              <% end %>
+            </td>
+            <td>
+              <% if run.active? %>
+                <span class="badge"><%= run.status == "queued" ? "Waiting" : "Checking…" %></span>
+              <% elsif run.failed? %>
+                <span class="badge gone">Didn't finish</span> <span class="muted small"><%= run.failure.to_s.truncate(90) %></span>
+              <% else %>
+                <%= run_answer(run) %>
+                <% if run.kind != "role" %><span class="muted small"><%= run.summary.to_s.truncate(90) %></span><% end %>
+              <% end %>
+            </td>
+            <td class="num"><%= cost(run.cost_usd) if run.status == "done" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">None yet: "Check now" on a role's or a company's page asks for one.</p>
+<% end %>

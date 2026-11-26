@@ -1,6 +1,6 @@
 module ProvenanceMcp
   module Tools
-    # How the search is going (3.3 step 3), worked out from the record as the Analytics page has it: the pipeline,
+    # How the search is going (3.3 step 3), worked out from the record as the dashboard's tabs have it: the pipeline,
     # the watch and the agents, a section or all of them, for a period. Figures only, never a record's own text.
     class AnalyticsReport < ReadTool
       tool_name "get_analytics"

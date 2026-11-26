@@ -1,5 +1,5 @@
 namespace :analytics do
-  desc "How the search is going, as on the Analytics page: the pipeline, the watch and the agents. Read-only. " \
+  desc "How the search is going, as on the dashboard's tabs: the pipeline, the watch and the agents. Read-only. " \
        "[SECTION=pipeline|watch|agents] [SINCE=2026-10-01]"
   task report: :environment do
     sections = ENV["SECTION"].presence ? [ ENV["SECTION"] ] : Analytics::Text::SECTIONS

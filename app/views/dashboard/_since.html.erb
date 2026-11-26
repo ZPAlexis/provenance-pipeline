@@ -1,0 +1,12 @@
+<%# The day a tab's history counts from (4e step 12), applied as soon as it is set; the tiles above stay now. Inside the
+    tab, its own tab kept (`tab`). %>
+<%= form_with url: root_path, method: :get, class: "list-filters since-bar", data: { controller: "autosubmit" }, "aria-label": "How it has gone, since a day" do %>
+  <%= hidden_field_tag :tab, tab, id: nil %>
+  <h3>How it has gone</h3>
+  <label>
+    <span class="muted small">Since</span>
+    <%= date_field_tag :since, @since, id: nil, data: { action: "change->autosubmit#submitSoon" } %>
+  </label>
+  <%= link_to "Everything", root_path(tab: tab), class: "small" if @since %>
+  <span class="muted small"><%= note %></span>
+<% end %>

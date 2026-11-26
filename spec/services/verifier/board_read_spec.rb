@@ -52,8 +52,10 @@ RSpec.describe Verifier::BoardRead do
     finder = worker_class.new([ own_board(outcome: "resolved", confidence: "medium", evidence: "The ashby board records the same company name.") ])
     worker = worker_class.new([ roles_read ])
 
-    outcome = described_class.run!(company, finder: finder, worker: worker)
+    outcome = described_class.run!(company, finder: finder, worker: worker, issued_by: "agent:assistant")
 
+    # 4e step 12: each credential the read holds says who asked: here the AI assistant, which tracked it on the operator's word.
+    expect(AgentCredential.where(actor: "agent:verifier").pluck(:issued_by).uniq).to eq([ "agent:assistant" ])
     expect(finder.asked).to include(command: "own_board", targets: [ hash_including(url: "https://jobs.ashbyhq.com/fabrikam", domain: "fabrikam.example") ])
     # Its roles read with no role carried and no LLM to settle a near-miss: nothing to write a verdict on.
     expect(worker.asked).to include(command: "verify", flags: [ "--no-llm" ])
@@ -117,7 +119,7 @@ RSpec.describe Verifier::BoardRead do
       allow(DatabaseBackup).to receive(:daily)
       allow(described_class).to receive(:run!).and_return(Verifier::CheckNow::Outcome.new(summary: "Read.", tally: {}, cost_usd: 0.0))
       CheckNowJob.perform_now(run)
-      expect(described_class).to have_received(:run!).with(proposed)
+      expect(described_class).to have_received(:run!).with(proposed, issued_by: "human:operator")
       expect(run.reload).to have_attributes(status: "done", summary: "Read.")
     end
 

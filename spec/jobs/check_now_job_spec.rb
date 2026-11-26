@@ -11,7 +11,7 @@ RSpec.describe CheckNowJob do
   before { allow(DatabaseBackup).to receive(:daily) }
 
   it "runs the check, backed up at most daily, and keeps what it found on the run" do
-    allow(Verifier::CheckNow).to receive(:role).with(run.posting).and_return(outcome)
+    allow(Verifier::CheckNow).to receive(:role).with(run.posting, issued_by: "human:operator").and_return(outcome)
 
     described_class.perform_now(run)
 
@@ -34,7 +34,7 @@ RSpec.describe CheckNowJob do
 
   it "checks a company's whole careers page for a company run" do
     company_run = create(:check_run, company: company)
-    allow(Verifier::CheckNow).to receive(:company).with(company).and_return(outcome)
+    allow(Verifier::CheckNow).to receive(:company).with(company, issued_by: "human:operator").and_return(outcome)
 
     described_class.perform_now(company_run)
 
@@ -55,7 +55,7 @@ RSpec.describe CheckNowJob do
 
   # 4e: a check that found a role's own posting moved its link there; what the page before said is read again from it.
   it "reads again the descriptions of the roles a check read whose own page moved, and says so after what it found" do
-    allow(Verifier::CheckNow).to receive(:role).with(run.posting).and_return(outcome)
+    allow(Verifier::CheckNow).to receive(:role).with(run.posting, issued_by: "human:operator").and_return(outcome)
     allow(Verifier::Descriptions).to receive(:reread_moved!)
       .and_return("One role's own page moved, so its description was read again from it (free): 1 another text.")
 

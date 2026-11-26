@@ -30,7 +30,7 @@ RSpec.describe "Page views", type: :request do
   it "writes nothing to the record, on any page" do
     credential, = AgentCredential.issue!(actor: "agent:verifier", scopes: %w[postings:verify], purpose: "verifier:verify",
                                          ttl: 1.hour, issued_by: AuditEvent::OPERATOR)
-    pages = [ root_path, check_all_path, audit_path(view: "checks"), audit_path, analytics_path, roles_path, role_path(role),
+    pages = [ root_path, check_all_path, audit_path(view: "checks"), audit_path, root_path(tab: "agents", since: Date.current.to_s), roles_path, role_path(role),
               companies_path, company_path(company), company_path(proposal), companies_path(tab: "all"), companies_path(tab: "suggested"),
               companies_path(fit: "70", sort: "fit", stage: "series_b", industry: "fintech"), companies_path(fit: "stale"),
               roles_path(sort: "company_fit"), roles_path(tab: "suggested", sort: "fit"),

@@ -1,11 +1,7 @@
-# How the search is going (3.3), worked out from the record. Read-only.
+# How the search is going (3.3) is the dashboard's since 4e step 12: each of its sections a tab there. The page's old
+# address leads to the dashboard, the day it was given kept; a link to a section (#watch, #agents) opens that tab.
 class AnalyticsController < ApplicationController
   def index
-    @since = Date.iso8601(params[:since]) if params[:since].present?
-    @pipeline = Analytics.pipeline(since: @since)
-    @watch = Analytics.watch(since: @since)
-    @agents = Analytics.agents(since: @since)
-  rescue Date::Error
-    redirect_to analytics_path, alert: "Since is a day as YYYY-MM-DD, not #{params[:since].inspect}.", status: :see_other
+    redirect_to root_path({ since: params[:since].presence }.compact), status: :moved_permanently
   end
 end

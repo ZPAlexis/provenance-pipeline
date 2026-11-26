@@ -200,15 +200,10 @@ ol.steps strong { display: block; color: var(--accent); }
 ol.steps strong::before { content: counter(step) ". "; }
 ol.steps span { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 
-/* The dashboard (4e: about one screen): its groups two to a row, their tiles smaller. */
-.dash-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr)); gap: 4px 24px; margin-bottom: 8px; }
-.dash-group h2 { margin: 12px 0 8px; }
-.dash-group > p { margin: 6px 0 0; }
-.tiles.compact { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
-.tiles.compact .tile { padding: 8px 10px; }
-.tiles.compact .value { font-size: 20px; }
-.tiles.compact .label { font-size: 11.5px; line-height: 1.3; }
-.tile .label { color: var(--muted); font-size: 12px; }
+/* The dashboard (4e step 12): in each tab, how it has gone under the tiles, from the day set in this bar. */
+.since-bar { margin: 26px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+.since-bar h3 { margin: 0 6px 0 0; }
+.tile .label { color: var(--muted); font-size: 13.5px; line-height: 1.35; } /* readable from further away (4e step 12) */
 .tile.live .value { color: var(--live); }
 .tile.gone .value { color: var(--gone); }
 .tile.unsure .value { color: var(--unsure); }

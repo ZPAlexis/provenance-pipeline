@@ -47,8 +47,17 @@ RSpec.describe Verifier::CheckNow do
       # Written under a credential issued for this one check, with the check's scopes alone, and revoked after.
       expect(AuditEvent.find_by!(target: role, action: "update").credential.reload).to have_attributes(
         actor: "agent:verifier", scopes: %w[postings:verify evidence:write], purpose: "check now: RevOps Engineer at Acme",
-        status: "revoked"
+        status: "revoked", issued_by: "human:operator"
       )
+    end
+
+    # 4e step 12: the credential says who asked for the check, as its run does.
+    it "issues its credential as whoever asked for the check" do
+      worker = worker_class.new([ verification(verdicts: [ verdict("verified_live") ]) ])
+
+      described_class.role(role, worker: worker, issued_by: "agent:assistant")
+
+      expect(AuditEvent.find_by!(target: role, action: "update").credential).to have_attributes(actor: "agent:verifier", issued_by: "agent:assistant")
     end
 
     it "has no answer when the check could not confirm, and writes no verdict" do

@@ -12,7 +12,7 @@ RSpec.describe "Check all tracked companies", type: :request do
     expect(response.body).to include(%(src="#{check_all_path}"))
 
     get root_path
-    expect(response.body).to include("Tracked companies' lists", "Of 1 tracked company, 0 last read more than 14 days", "and 1 never",
+    expect(response.body).to include("Of 1 tracked company, 0 lists last read more than", "14 days", "and", "1 never",
                                      "role search reads these lists as they were last read", %(<a href="/roles">Check all tracked companies</a>))
       .and not_include(%(src="#{check_all_path}"))
   end

@@ -17,19 +17,14 @@ RSpec.describe "The record's pages, reorganized", type: :request do
     expect(response.body).to include(%(href="/agents?actor=agent%3Averifier#credentials"))
   end
 
-  it "shows Analytics in three tabs, its explanation folded" do
-    get analytics_path
-
-    expect(tabs(response.body)).to eq([ "Pipeline", "The watch", "The agents" ])
-    expect(response.body).to include("How this works", %(<section id="agents" class="tab-panel"))
-  end
-
-  it "shows the dashboard's two tables as tabs, eight verdicts at most" do
+  # 4e step 12: the dashboard and Analytics, one page.
+  it "shows the dashboard in three tabs, now on top and how it has gone under it, its explanation folded" do
     get root_path
 
-    expect(tabs(response.body)).to eq([ "Checks you asked for", "Verdict changes" ])
-    expect(response.body).to include(%(<div class="dash-groups">), "Tracked companies' lists")
-    expect(Overview::RECENT_CHANGES).to eq(8)
+    expect(tabs(response.body)).to eq([ "Pipeline", "The watch", "Agents" ])
+    expect(response.body).to include("How this works", %(<section id="agents" class="tab-panel"), ">Runs</h3>", "To review")
+    expect(response.body.scan(%(<h3>How it has gone</h3>)).size).to eq(3)
+    expect(response.body).not_to include("Verdict changes", "Checks you asked for")
   end
 
   # 4e step 11: What changed is the audit log's Check results; the page's address leads there.

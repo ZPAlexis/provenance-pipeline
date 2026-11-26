@@ -18,7 +18,7 @@ AI agents do the legwork: they check at each employer's own careers page whether
 
 **Why "provenance":** every change on record says where it came from: who made it, under which permission, and why.
 
-> **Status:** in use for my own job search, running locally. Now: a review of the pages, from my own use. Next: a demo on made-up data, with a version of the app that's easier to run locally. [Build history](docs/build-stages.md).
+> **Status:** in use for my own job search, running locally. Now: a review of the pages, from my own use. Next: checks that can run through my own AI assistant instead of paid API calls, then a demo on made-up data, with a version of the app that's easier to run locally. [Build history](docs/build-stages.md).
 
 **Contents:** [Why I built it](#why-i-built-it) · [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
 

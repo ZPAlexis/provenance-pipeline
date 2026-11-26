@@ -83,26 +83,28 @@ module Verifier
       spent / [ PageCheck.where(purpose: "resolution").distinct.count(:company_id), 1 ].max
     end
 
-    def role(posting, worker: Worker.new(run_dir: Worker.dir_for("check")), finder: nil)
-      with_page(posting.company, finder) do
+    # `issued_by` (4e step 12): who asked for the check, recorded on each credential its runs hold: the operator, or
+    # their AI assistant (only ever for a free board read, on their word).
+    def role(posting, worker: Worker.new(run_dir: Worker.dir_for("check")), finder: nil, issued_by: AuditEvent::OPERATOR)
+      with_page(posting.company, finder, issued_by:) do
         start = -> { worker.run([ Targets.check(posting) ], command: "check") }
-        record(start, purpose: "check now: #{posting.role_title} at #{posting.company.name}") do |result, verdicts|
+        record(start, purpose: "check now: #{posting.role_title} at #{posting.company.name}", issued_by:) do |result, verdicts|
           verdict = verdicts.first
           [ verdict&.dig("verdict"), verdict ? verdict["reasoning"] : "The check failed (#{result['reason']}); nothing was written." ]
         end
       end
     end
 
-    def company(company, worker: Worker.new(run_dir: Worker.dir_for("verify")), finder: nil)
-      with_page(company, finder) { read_list(company, worker) }
+    def company(company, worker: Worker.new(run_dir: Worker.dir_for("verify")), finder: nil, issued_by: AuditEvent::OPERATOR)
+      with_page(company, finder, issued_by:) { read_list(company, worker, issued_by:) }
     end
 
     # The check, once the company has a watched page: found first when it has none
     # (one just added, say), and the check said after what finding it found.
-    def with_page(company, finder)
+    def with_page(company, finder, issued_by: AuditEvent::OPERATOR)
       return yield if company.resolution_status == "resolved"
 
-      found = find_page(company, finder || Worker.new(run_dir: Worker.dir_for("resolve")))
+      found = find_page(company, finder || Worker.new(run_dir: Worker.dir_for("resolve")), issued_by:)
       return found unless company.resolution_status == "resolved"
 
       outcome = yield
@@ -114,8 +116,9 @@ module Verifier
     # A company's careers page found and recorded as verifier:resolve records it,
     # as the verifier, under a credential for this one run. A low-confidence find
     # waits for the operator; nothing found says why.
-    def find_page(company, finder)
-      run, result = Authority.run(Ingest::ACTOR, scopes: FINDING, purpose: "check now: find #{company.name}'s careers page") do
+    def find_page(company, finder, issued_by: AuditEvent::OPERATOR)
+      run, result = Authority.run(Ingest::ACTOR, scopes: FINDING, purpose: "check now: find #{company.name}'s careers page",
+                                                 issued_by:) do
         run = finder.run(Resolution.targets([ company ]), command: "resolve")
         result = run.results.first
         Ingest.new(run_id: run.id).resolution(result) if result
@@ -141,9 +144,9 @@ module Verifier
       Outcome.new(summary: summary, tally: {}, cost_usd: cost(result), run_id: run.id, run_dir: run.dir, stopped: run.stopped)
     end
 
-    def read_list(company, worker)
+    def read_list(company, worker, issued_by: AuditEvent::OPERATOR)
       start = -> { worker.run([ Targets.verify(company) ], command: "verify") }
-      record(start, purpose: "check now: #{company.name}") do |result, verdicts|
+      record(start, purpose: "check now: #{company.name}", issued_by:) do |result, verdicts|
         found = verdicts.map { |v| v["verdict"] || "inconclusive" }.tally
         read = result["outcome"] == "ok" ? "#{result['listing_count']} roles read#{', the whole list' if result['complete']}" : "Not read (#{result['reason']})"
         roles = found.map { |state, count| "#{count} #{Posting::ANSWER_LABELS.fetch(state, 'no answer').downcase}" }
@@ -154,8 +157,8 @@ module Verifier
     # Starts the run and records its one result through the write path, under the
     # verifier's credential for this run; the block turns it into an answer and a
     # summary. The suggestions are brought up to date after, by the suggester.
-    def record(start, purpose:)
-      run, result, tally = Authority.run(Ingest::ACTOR, scopes: CHECKING, purpose: purpose) do
+    def record(start, purpose:, issued_by: AuditEvent::OPERATOR)
+      run, result, tally = Authority.run(Ingest::ACTOR, scopes: CHECKING, purpose: purpose, issued_by:) do
         run = start.call
         result = run.results.first
         [ run, result, (Ingest.new(run_id: run.id).verification(result) if result) ]

@@ -29,25 +29,28 @@ module Verifier
       ActiveRecord.after_all_transactions_commit { CheckRun.start_board!(company, requested_by: requested_by) }
     end
 
-    def run!(company, finder: nil, worker: nil)
+    # `issued_by` (4e step 12): who asked, on each credential the read holds: the operator, or their AI assistant, which
+    # tracked the proposal on their word.
+    def run!(company, finder: nil, worker: nil, issued_by: AuditEvent::OPERATOR)
       finder ||= Worker.new(run_dir: Worker.dir_for("own_board"), free: true)
       worker ||= Worker.new(run_dir: Worker.dir_for("verify"), free: true)
       raise ArgumentError, "the read on tracking a proposal runs only with no API key" unless finder.free? && worker.free?
 
-      found = find_page(company, finder) unless company.resolution_status == "resolved"
+      found = find_page(company, finder, issued_by) unless company.resolution_status == "resolved"
       return found if found && company.resolution_status != "resolved"
 
-      read = read_roles(company, worker)
+      read = read_roles(company, worker, issued_by)
       read.summary = "#{found.summary} #{read.summary}" if found
       read
     end
 
-    def find_page(company, finder)
+    def find_page(company, finder, issued_by)
       url = link(company) or
         return CheckNow::Outcome.new(summary: "No known board to read: Check now finds its careers page, asking first what it costs.",
                                      tally: {}, cost_usd: 0.0)
 
-      run, result = Authority.run(Ingest::ACTOR, scopes: CheckNow::FINDING, purpose: "tracked: #{company.name}'s board, read free") do
+      run, result = Authority.run(Ingest::ACTOR, scopes: CheckNow::FINDING, purpose: "tracked: #{company.name}'s board, read free",
+                                                 issued_by:) do
         run = finder.run([ { id: company.id, label: company.name, domain: company.domain, name: company.name, url: url } ],
                          command: "own_board")
         result = run.results.first
@@ -73,9 +76,9 @@ module Verifier
     end
 
     # Its roles read through the board's API, carrying no role, so no verdict is written; the suggester weighs them after.
-    def read_roles(company, worker)
+    def read_roles(company, worker, issued_by)
       start = -> { worker.run([ Targets.verify(company, postings: Posting.none) ], command: "verify", flags: [ "--no-llm" ]) }
-      CheckNow.record(start, purpose: "tracked: #{company.name}'s roles, read free") do |result, _verdicts|
+      CheckNow.record(start, purpose: "tracked: #{company.name}'s roles, read free", issued_by:) do |result, _verdicts|
         read = result["outcome"] == "ok" ? "#{result['listing_count']} roles read#{', the whole list' if result['complete']}." : "Its roles were not read (#{result['reason']})."
         [ nil, read ]
       end

@@ -1,6 +1,6 @@
 module Analytics
   # The analytics in plain text (3.3 step 3), for `analytics:report` and the `get_analytics` MCP tool: the same
-  # figures as the Analytics page, a section at a time. Figures only: nothing a role, a company or a person wrote.
+  # figures as the dashboard's tabs, a section at a time. Figures only: nothing a role, a company or a person wrote.
   module Text
     SECTIONS = %w[pipeline watch agents].freeze
     # How many of the latest weeks and days the text lists; the page shows them all.

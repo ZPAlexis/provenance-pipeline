@@ -1,0 +1,47 @@
+<%# How the watch has gone (3.3; since 4e step 12 the dashboard's The watch tab, under its tiles): how long roles
+    stay listed, how often answers change. Since @since when given. %>
+<% watch = @watch %>
+<h3>How long roles stay listed</h3>
+<% lasting = watch.lasting %>
+<div class="tiles">
+  <div class="tile">
+    <div class="value"><%= days_measured(lasting.closed_median) %> <span class="small muted">days</span></div>
+    <div class="label">Median, for the <%= pluralize(lasting.closed, "role") %> since seen gone (longest <%= days_measured(lasting.closed_longest) %>)</div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= days_measured(lasting.listed_median) %> <span class="small muted">days</span></div>
+    <div class="label">Median so far, for the <%= pluralize(lasting.listed, "role") %> listed still (longest <%= days_measured(lasting.listed_longest) %>)</div>
+  </div>
+</div>
+<p class="muted small">
+  From the first time a role was seen listed to the first time it was seen gone after that, by the days of the checks
+  themselves (an imported answer's check date, the verifier's time of reading).
+</p>
+
+<h3>How often answers change</h3>
+<% if watch.weeks.any? %>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Week of</th><th class="num">Roles the reads matched</th><th class="num">Answers changed</th><th class="num">To gone</th><th class="num">To listed</th><th class="num">To another</th><th class="num">Yours</th></tr></thead>
+      <tbody>
+        <% watch.weeks.each do |week| %>
+          <tr>
+            <td class="nowrap"><%= week.week %></td>
+            <td class="num"><%= week.checked %></td>
+            <td class="num"><%= week.changed %></td>
+            <td class="num"><%= week.gone %></td>
+            <td class="num"><%= week.listed %></td>
+            <td class="num"><%= week.other %></td>
+            <td class="num"><%= week.by_operator %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">
+    Weeks start on Monday (UTC). A check that confirms an answer changes nothing, so a quiet week of reads is a steady one.
+    <%= link_to "Each change in the audit log", audit_path(kind: "role", attribute: "verification_state", act: "update") %>.
+  </p>
+<% else %>
+  <p class="empty">No role read and no answer changed<%= " since #{@since}" if @since %>.</p>
+<% end %>

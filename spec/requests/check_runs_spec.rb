@@ -82,6 +82,7 @@ RSpec.describe "Check now", type: :request do
 
     get root_path
 
-    expect(response.body).to include("Checks you asked for", "No longer listed", "$0.004")
+    expect(response.body).to include(">Runs</h3>", "No longer listed", "$0.004",
+                                     %(<span class="badge by-you" title="human:operator">Operator</span>)) # asked by you
   end
 end

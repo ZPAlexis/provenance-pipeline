@@ -33,16 +33,19 @@ RSpec.describe "The AI assistant's changes, said on the page", type: :request do
     expect(response.body).to include(%(data-controller="poll"), %(data-poll-interval-value="20000")).and(not_include("assistant-changes"))
   end
 
-  it "says what the assistant changed on a role's page: the role, and its company's review in its header" do
-    saved(role, action: "update", changes_made: { "tracking" => %w[suggested tracked] })
+  it "says what the assistant changed on a role's page: the role first, then its company's reviews in its header" do
     review = create(:company_review, company: company)
     saved(review)
     saved(create(:company_review, company: company))
+    saved(role, action: "update", changes_made: { "tracking" => %w[suggested tracked] })
 
     ask("role", role)
 
     expect(response.body).to include("Your AI assistant changed this page since you opened it: this role and 2 company reviews.",
                                      %(data-action="reload#now"), "Refresh")
+    # The same sentence whatever order the changes come in.
+    changes = RecordHistory.assistant_changes(role, since: opened).to_a
+    expect(RecordHistory.said(changes.reverse, role)).to eq(RecordHistory.said(changes, role))
   end
 
   it "says what it saved under an application, by the application's id a record keeps, and under a company" do

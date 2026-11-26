@@ -140,7 +140,7 @@ RSpec.describe "verifier: and postings: commands" do
     )
     tracked = run_task("verifier:track_company", contoso.id, NOTE: "It fits.")
     expect(tracked.out).to include("Contoso: tracked\n", "Its board, read free: Its board is its own: watched at https://jobs.ashbyhq.com/contoso.")
-    expect(Verifier::BoardRead).to have_received(:run!).with(contoso)
+    expect(Verifier::BoardRead).to have_received(:run!).with(contoso, issued_by: "human:operator")
     expect(CheckRun.sole).to have_attributes(status: "done", requested_by: "human:operator")
     expect(CheckNowJob.queue_adapter).not_to be_a(ActiveJob::QueueAdapters::InlineAdapter)
 

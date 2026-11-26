@@ -1,7 +1,6 @@
-# What the dashboard shows: where the tracked roles stand, what changed lately,
-# the companies watched, and what reading pages has cost. Read-only.
+# What the dashboard's tiles show: where the tracked roles stand, the companies watched, the runs asked for lately,
+# and what reading pages has cost. Read-only. (Since 4e step 12 the verdicts that changed are the audit log's.)
 module Overview
-  RECENT_CHANGES = 8 # about a screen, on the dashboard's tab (4e)
   RECENT_RUNS = 8
   # A tracked role not checked for this long is worth a look: listings are read
   # in full every 14 days, so its answer may have gone stale.
@@ -18,15 +17,6 @@ module Overview
     Posting.group(:tracking).count
   end
 
-  def stale_count
-    Posting.tracked.where(last_checked_at: ...STALE_AFTER.ago).count
-  end
-
-  # The latest verdicts that changed, newest first: the verifier's and the operator's.
-  def recent_changes(limit = RECENT_CHANGES)
-    AuditEvent.where(target_type: "Posting", action: "update").where("changes_made ? 'verification_state'")
-              .order(occurred_at: :desc).limit(limit).preload(:credential, target: :company)
-  end
 
   def companies
     {

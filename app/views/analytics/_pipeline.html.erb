@@ -1,0 +1,70 @@
+<%# How the pipeline has gone (3.3; since 4e step 12 the dashboard's Pipeline tab, under its tiles): how far
+    applications get, how long they sit, how they end. Since @since when given. %>
+<% pipeline = @pipeline %>
+<% if pipeline.applications.zero? %>
+  <p class="empty">No application started <%= @since ? "since #{@since}" : "yet" %>: start one from a role's page.</p>
+<% else %>
+  <p class="muted small">
+    <%= pluralize(pipeline.applications, "application") %> started<%= " since #{@since}" if @since %>.
+    <%= link_to "Each one in the pipeline", applications_path %>.
+  </p>
+
+  <h3>How far they get</h3>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Stage</th><th class="num">Reached it</th><th class="num">Of those at the stage before</th></tr></thead>
+      <tbody>
+        <% pipeline.steps.each do |step| %>
+          <tr>
+            <td><%= Application.stage_label(step.stage) %></td>
+            <td class="num"><%= step.reached %></td>
+            <td class="num"><%= step.before.nil? ? tag.span("—", class: "muted") : rate_cell(step.rate, step.before) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">
+    An application counts at every stage up to the furthest it reached, so one started at Applied passed Interested,
+    and an accepted offer passed Offer. Closing as rejected, withdrawn or no response reaches nothing further.
+  </p>
+
+  <h3>How long they sit</h3>
+  <% if pipeline.stays.any? %>
+    <div class="table-wrap">
+      <table class="analytics">
+        <thead><tr><th>Stage</th><th class="num">Times there</th><th class="num">Median days</th><th class="num">Longest</th><th class="num">Still there</th></tr></thead>
+        <tbody>
+          <% pipeline.stays.each do |stay| %>
+            <tr>
+              <td><%= Application.stage_label(stay.stage) %></td>
+              <td class="num"><%= stay.times %></td>
+              <td class="num"><%= days_measured(stay.median) %></td>
+              <td class="num"><%= days_measured(stay.longest) %></td>
+              <td class="num"><%= stay.still %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">
+      From the day a stage began to the day the next began, as you dated them; an application still at a stage counts
+      its days so far.
+    </p>
+  <% else %>
+    <p class="empty">No stage to measure yet.</p>
+  <% end %>
+
+  <h3>How they end</h3>
+  <% outcome = pipeline.outcome %>
+  <div class="tiles">
+    <div class="tile">
+      <div class="value"><%= rate_cell(outcome.accepted_rate, outcome.closed) %></div>
+      <div class="label">Accepted, of <%= outcome.closed %> closed (<%= outcome.accepted %>)</div>
+    </div>
+    <div class="tile">
+      <div class="value"><%= rate_cell(outcome.offer_rate, outcome.applied) %></div>
+      <div class="label">Reached an offer, of <%= outcome.applied %> applied (<%= outcome.offers %>)</div>
+    </div>
+  </div>
+<% end %>

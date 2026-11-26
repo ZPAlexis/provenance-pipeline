@@ -1,0 +1,107 @@
+<%# How the agents have done (3.3; since 4e step 12 the dashboard's Agents tab, under its tiles): what the AI cost,
+    reading the watched pages, the recommendations, what each wrote. Since @since when given. %>
+<% agents = @agents %>
+<h3>What the AI cost</h3>
+<% if agents.days.any? %>
+  <p class="muted small"><%= money(agents.cost) %> over <%= pluralize(agents.spend.sum(&:calls), "call") %><%= " since #{@since}" if @since %>.</p>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Purpose</th><th>Model</th><th class="num">Calls</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Cost</th><th class="num">Share</th></tr></thead>
+      <tbody>
+        <% agents.spend.each do |spend| %>
+          <tr>
+            <td><%= spend.purpose %></td>
+            <td class="small"><%= spend.model %></td>
+            <td class="num"><%= spend.calls %></td>
+            <td class="num"><%= number_with_delimiter(spend.tokens_in) %></td>
+            <td class="num"><%= number_with_delimiter(spend.tokens_out) %></td>
+            <td class="num"><%= cost(spend.cost) %></td>
+            <td class="num"><%= spend.share ? "#{(spend.share * 100).round(1)}%" : "—" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <details class="small by-day">
+    <summary>By day, with the running total</summary>
+    <div class="table-wrap">
+      <table class="analytics">
+        <thead><tr><th>Day</th><th class="num">Calls</th><th class="num">Cost</th><th class="num">Running total</th></tr></thead>
+        <tbody>
+          <% agents.days.reverse_each do |day| %>
+            <tr><td class="nowrap"><%= day.day %></td><td class="num"><%= day.calls %></td><td class="num"><%= cost(day.cost) %></td><td class="num"><%= money(day.running) %></td></tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </details>
+<% else %>
+  <p class="empty">No AI call<%= " since #{@since}" if @since %>.</p>
+<% end %>
+
+<h3>Reading the watched pages</h3>
+<% reads = agents.reads %>
+<div class="tiles">
+  <div class="tile">
+    <div class="value"><%= reads.reads %></div>
+    <div class="label">Verification reads, <%= reads.with_ai %> of them needing the AI</div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= reads.per_read ? cost(reads.per_read) : "—" %></div>
+    <div class="label">A read, on average (<%= money(reads.cost) %> in all)</div>
+  </div>
+  <div class="tile">
+    <div class="value"><%= reads.per_confirmed ? cost(reads.per_confirmed) : "—" %></div>
+    <div class="label">A role confirmed listed (<%= pluralize(reads.confirmed, "role") %>)</div>
+  </div>
+</div>
+<p class="muted small">A read through a board's API needs no AI and still counts, so the cost of a read is never overstated.</p>
+
+<h3>How the recommendations came out</h3>
+<% if agents.agreement.any? %>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Kind</th><th class="num">Agreed</th><th class="num">Differed</th><th class="num">Resolved on their own</th><th class="num">Pending</th><th class="num">Agreement</th></tr></thead>
+      <tbody>
+        <% agents.agreement.each do |row| %>
+          <tr>
+            <td><%= link_to ReviewGuidance.label(row.kind), review_path(kind: row.kind, recommended: 1) %></td>
+            <td class="num"><%= row.agreed %></td>
+            <td class="num"><%= row.differed %></td>
+            <td class="num"><%= row.resolved %></td>
+            <td class="num"><%= row.pending %></td>
+            <td class="num"><%= rate_cell(row.rate, row.decided) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">
+    Your AI assistant's recommendations on the review queue. Agreement is of those you decided: the only ground on
+    which a kind would ever act on its own.
+  </p>
+<% else %>
+  <p class="empty">No recommendation made<%= " since #{@since}" if @since %>.</p>
+<% end %>
+
+<h3>What each one wrote</h3>
+<% if agents.actors.any? %>
+  <div class="table-wrap">
+    <table class="analytics">
+      <thead><tr><th>Who</th><th class="num">Writes</th><th class="num">Refused</th><th class="num">Credentials issued</th></tr></thead>
+      <tbody>
+        <% agents.actors.each do |row| %>
+          <% operator = row.actor == "operator" %>
+          <tr>
+            <td><%= actor_dot(row.actor) %><%= link_to actor_label(operator ? AuditEvent::OPERATOR : row.actor), audit_path({ who: row.actor, from: @since }.compact) %></td>
+            <td class="num"><%= row.writes %></td>
+            <td class="num"><%= row.refused.positive? ? tag.strong(row.refused, class: "refused") : 0 %></td>
+            <td class="num"><%= operator ? tag.span("—", class: "muted", title: "Your writes need no credential") : row.credentials %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="empty">Nothing written<%= " since #{@since}" if @since %>.</p>
+<% end %>
