@@ -43,15 +43,29 @@
   <dd><%= Application.stage_label(@application.stage) %>, <%= in_stage(@application) %> (since <%= @application.stage_changed_on %>)</dd>
   <dt>Listing</dt>
   <dd><%= answer_label(role.verification_state) %><%= ", checked " if role.last_checked_at %><%= ago(role.last_checked_at) if role.last_checked_at %></dd>
+  <%# 4e step 13: the role's own page and its company's site, to go to them from here; the role's own page in a few
+      characters, so the line never breaks, then the role's page in the app. %>
+  <dt>Its own page</dt>
+  <dd class="one-line">
+    <span class="gives"><%= role.job_url ? compact_link(role.job_url) : tag.span("none on record", class: "muted") %></span>
+    <span class="sep">·</span><%= link_to "its role page", role_path(role) %>
+  </dd>
+  <dt>Its company</dt>
+  <% company = @application.company %>
+  <dd class="one-line">
+    <%= link_to company.name, company_path(company) %>
+    <% if company.domain %><span class="sep">·</span><span class="gives"><%= outside_link("https://#{company.domain}", label: company.domain) %></span><% end %>
+    <% if company.careers_page_url %><span class="sep">·</span><%= outside_link(company.careers_page_url, label: "its careers page") %><% end %>
+  </dd>
   <dt>Description</dt>
   <dd>
     <% if (description = role.role_descriptions.newest_first.first) %>
-      <%= number_with_delimiter(description.words) %> words, read <%= description.first_read_at.to_date %> · <%= link_to "read it on the role's page", role_path(role, anchor: "description") %>
+      <%= number_with_delimiter(description.words) %> words, read <%= description.first_read_at.to_date %>
       <% if Verifier::Descriptions.elsewhere?(role, description) %>
         <br><span class="small warn">Read from a page that is no longer the role's own: it may describe another role. Read it again on the role's page before writing from it.</span>
       <% end %>
     <% else %>
-      <span class="muted">not read yet</span> · <%= link_to "the role's page", role_path(role) %> reads it
+      <span class="muted">not read yet: its role page reads it</span>
     <% end %>
   </dd>
   <dt>Writing</dt>

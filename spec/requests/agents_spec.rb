@@ -28,7 +28,7 @@ RSpec.describe "Agents", type: :request do
                                      "Review queue", "review:keep", "Yours alone", "Decide a review item", "watchlist:curate",
                                      "On the operator&#39;s word")
     expect(response.body).not_to include("Track or archive a role or a company")
-    expect(response.body).to include(agent_credential_path(credential), "revoked", "Agents (1 refused)")
+    expect(response.body).to include(agent_credential_path(credential), "revoked", %(Agents<span class="count refused" title="1 write refused in the last 7 days">1</span>))
     expect(response.body).to include("may not update a posting (tracking) with postings:verify, evidence:write")
 
     get agents_path(actor: "agent:suggester")

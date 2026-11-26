@@ -1,23 +1,33 @@
-<nav class="site-nav">
-  <%= link_to "Provenance Pipeline", root_path, class: "brand" %>
-  <%= nav_link "Dashboard", root_path, current: controller_name == "dashboard" %>
-  <%= nav_link "Pipeline", applications_path, current: controller_name == "applications" %>
-  <%= nav_link "Roles", roles_path, current: controller_name == "roles" %>
-  <%= nav_link "Companies", companies_path, current: controller_name == "companies" %>
-  <%= nav_link "Profile", profile_path, current: controller_name == "profiles" %>
-  <% waiting = review_open_count %>
-  <%= nav_link waiting.positive? ? "Review (#{waiting})" : "Review", review_path, current: controller_name == "review_items" %>
-  <%# The record's own pages (4e): who did what, what changed, how it is going, and who may write what. %>
-  <% refused = agents_refused_recently %>
-  <details class="nav-menu<%= " current" if %w[audit_events agents agent_credentials].include?(controller_name) %>"
-           data-controller="menu">
-    <summary><%= refused.positive? ? "Record (#{refused} refused)" : "Record" %></summary>
-    <div class="menu-list">
+<%# The top bar (4e step 13), as Salesforce lays one out: the app's name and icon in a row of their own, then its pages as
+    tabs, the work on the left (Dashboard to the Audit log) and the setup on the right (Profile, Agents, About). The
+    page you are on is the selected tab. On a narrow screen the tabs fold behind a menu button. %>
+<% waiting = review_open_count %>
+<% refused = agents_refused_recently %>
+<header class="site-header" data-controller="nav">
+  <div class="brand-row">
+    <%= link_to root_path, class: "brand" do %>
+      <span class="brand-icon" style="--logo: url('<%= image_path("app-logo-icon.png") %>')" aria-hidden="true"></span>
+      Provenance Pipeline
+    <% end %>
+    <button type="button" class="nav-toggle" aria-controls="site-tabs" aria-expanded="false" data-nav-target="button" data-action="nav#toggle">
+      <span aria-hidden="true">☰</span> Menu
+    </button>
+  </div>
+  <nav id="site-tabs" class="site-tabs" aria-label="Pages">
+    <div class="tabs-side">
+      <%= nav_link "Dashboard", root_path, current: controller_name == "dashboard" %>
+      <%= nav_link "Pipeline", applications_path, current: controller_name == "applications" %>
+      <%= nav_link "Roles", roles_path, current: controller_name == "roles" %>
+      <%= nav_link "Companies", companies_path, current: controller_name == "companies" %>
+      <%= nav_link safe_join([ "Review", (tag.span(waiting, class: "count", title: "#{pluralize(waiting, 'question')} waiting for you") if waiting.positive?) ]),
+                   review_path, current: controller_name == "review_items" %>
       <%= nav_link "Audit log", audit_path, current: controller_name == "audit_events" %>
-      <%= nav_link refused.positive? ? "Agents (#{refused} refused)" : "Agents", agents_path,
-                   current: %w[agents agent_credentials].include?(controller_name) %>
     </div>
-  </details>
-  <span class="spacer"></span>
-  <%= nav_link "About", about_path, current: controller_name == "pages" %>
-</nav>
+    <div class="tabs-side">
+      <%= nav_link "Profile", profile_path, current: controller_name == "profiles" %>
+      <%= nav_link safe_join([ "Agents", (tag.span(refused, class: "count refused", title: "#{pluralize(refused, 'write')} refused in the last 7 days") if refused.positive?) ]),
+                   agents_path, current: %w[agents agent_credentials].include?(controller_name) %>
+      <%= nav_link "About", about_path, current: controller_name == "pages" %>
+    </div>
+  </nav>
+</header>

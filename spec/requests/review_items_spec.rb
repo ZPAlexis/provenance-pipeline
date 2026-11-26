@@ -9,7 +9,7 @@ RSpec.describe "Review", type: :request do
 
     expect(response).to have_http_status(:success)
     expect(response.body).to include("To review", "Where does Acme list its open roles?", "No careers page found (not_found).",
-                                     "Find its careers page again", "Raised by Verifier", "What to check", "Review (1)")
+                                     "Find its careers page again", "Raised by Verifier", "What to check", %(Review<span class="count" title="1 question waiting for you">1</span>))
 
     get review_path(kind: "suspect_verdict")
     expect(response.body).to include("Nothing to review of this kind.")

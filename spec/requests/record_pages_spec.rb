@@ -58,11 +58,39 @@ RSpec.describe "The record's pages, reorganized", type: :request do
     expect(response.body).to include("Nothing changed since then.").and(not_include(">What changed</a>"))
   end
 
+  # 4e step 13: the app's name and icon in a row of their own, then its pages as tabs, the work left and the setup right.
+  it "lays the top bar out as tabs: the work on the left, the setup on the right, the page you are on selected" do
+    get audit_path
+
+    nav = response.body[%r{<nav id="site-tabs".*?</nav>}m]
+    left, right = nav.scan(%r{<div class="tabs-side">(.*?)</div>}m).flatten.map { |side| side.scan(%r{<a [^>]*>([^<]+)}).flatten.map(&:strip) }
+    expect(left).to eq([ "Dashboard", "Pipeline", "Roles", "Companies", "Review", "Audit log" ])
+    expect(right).to eq([ "Profile", "Agents", "About" ])
+    expect(nav).to include(%(<a class="current" aria-current="page" href="/audit">Audit log</a>))
+    header = response.body[%r{<header class="site-header".*?</header>}m]
+    expect(header).to include(%(class="brand-icon"), "app-logo-icon", %(data-action="nav#toggle")).and(not_include("Record"))
+  end
+
+  it "links an application to its role's own page and its company's site and careers page" do
+    role.update!(job_url: "https://job-boards.greenhouse.io/acme/jobs/4012345")
+    application = create(:application, posting: role)
+
+    get application_path(application)
+
+    expect(response.body).to include("Its own page", %(href="https://job-boards.greenhouse.io/acme/jobs/4012345"), "Its company",
+                                     %(href="https://acme.example"), %(href="#{company.careers_page_url}"), "its careers page")
+    # Its own page in a few characters, so the line never breaks; then its role page, in place of the Description's link.
+    expect(response.body).to include(%(class="nowrap" href="https://job-boards.greenhouse.io/acme/jobs/4012345">job-boards.greenhouse.io/…</a>),
+                                     %(<a href="#{role_path(role)}">its role page</a>)).and(not_include("read it on the role"))
+  end
+
   it "shows About in four steps and a section for each, naming your AI assistant" do
     get about_path
 
-    expect(response.body).to include(%(<ol class="steps">), %(<section id="watch">), %(<section id="find">), %(<section id="apply">),
-                                     %(<section id="assistant">), %(<section id="govern">), "Your own AI assistant (Claude or another MCP client")
+    # 4e step 13: each part a tab, after the opening and its four steps.
+    expect(tabs(response.body)).to eq([ "Watching", "Finding", "Applying", "Governance", "AI assistant (MCP)" ])
+    expect(response.body).to include(%(<ol class="steps">), %(<a href="#find">), %(<section id="assistant" class="tab-panel"),
+                                     "Your own AI assistant (Claude or another MCP client")
     expect(response.body).not_to include("Claude client")
   end
 end

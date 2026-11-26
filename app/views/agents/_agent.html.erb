@@ -1,0 +1,27 @@
+<%# One agent's card (1.3; 4e): what it does, its scopes as chips (what each allows on hover, and in the fold), its runs
+    and writes in 30 days. `wide` (step 13: the AI assistant's) takes the row's full width. %>
+<section class="agent<%= " wide" if local_assigns[:wide] %>">
+  <%# The AI assistant's card says how it comes in: through MCP (4e step 13). %>
+  <div class="agent-head"><%= actor_dot(actor) %><strong><%= actor_label(actor) %><%= " (MCP)" if actor == "agent:assistant" %></strong> <code class="muted"><%= actor %></code></div>
+  <p class="small"><%= agent[:about] %></p>
+  <p class="chips"><%= scope_chips(agent[:scopes]) %></p>
+  <p class="muted small">
+    Last run <%= ago(@last_issued[actor]) %> · <%= pluralize(@issued.fetch(actor, 0), "credential") %> ·
+    <%= link_to pluralize(@writes.fetch(actor, 0), "write"), audit_path(who: actor, from: 30.days.ago.to_date) %> in 30 days<% if @refusals[actor].to_i.positive? %>,
+      <strong class="refused"><%= @refusals[actor] %> refused</strong><% end %>
+  </p>
+  <% if actor == "agent:assistant" && @recommendations.any? %>
+    <p class="muted small">
+      Its recommendations on the review queue: <%= ReviewRecommendations.summary(@recommendations) %>.
+      <%= link_to "By kind", review_path(recommended: 1) %>
+    </p>
+  <% end %>
+  <details class="scope-fold">
+    <summary class="muted small">What <%= agent[:scopes].one? ? "its scope allows" : "its #{agent[:scopes].size} scopes allow" %></summary>
+    <ul class="scopes">
+      <% agent[:scopes].each do |scope| %>
+        <li><code class="scope"><%= scope %></code> <span class="small"><%= scope_about(scope) %></span></li>
+      <% end %>
+    </ul>
+  </details>
+</section>

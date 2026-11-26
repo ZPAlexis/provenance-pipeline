@@ -131,6 +131,19 @@ module ApplicationHelper
     url
   end
 
+  # An outside address in a few characters (4e step 13: an application's role's own page): its host, and "/…" when it
+  # has more, the whole on hover; opened in a new tab.
+  def compact_link(url)
+    uri = URI.parse(url)
+    host = uri.host.to_s.delete_prefix("www.")
+    return url if host.empty?
+
+    more = uri.path.to_s.delete_suffix("/").present? || uri.query.present?
+    link_to("#{host}#{'/…' if more}", url, target: "_blank", rel: "noopener noreferrer", title: url, class: "nowrap")
+  rescue URI::InvalidURIError
+    url
+  end
+
   # An outside address, shown short: its host and path (or its host alone), opened in a new tab.
   def outside_link(url, label: nil, host_only: false)
     return tag.span("—", class: "muted") if url.blank?
@@ -257,8 +270,9 @@ module ApplicationHelper
                                class: "small") ])
   end
 
+  # A page in the top bar (4e step 13: a tab), selected when it is the page you are on.
   def nav_link(label, path, current:)
-    link_to(label, path, class: ("current" if current))
+    link_to(label, path, class: ("current" if current), "aria-current": ("page" if current))
   end
 
   # Tabs inside a page (4e), inside an element with data-controller="tabs": `tabs` is [[id, label], ...], the first

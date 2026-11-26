@@ -76,47 +76,96 @@ code { font: 12px var(--mono); }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .nowrap { white-space: nowrap; }
+/* A line that never breaks (4e step 13: an application's links): on a narrow screen its address gives way, cut short
+   with "…" (the whole on hover), and the rest keeps whole. */
+.one-line { display: flex; align-items: baseline; gap: 0 5px; min-width: 0; white-space: nowrap; }
+.one-line > * { flex: none; }
+.one-line > .gives { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.one-line .sep { color: var(--muted); }
 
 /* Layout */
 
-.site-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
+/* The top bar (4e step 13), as Salesforce lays one out: the app's name and icon in a row of their own, then its pages
+   as tabs, the work on the left and the setup on the right. A tab shows it is under the pointer, pressed, and
+   selected (the page you are on: a bar under it). On a narrow screen the tabs fold behind a menu button. */
+.site-header { background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 24px 4px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; color: var(--text); }
+.brand:hover { text-decoration: none; }
+/* The icon's own shape, in the theme's grey: its light grey alone would fade into a light header. */
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  background-color: var(--muted);
+  -webkit-mask: var(--logo) center / contain no-repeat;
+  mask: var(--logo) center / contain no-repeat;
+}
+/* The menu button on a narrow screen, a tab as the others are: under the pointer, pressed, and (open) selected. */
+.nav-toggle {
+  display: none;
   align-items: center;
-  padding: 10px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  gap: 6px;
+  padding: 8px 14px 7px;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
 }
-.site-nav .brand { font-weight: 700; color: var(--text); margin-right: 12px; }
-.site-nav a.current { color: var(--text); font-weight: 600; }
-.site-nav .spacer { flex: 1; }
-/* A menu in the top bar (4e): the record's own pages, folded under one name. */
-.nav-menu { position: relative; }
-.nav-menu > summary { list-style: none; cursor: pointer; color: var(--accent); }
-.nav-menu > summary::-webkit-details-marker { display: none; }
-.nav-menu > summary::after { content: " ▾"; font-size: 11px; }
-.nav-menu.current > summary { color: var(--text); font-weight: 600; }
-.nav-menu .menu-list {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 20;
-  min-width: 190px;
-  padding: 6px 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+.nav-toggle:hover { color: var(--text); background: var(--bg); }
+.nav-toggle:active { background: var(--line); }
+.nav-toggle[aria-expanded="true"] { color: var(--text); font-weight: 600; background: var(--bg); border-bottom-color: var(--accent); }
+.nav-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.site-tabs { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 12px; padding: 0 16px; }
+.site-tabs .tabs-side { display: flex; flex-wrap: wrap; }
+.site-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 7px;
+  color: var(--muted);
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+  border-radius: 6px 6px 0 0;
+  transition: background-color 0.12s, color 0.12s;
 }
-.nav-menu .menu-list a { display: block; padding: 6px 14px; color: var(--text); white-space: nowrap; }
-.nav-menu .menu-list a:hover { background: var(--bg); text-decoration: none; }
-.nav-menu .menu-list a.current { font-weight: 600; color: var(--accent); }
+.site-tabs a:hover { color: var(--text); background: var(--bg); text-decoration: none; }
+.site-tabs a:active { background: var(--line); }
+.site-tabs a.current { color: var(--text); font-weight: 600; background: var(--bg); border-bottom-color: var(--accent); }
+.site-tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.site-tabs .count {
+  min-width: 18px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  color: var(--unsure);
+  background: var(--unsure-bg);
+  border-radius: 999px;
+}
+.site-tabs .count.refused { color: var(--gone); background: var(--gone-bg); }
+
+@media (max-width: 760px) {
+  .brand-row { padding: 10px 16px; }
+  .nav-toggle { display: inline-flex; }
+  .site-tabs { display: none; flex-direction: column; padding: 0 0 8px; }
+  .site-header.open .site-tabs { display: flex; }
+  .site-tabs .tabs-side { flex-direction: column; }
+  .site-tabs .tabs-side + .tabs-side { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 4px; }
+  .site-tabs a { padding: 9px 16px; border-bottom: 0; border-left: 3px solid transparent; border-radius: 0; }
+  .site-tabs a.current { border-left-color: var(--accent); }
+}
 
 main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 48px; }
 
 @media (max-width: 600px) {
-  .site-nav { padding: 10px 16px; }
   main { padding: 16px 16px 40px; }
 }
 
@@ -186,9 +235,9 @@ a.tile:hover { text-decoration: none; border-color: var(--accent); }
 .about { max-width: 860px; }
 .about > :not(ol.steps) { max-width: 72ch; }
 .about .lead { font-size: 16px; line-height: 1.55; }
-.about section { margin-top: 26px; scroll-margin-top: 16px; }
-.about section > ul { padding-left: 20px; }
-.about section > ul li { margin-bottom: 7px; line-height: 1.5; }
+.about .tab-panel { margin-top: 4px; }
+.about .tab-panel > ul { padding-left: 20px; }
+.about .tab-panel > ul li { margin-bottom: 7px; line-height: 1.5; }
 .about .pages { font-size: 13px; }
 ol.steps { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px; margin: 18px 0 8px; padding: 0; }
@@ -493,8 +542,10 @@ details.guidance > summary { cursor: pointer; }
 
 /* Agents (1.3) */
 
-/* 4e: cards the size of their own content (a fold opened stretches no other), their scopes as chips. */
-.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+/* 4e: an agent's scopes as chips. Since step 13 each card is as tall as the tallest in its row, and the AI assistant's,
+   with the most scopes, takes the full width, last. */
+.agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.agent.wide { grid-column: 1 / -1; }
 .agent { padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .agent p { margin: 6px 0; }
 .agent.human { border-style: dashed; margin-bottom: 10px; }

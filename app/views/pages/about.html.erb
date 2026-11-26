@@ -1,6 +1,7 @@
 <% content_for :title, "About · Provenance Pipeline" %>
-<%# What the app is and how its parts work (4e): an opening, four steps, then a section for each with a sentence, a few
-    points and its pages, at a readable line length. The pages' "How this works" folds say the same, where it applies. %>
+<%# What the app is and how its parts work (4e): an opening, four steps, then (step 13) a tab for each part, with a
+    sentence, a few points and its pages, at a readable line length. A step's link opens its tab. The pages' "How this
+    works" folds say the same, where it applies. %>
 <div class="about">
   <h1>About</h1>
   <p class="lead">
@@ -16,8 +17,11 @@
     <li><a href="#govern"><strong>Govern</strong><span>Credentials, the review queue, the audit log.</span></a></li>
   </ol>
 
-  <section id="watch">
-    <h2>Watching roles</h2>
+  <div data-controller="tabs">
+  <%= page_tabs([ [ "watch", "Watching" ], [ "find", "Finding" ], [ "apply", "Applying" ], [ "govern", "Governance" ],
+                  [ "assistant", "AI assistant (MCP)" ] ], label: "How it works") %>
+
+  <%= tab_panel "watch", first: true do %>
     <p>
       The app watches the companies you track at their own careers pages, and records whether each role you track is
       still listed, through one audited write path.
@@ -43,10 +47,9 @@
       </li>
     </ul>
     <p class="pages"><%= link_to "Roles", roles_path %> · <%= link_to "Companies", companies_path %></p>
-  </section>
+  <% end %>
 
-  <section id="find">
-    <h2>Finding roles and companies</h2>
+  <%= tab_panel "find" do %>
     <p>What may fit is proposed, never tracked: you decide what to watch.</p>
     <ul>
       <li>
@@ -71,10 +74,9 @@
       </li>
     </ul>
     <p class="pages"><%= link_to "Profile", profile_path %> · <%= link_to "Roles by fit", roles_path(sort: "fit") %> · <%= link_to "Proposed companies", companies_path(tab: "suggested") %></p>
-  </section>
+  <% end %>
 
-  <section id="apply">
-    <h2>Applying</h2>
+  <%= tab_panel "apply" do %>
     <p>Only you start an application or move it: no agent can, whatever it holds.</p>
     <ul>
       <li>
@@ -92,35 +94,9 @@
       </li>
     </ul>
     <p class="pages"><%= link_to "Pipeline", applications_path %></p>
-  </section>
+  <% end %>
 
-  <section id="assistant">
-    <h2>Your AI assistant</h2>
-    <p>
-      Your own AI assistant (Claude or another MCP client; only Claude Desktop has been tested) works through the app's
-      MCP server, on your subscription, and changes the record only on your word.
-    </p>
-    <ul>
-      <li>
-        <strong>It writes</strong> letters, notes, resume reviews and tailored resumes from an application's materials and
-        the writing rules, and saves them when you say so, each save under a credential for that one call.
-      </li>
-      <li>
-        <strong>It finds and weighs</strong> roles on your watched pages by meaning, and finds and reviews companies.
-      </li>
-      <li>
-        <strong>It keeps your watch list</strong> on your word, with your reason on the record; logs what happened, but
-        never moves an application; and recommends decisions on the review queue, never making one.
-      </li>
-      <li>
-        <strong>It answers</strong> from the audit log and the analytics. A role's, an application's or a company's page
-        says when it changes what you're looking at, with Refresh.
-      </li>
-    </ul>
-  </section>
-
-  <section id="govern">
-    <h2>Governance</h2>
+  <%= tab_panel "govern" do %>
     <p>
       Each agent run holds a credential with only the scopes it needs; every write is checked against it, down to what it
       changes, and lands in an append-only audit log. A write no scope allows is refused, on the record.
@@ -147,7 +123,33 @@
       <%= link_to "Review", review_path %> · <%= link_to "Agents", agents_path %> · <%= link_to "Audit log", audit_path %> ·
       <%= link_to "Check results", audit_path(view: "checks") %> · <%= link_to "Dashboard", root_path %>
     </p>
-  </section>
+  <% end %>
+
+  <%= tab_panel "assistant" do %>
+    <p>
+      Your own AI assistant (Claude or another MCP client; only Claude Desktop has been tested) works through the app's
+      MCP server, on your subscription, and changes the record only on your word.
+    </p>
+    <ul>
+      <li>
+        <strong>It writes</strong> letters, notes, resume reviews and tailored resumes from an application's materials and
+        the writing rules, and saves them when you say so, each save under a credential for that one call.
+      </li>
+      <li>
+        <strong>It finds and weighs</strong> roles on your watched pages by meaning, and finds and reviews companies.
+      </li>
+      <li>
+        <strong>It keeps your watch list</strong> on your word, with your reason on the record; logs what happened, but
+        never moves an application; and recommends decisions on the review queue, never making one.
+      </li>
+      <li>
+        <strong>It answers</strong> from the audit log and the analytics. A role's, an application's or a company's page
+        says when it changes what you're looking at, with Refresh.
+      </li>
+    </ul>
+  <% end %>
+
+  </div>
 
   <p class="muted small">Local and single-user: there is no login, so it is never deployed as it is.</p>
 </div>
