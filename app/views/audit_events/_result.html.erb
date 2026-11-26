@@ -1,0 +1,62 @@
+<%# One of the check results (4e step 11): an audit event, or (from page reads) what two reads of a page showed, which
+    no write records. What needs you is marked. %>
+<% source = row.source %>
+<tr>
+  <td class="nowrap">
+    <%= row.at.utc.strftime("%Y-%m-%d %H:%M") %>
+    <div class="small"><%= ago(row.at) %></div>
+  </td>
+  <td>
+    <%= result_kind_badge(row) %>
+    <% if row.needs_you %><span class="badge needs">Needs you</span><% end %>
+  </td>
+  <% case row.kind %>
+  <% when "description" %>
+    <td>
+      <%= link_to source.posting.role_title, role_path(source.posting, anchor: "description") %>
+      <div class="small"><%= link_to source.posting.company.name, company_path(source.posting.company) %></div>
+    </td>
+    <td><%= number_with_delimiter(source.words) %> words now</td>
+    <td><%= actor_badge("agent:verifier") %><div class="small muted">from page reads, not a write</div></td>
+    <td class="reason">Its own page now says something else: often edited or reposted. Earlier versions are on its page.</td>
+  <% when "page_changed" %>
+    <td><%= link_to source.company.name, company_path(source.company) %></td>
+    <td>
+      <%= source.gone %> of <%= source.before_size %> gone, <%= source.added %> of <%= source.after_size %> new
+      <div class="small muted"><%= source.before.checked_at.to_date %> → <%= source.after.checked_at.to_date %></div>
+    </td>
+    <td><%= actor_badge("agent:verifier") %><div class="small muted">from page reads, not a write</div></td>
+    <td class="reason">
+      Between two whole reads of the same page, at least half its roles gone or half of them new, and at least
+      <%= Verifier::ListChange::AT_LEAST %> either way: often a different page now. <%= outside_link(source.url, label: "The page") %>
+    </td>
+  <% when "question" %>
+    <td>
+      <% if source.subject.is_a?(Posting) %>
+        <%= link_to source.subject.role_title, role_path(source.subject) %>
+        <div class="small"><%= link_to source.company.name, company_path(source.company) %></div>
+      <% else %>
+        <%= link_to source.company.name, company_path(source.company) %>
+      <% end %>
+    </td>
+    <td><span class="badge"><%= review_kind_label(source.kind) %></span> <%= review_question(source) %></td>
+    <td><%= actor_badge(ReviewQueue::ACTOR) %><div class="small muted">found by the <%= actor_label_inline(source.raised_by) %></div></td>
+    <td class="reason">
+      <%= source.status == "open" ? link_to("Open: decide it", review_path(kind: source.kind)) : tag.span(source.status == "left" ? "Left as is" : "Decided", class: "muted") %>
+    </td>
+  <% else %>
+    <td>
+      <%= event_subject(source) %>
+      <% if (company = result_company(source)) %><div class="small"><%= link_to company.name, company_path(company) %></div><% end %>
+    </td>
+    <td class="change-list">
+      <% if row.kind == "refused" %>
+        tried: <%= source.changes_made.keys.join(", ").presence || "—" %>
+      <% else %>
+        <%= row.kind.in?(%w[careers_page board]) ? company_change(source) : change_summary(source) %>
+      <% end %>
+    </td>
+    <td><%= actor_cell(source) %></td>
+    <td class="reason"><%= row.kind == "refused" ? source.reasoning.to_s.delete_prefix("Denied: ") : source.reasoning.to_s.truncate(220) %></td>
+  <% end %>
+</tr>

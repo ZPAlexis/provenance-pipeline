@@ -107,7 +107,7 @@
                 <% if entry.activity.contact %><span class="muted small">with <%= entry.activity.contact.name %></span><% end %>
               <% end %>
             </td>
-            <td><%= actor_label(entry.actor) %></td>
+            <td><%= actor_badge(entry.actor) %></td>
             <td class="reason"><%= entry.note %></td>
             <td class="nowrap">
               <% if (activity = entry.activity) %>

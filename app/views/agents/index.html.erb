@@ -39,7 +39,7 @@
   <div class="agents">
     <% Authority::AGENTS.each do |actor, agent| %>
       <section class="agent">
-        <div class="agent-head"><strong><%= actor_label(actor) %></strong> <code class="muted"><%= actor %></code></div>
+        <div class="agent-head"><%= actor_dot(actor) %><strong><%= actor_label(actor) %></strong> <code class="muted"><%= actor %></code></div>
         <p class="small"><%= agent[:about] %></p>
         <p class="chips"><%= scope_chips(agent[:scopes]) %></p>
         <p class="muted small">
@@ -66,7 +66,7 @@
 
     <% Authority::SYSTEM.each_value do |grant| %>
       <section class="agent">
-        <div class="agent-head"><strong><%= actor_label(grant.actor) %></strong> <code class="muted"><%= grant.actor %></code></div>
+        <div class="agent-head"><%= actor_dot(grant.actor) %><strong><%= actor_label(grant.actor) %></strong> <code class="muted"><%= grant.actor %></code></div>
         <p class="small"><%= grant.about %> A grant fixed in code, never a token: its writes are checked like an agent's.</p>
         <p class="chips"><%= scope_chips(grant.scopes) %></p>
         <p class="muted small"><%= link_to pluralize(@writes.fetch(grant.actor, 0), "write"), audit_path(who: grant.actor, from: 30.days.ago.to_date) %> in 30 days</p>
@@ -90,7 +90,7 @@
     <% end %>
     <% Authority::AGENTS.each_key do |actor| %>
       <%= link_to agents_path(actor: actor, anchor: "credentials"), class: ("current" if actor == @actor) do %>
-        <%= actor_label(actor) %> <span class="count"><%= @issued.fetch(actor, 0) %></span>
+        <%= actor_dot(actor) %><%= actor_label(actor) %> <span class="count"><%= @issued.fetch(actor, 0) %></span>
       <% end %>
     <% end %>
   </nav>
@@ -105,7 +105,7 @@
           <% @credentials.each do |credential| %>
             <tr>
               <td><%= ago(credential.created_at) %></td>
-              <td><%= actor_label(credential.actor) %></td>
+              <td><%= actor_badge(credential.actor) %></td>
               <td><%= link_to credential.purpose, agent_credential_path(credential) %></td>
               <td><%= scope_chips(credential.scopes) %></td>
               <td><%= credential_badge(credential) %></td>
@@ -117,7 +117,7 @@
       </table>
     </div>
   <% else %>
-    <p class="empty">No credential issued yet<%= " to the #{actor_label(@actor).downcase}" if @actor %>: one is issued with each run.</p>
+    <p class="empty">No credential issued yet<%= " to the #{actor_label_inline(@actor)}" if @actor %>: one is issued with each run.</p>
   <% end %>
 <% end %>
 

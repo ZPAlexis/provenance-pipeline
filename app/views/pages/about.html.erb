@@ -134,7 +134,8 @@
       <li><strong>The Agents page:</strong> who may write what, the credentials their runs held, and every write refused.</li>
       <li>
         <strong>The audit log:</strong> every write on record, yours and every agent's, refused ones included; nothing in
-        it can be changed or deleted. What changed lists what a check of all tracked companies found.
+        it can be changed or deleted. Its check results list what a check of all tracked companies found, what needs
+        you marked.
       </li>
       <li>
         <strong>Analytics:</strong> how far applications get, how long roles stay listed, and what the AI cost. A rate
@@ -143,7 +144,7 @@
     </ul>
     <p class="pages">
       <%= link_to "Review", review_path %> · <%= link_to "Agents", agents_path %> · <%= link_to "Audit log", audit_path %> ·
-      <%= link_to "What changed", changes_path %> · <%= link_to "Analytics", analytics_path %>
+      <%= link_to "Check results", audit_path(view: "checks") %> · <%= link_to "Analytics", analytics_path %>
     </p>
   </section>
 

@@ -70,6 +70,35 @@ class WhatChanged
 
   def refused = @refused ||= events.denied.to_a
 
+  # Since 4e step 11 the audit log's "Check results": every part above as one list, a row each, newest first. A row
+  # is an audit event, or (FROM_READS) what two reads of a page showed, which no write records. What needs the
+  # operator is marked: an open review question, or a page that changed a lot whose question is still open.
+  Row = Data.define(:at, :kind, :source, :needs_you) do
+    def from_reads? = FROM_READS.include?(kind)
+  end
+
+  KINDS = { "not_found" => "No longer listed", "verified_live" => "Listed", "inaccessible" => "Couldn't confirm",
+            "pending" => "Back to no answer", "suggested" => "Suggested", "withdrawn" => "Suggestion withdrawn",
+            "careers_page" => "Careers page", "board" => "Board", "description" => "Description changed",
+            "page_changed" => "Page changed a lot", "question" => "Review question", "refused" => "Refused write" }.freeze
+  FROM_READS = %w[description page_changed].freeze
+
+  def rows
+    @rows ||= begin
+      open_pages = ReviewItem.open.where(kind: "page_changed", evidence_key: lists.map { |change| change.after.id.to_s }).pluck(:evidence_key).to_set
+      row = ->(at, kind, source, needs_you = false) { Row.new(at: at, kind: kind, source: source, needs_you: needs_you) }
+      [ *verdicts.flat_map { |state, events| events.map { |event| row.(event.occurred_at, state, event) } },
+        *suggested.map { |event| row.(event.occurred_at, "suggested", event) },
+        *withdrawn.map { |event| row.(event.occurred_at, "withdrawn", event) },
+        *careers_pages.map { |event| row.(event.occurred_at, "careers_page", event) },
+        *boards.map { |event| row.(event.occurred_at, "board", event) },
+        *descriptions.map { |version| row.(version.first_read_at, "description", version) },
+        *lists.map { |change| row.(change.after.checked_at, "page_changed", change, open_pages.include?(change.after.id.to_s)) },
+        *questions.map { |item| row.(item.created_at, "question", item, item.status == "open") },
+        *refused.map { |event| row.(event.occurred_at, "refused", event) } ].sort_by { |each| -each.at.to_f }
+    end
+  end
+
   # Each part, with how many, in the order the page shows them.
   def counts
     {

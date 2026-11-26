@@ -163,7 +163,7 @@
 <%= tab_panel "verdicts" do %>
 <p class="muted small">
   The latest <%= Overview::RECENT_CHANGES %>. <%= link_to "See all", audit_path(kind: "Posting", attribute: "verification_state") %>, in the audit log;
-  <%= link_to "what changed since the last check of all tracked companies", changes_path %>: suggestions, careers pages, lists that changed a lot, and more.
+  <%= link_to "what the last check of all tracked companies found", audit_path(view: "checks") %>: suggestions, careers pages, lists that changed a lot, and more.
 </p>
 <% if @changes.any? %>
   <div class="table-wrap">

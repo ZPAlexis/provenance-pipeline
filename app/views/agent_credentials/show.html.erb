@@ -4,7 +4,7 @@
     <p class="muted small"><%= link_to "Agents", agents_path %> / Credential</p>
     <h1><%= @credential.purpose %></h1>
     <p class="sub">
-      Issued to the <%= actor_label(@credential.actor).downcase %> for one run. Everything it wrote is below, and anything it
+      Issued to the <%= actor_label_inline(@credential.actor) %> for one run. Everything it wrote is below, and anything it
       was refused.
     </p>
   </div>
@@ -12,7 +12,7 @@
 </div>
 
 <dl class="facts">
-  <dt>Agent</dt><dd><%= actor_label(@credential.actor) %> <code class="muted"><%= @credential.actor %></code></dd>
+  <dt>Agent</dt><dd><%= actor_badge(@credential.actor) %> <code class="muted"><%= @credential.actor %></code></dd>
   <dt>Scopes</dt>
   <dd>
     <ul class="scopes">

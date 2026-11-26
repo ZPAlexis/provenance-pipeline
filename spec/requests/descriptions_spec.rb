@@ -42,8 +42,8 @@ RSpec.describe "Descriptions", type: :request do
     get role_path(role)
     expect(response.body).to include("You will run discovery and demos.", "2 versions", "Earlier versions", "Read it again")
 
-    get changes_path
-    expect(response.body).to include("Descriptions changed", "Sales Engineer")
+    get audit_path(view: "checks")
+    expect(response.body).to include("Description changed", "Sales Engineer", "from page reads, not a write")
   end
 
   it "is read when an application starts" do
@@ -78,8 +78,8 @@ RSpec.describe "Descriptions", type: :request do
     expect(response.body).not_to include("which is no longer its own page")
     expect(response.body).to include("2 versions, new on", "(the same text, from its own page when it moved)")
 
-    get changes_path # the last 7 days: the same text from its new page is a version, not a change
-    expect(response.body).not_to include("id=\"descriptions-changed\"")
+    get audit_path(view: "checks") # the last 7 days: the same text from its new page is a version, not a change
+    expect(response.body).not_to include("Description changed")
   end
 
   it "is read again, in the background, when the operator moves the role's own page" do

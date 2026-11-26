@@ -741,7 +741,7 @@ namespace :verifier do
     puts "\n#{tally.map { |outcome, count| "#{outcome}: #{count}" }.join(' · ')}; #{reads.count(&:new_version)} new versions."
   end
 
-  desc "What changed since a check of everything, as the What changed page shows it: verdicts, suggestions made and " \
+  desc "What changed since a check of everything, as the audit log's Check results show it: verdicts, suggestions made and " \
        "withdrawn, lists that changed a lot, careers pages, boards, new review questions, refused writes. Read-only. " \
        "[FROM=check_run_id] (by default, since the check before the latest ended)"
   task changes: :environment do

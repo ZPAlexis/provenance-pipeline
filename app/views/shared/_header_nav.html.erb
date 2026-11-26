@@ -9,12 +9,11 @@
   <%= nav_link waiting.positive? ? "Review (#{waiting})" : "Review", review_path, current: controller_name == "review_items" %>
   <%# The record's own pages (4e): who did what, what changed, how it is going, and who may write what. %>
   <% refused = agents_refused_recently %>
-  <details class="nav-menu<%= " current" if %w[audit_events changes analytics agents agent_credentials].include?(controller_name) %>"
+  <details class="nav-menu<%= " current" if %w[audit_events analytics agents agent_credentials].include?(controller_name) %>"
            data-controller="menu">
     <summary><%= refused.positive? ? "Record (#{refused} refused)" : "Record" %></summary>
     <div class="menu-list">
       <%= nav_link "Audit log", audit_path, current: controller_name == "audit_events" %>
-      <%= nav_link "What changed", changes_path, current: controller_name == "changes" %>
       <%= nav_link "Analytics", analytics_path, current: controller_name == "analytics" %>
       <%= nav_link refused.positive? ? "Agents (#{refused} refused)" : "Agents", agents_path,
                    current: %w[agents agent_credentials].include?(controller_name) %>

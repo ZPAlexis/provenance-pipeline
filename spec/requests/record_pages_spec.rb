@@ -32,7 +32,8 @@ RSpec.describe "The record's pages, reorganized", type: :request do
     expect(Overview::RECENT_CHANGES).to eq(8)
   end
 
-  it "shows What changed in tabs, what needs you first, only those that hold something" do
+  # 4e step 11: What changed is the audit log's Check results; the page's address leads there.
+  it "shows what a check found in the audit log's Check results, what needs you marked" do
     create(:check_run, kind: "all", company: nil, status: "done", started_at: 1.hour.ago, finished_at: 10.minutes.ago, total: 1)
     as_agent("agent:verifier") do
       role.update!(verification_state: "not_found", last_checked_at: Time.current)
@@ -41,21 +42,25 @@ RSpec.describe "The record's pages, reorganized", type: :request do
     # Its careers page not found: a question for you.
     ReviewQueue.sync!(create(:company, name: "Contoso", domain: "contoso.example", resolution_status: "failed", resolution_failure: "not_found"))
 
-    get changes_path
+    get audit_path(view: "checks")
 
-    expect(tabs(response.body).first(2)).to eq([ "Needs you", "Listings" ])
-    expect(tabs(response.body)).not_to include("Suggestions", "Refused writes")
-    expect(response.body).to include(%(id="new-review-questions"), %(id="no-longer-listed"))
+    expect(tabs(response.body)).to eq([ "Every write", "Check results" ])
+    expect(response.body).to include(%(id="checks-tab" role="tab" aria-controls="checks" aria-selected="true"))
+    expect(response.body).to include("No longer listed", "Review question", %(<span class="badge needs">Needs you</span>), "Needs you (1)")
+
+    get audit_path(view: "checks", result: "needs_you")
+    expect(response.body.scan(%(<span class="badge needs">)).size).to eq(1)
+    expect(response.body).not_to include(%(<span class="badge gone">No longer listed</span>))
 
     get changes_path(from: "week")
-    expect(response.body).to include("What changed since a check of all tracked companies")
+    expect(response).to redirect_to(audit_path(view: "checks", since: "week"))
+    expect(response).to have_http_status(:moved_permanently)
   end
 
-  it "says nothing changed, with no tabs, when nothing did" do
-    get changes_path
+  it "says nothing changed, when nothing did, and leaves What changed out of the Record menu" do
+    get audit_path(view: "checks")
 
-    expect(response.body).to include("Nothing changed since then.")
-    expect(tabs(response.body)).to be_empty
+    expect(response.body).to include("Nothing changed since then.").and(not_include(">What changed</a>"))
   end
 
   it "shows About in four steps and a section for each, naming your AI assistant" do

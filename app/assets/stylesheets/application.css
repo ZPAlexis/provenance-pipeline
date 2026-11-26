@@ -1,6 +1,8 @@
 /* Provenance Pipeline: an operator's tool. Dense tables, clear states, light and dark. */
 
 :root {
+  /* The browser's own parts (scrollbars, date pickers, a select's list) follow the theme too (4e step 11). */
+  color-scheme: light dark;
   --bg: #f7f7f5;
   --surface: #ffffff;
   --text: #1c1d1f;
@@ -16,6 +18,13 @@
   --unsure-bg: #fbefd5;
   --idle: #5c6168;
   --idle-bg: #eceef0;
+  /* Who wrote it (4e): you, your AI assistant through MCP, the app's agents; the system takes --idle. */
+  --you: #2f5bd3;
+  --you-bg: #e6edfc;
+  --assistant: #7a3fc2;
+  --assistant-bg: #f1e8fb;
+  --agent: #0d7377;
+  --agent-bg: #dcf1f1;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
 }
@@ -37,6 +46,12 @@
     --unsure-bg: #3a2e14;
     --idle: #b0b4bb;
     --idle-bg: #2a2d31;
+    --you: #9db4ff;
+    --you-bg: #1f2a4a;
+    --assistant: #cba6f7;
+    --assistant-bg: #2e2140;
+    --agent: #6fd0d3;
+    --agent-bg: #133234;
   }
 }
 
@@ -200,7 +215,9 @@ ol.steps span { display: block; margin-top: 2px; font-size: 12.5px; color: var(-
 
 /* Tables */
 
-.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+/* A wide table scrolls sideways inside its frame, with the thin, quiet bar the tabs and the pipeline use (4e step 11). */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
 th { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--bg); }
@@ -252,6 +269,18 @@ details.facts-more > summary { cursor: pointer; }
 .badge.live { background: var(--live-bg); color: var(--live); }
 .badge.gone { background: var(--gone-bg); color: var(--gone); }
 .badge.unsure { background: var(--unsure-bg); color: var(--unsure); }
+/* Who wrote it (4e), as a badge or a dot. */
+.badge.by-you { background: var(--you-bg); color: var(--you); }
+.badge.by-assistant { background: var(--assistant-bg); color: var(--assistant); }
+.badge.by-agent { background: var(--agent-bg); color: var(--agent); }
+.badge.by-system { background: var(--idle-bg); color: var(--idle); }
+.dot { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; }
+.dot.by-you { background: var(--you); }
+.dot.by-assistant { background: var(--assistant); }
+.dot.by-agent { background: var(--agent); }
+.dot.by-system { background: var(--idle); }
+/* What needs you (4e), in the audit log's check results. */
+.badge.needs { background: var(--unsure-bg); color: var(--unsure); font-weight: 600; }
 
 /* Tabs */
 
@@ -684,7 +713,8 @@ td form.button_to { display: inline-block; }
 .add-here .add-more > .add-form { right: auto; left: 0; }
 .list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 4px 0 12px; }
 .list-filters label { display: flex; align-items: center; gap: 6px; }
-.list-filters select {
+.list-filters select.wide { max-width: min(400px, 100%); }
+.list-filters select, .list-filters input[type="date"] {
   max-width: 240px;
   padding: 4px 8px;
   font: 13px var(--font);

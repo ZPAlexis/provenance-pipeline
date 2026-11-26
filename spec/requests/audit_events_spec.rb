@@ -18,6 +18,9 @@ RSpec.describe "The audit log", type: :request do
     credential
   end
 
+  # The Every write tab alone (4e step 11): the Check results tab beside it lists some of the same events.
+  def every_write = response.body[%r{<section id="every".*?</section>}m]
+
   it "shows every event in full: when, by whom under which credential, on what, the action, what changed, and why" do
     credential = history
 
@@ -35,22 +38,22 @@ RSpec.describe "The audit log", type: :request do
     history
 
     get audit_path(who: "agent:verifier")
-    expect(response.body).to include("1 event matches.")
-    expect(response.body).to include("Not among the 12 roles listed.").and(not_include("Its legal name."))
-    expect(response.body).to include('class="filter current"')
+    expect(every_write).to include("1 event matches.")
+    expect(every_write).to include("Not among the 12 roles listed.").and(not_include("Its legal name."))
+    expect(every_write).to include('class="filter current"')
 
     get audit_path(kind: "company", act: "update")
-    expect(response.body).to include("Its legal name.").and(not_include("Not among the 12 roles listed."))
-    expect(response.body).to include(audit_path(who: "operator", kind: "company", act: "update").gsub("&", "&amp;"))
+    expect(every_write).to include("Its legal name.").and(not_include("Not among the 12 roles listed."))
+    expect(every_write).to include(audit_path(who: "operator", kind: "company", act: "update").gsub("&", "&amp;"))
 
     get audit_path(act: "denied")
-    expect(response.body).to include("Denied: may not update a posting").and(not_include("Its legal name."))
+    expect(every_write).to include("Denied: may not update a posting").and(not_include("Its legal name."))
 
     get audit_path(attribute: "verification_state", from: Date.current.to_s, to: Date.current.to_s)
-    expect(response.body).to include("Not among the 12 roles listed.").and(not_include("Denied: may not"))
+    expect(every_write).to include("Not among the 12 roles listed.").and(not_include("Denied: may not"))
 
     get audit_path(from: Date.tomorrow.to_s)
-    expect(response.body).to include("No event matches.")
+    expect(every_write).to include("No event matches.")
   end
 
   it "narrows to one record or one credential, naming it, with a way back to all" do

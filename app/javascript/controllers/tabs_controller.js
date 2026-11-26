@@ -10,7 +10,8 @@ export default class extends Controller {
   static targets = ["tab", "panel"]
 
   connect() {
-    this.show(this.fromHash() || this.sentFrom() || this.panelTargets[0]?.id)
+    // Else the panel the page opened on: its first, or the one its address asked for (the audit log's ?view=checks).
+    this.show(this.fromHash() || this.sentFrom() || (this.panelTargets.find((panel) => !panel.hidden) || this.panelTargets[0])?.id)
     this.onHash = () => { const id = this.fromHash(); if (id) this.show(id) }
     this.onMorph = () => this.show(this.current)
     this.onSubmit = () => this.remember(this.current)

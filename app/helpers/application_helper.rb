@@ -56,8 +56,30 @@ module ApplicationHelper
     kind, name = actor.to_s.split(":", 2)
     return "Operator" if kind == "human"
 
-    { "verifier" => "Verifier", "clay_importer" => "Clay import" }.fetch(name.to_s, name.to_s.humanize)
+    { "verifier" => "Verifier", "clay_importer" => "Clay import", "assistant" => "AI assistant" }.fetch(name.to_s, name.to_s.humanize)
   end
+
+  # The same in a sentence ("issued to the verifier", "to the AI assistant").
+  def actor_label_inline(actor)
+    label = actor_label(actor)
+    label.start_with?("AI ") ? label : label.downcase
+  end
+
+  # Who wrote something, by kind, as its badge is colored (4e): you, your AI assistant through MCP, the app's own
+  # agents, or the system (the review queue's fixed grant).
+  def actor_group(actor)
+    kind, = actor.to_s.split(":", 2)
+    return "you" if kind == "human" || actor.to_s == "operator"
+    return "assistant" if actor.to_s == "agent:assistant"
+    return "system" if kind == "system"
+
+    "agent"
+  end
+
+  def actor_badge(actor) = tag.span(actor_label(actor), class: [ "badge", "by-#{actor_group(actor)}" ], title: actor)
+
+  # A dot of the same color, beside a name in a tab or a chip.
+  def actor_dot(actor) = tag.span(class: [ "dot", "by-#{actor_group(actor)}" ], "aria-hidden": true)
 
   def read_via_label(read_via)
     return "—" if read_via.blank?
@@ -228,7 +250,7 @@ module ApplicationHelper
 
   # Who wrote it, and the credential its run held when an agent did (1.3).
   def actor_cell(event)
-    label = actor_label(event.actor)
+    label = actor_badge(event.actor)
     return label unless event.credential
 
     safe_join([ label, tag.div(link_to("its credential", agent_credential_path(event.credential), title: event.credential.purpose),
@@ -241,11 +263,14 @@ module ApplicationHelper
 
   # Tabs inside a page (4e), inside an element with data-controller="tabs": `tabs` is [[id, label], ...], the first
   # open. Each panel's id is the anchor links into the page already use, so a link to #links opens the tab holding it.
-  def page_tabs(tabs, label:)
+  # `current`, a tab's id, opens on another than the first (4e step 11: the audit log's Check results, by address), as
+  # its panel's `first:` says too.
+  def page_tabs(tabs, label:, current: tabs.first&.first)
     tag.nav(class: "tabs page-tabs", role: "tablist", "aria-label": label) do
-      safe_join(tabs.each_with_index.map do |(id, text), index|
-        link_to(text, "##{id}", id: "#{id}-tab", role: "tab", "aria-controls": id, "aria-selected": index.zero?,
-                                tabindex: (index.zero? ? 0 : -1), class: ("current" if index.zero?),
+      safe_join(tabs.map do |id, text|
+        on = id == current
+        link_to(text, "##{id}", id: "#{id}-tab", role: "tab", "aria-controls": id, "aria-selected": on,
+                                tabindex: (on ? 0 : -1), class: ("current" if on),
                                 data: { tabs_target: "tab", action: "tabs#select keydown->tabs#key" })
       end)
     end
