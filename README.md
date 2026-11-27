@@ -18,7 +18,7 @@ AI agents do the legwork: they check at each employer's own careers page whether
 
 **Why "provenance":** every change on record says where it came from: who made it, under which permission, and why.
 
-> **Status:** in use for my own job search, running locally. Now: a review of the pages, from my own use. Next: checks that can run through my own AI assistant instead of paid API calls, then a demo on made-up data, with a version of the app that's easier to run locally. [Build history](docs/build-stages.md).
+> **Status:** in use for my own job search, running locally. Just finished: a review of every page, from my own use. Next: checks that can run through my own AI assistant instead of paid API calls, then a demo on made-up data, with a version of the app that's easy to run locally. [Build history](docs/build-stages.md).
 
 **Contents:** [Why I built it](#why-i-built-it) · [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
 
@@ -42,7 +42,7 @@ So I built one, and I use it for my own job search.
 | **Governance** | Permission sets and field-level security for AI agents: a credential per run, checked at every write down to the fields it sets; refused writes on the record; an append-only audit log, enforced by the database |
 | **Data** | Careers pages read in a real browser, robots.txt honored; five job boards read through their own feeds (Greenhouse, Lever, Ashby, Workday, Oracle Cloud) |
 | **Measured** | 58 of 59 verdicts right on fresh reads, and every role reported closed was closed (12 of 12); 87% of hidden careers pages found again ([AI evaluation](#measured-results)) |
-| **Quality** | 907 RSpec examples and 351 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
+| **Quality** | 956 RSpec examples and 351 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
 | **Stack** | Ruby on Rails 8.1, PostgreSQL 16, Python 3.13, the Claude API, MCP ([in full](#stack)) |
 
 ## How this maps to GTM work
@@ -62,7 +62,7 @@ The job search is the test bed; the patterns are the ones a RevOps or GTM team b
 | Waterfall enrichment | A company's careers page found cheapest and most certain step first (the page on record, common paths, homepage links, a guessed job board its vendor confirms, an LLM pick last), each find with a confidence; a low one waits for a person | [87% found again](#measured-results) |
 | Enrichment imports | Clay CSV exports, each field written kept as a before-and-after diff in the audit log | [Schema](docs/schema.md) |
 | Unit economics per enriched record | A cost per page read, gated behind cheap checks: free job-board feeds first, an unchanged page reuses its last read, every model call's cost on the record | [137 companies for $1.17](#measured-results) |
-| Funnel analytics | Stage conversion and days in each stage, from dated stage changes; how long roles stay listed; AI cost by purpose; raw SQL over the record | The Analytics page, `analytics:report` |
+| Funnel analytics | Stage conversion and days in each stage, from dated stage changes; how long roles stay listed; AI cost by purpose; raw SQL over the record | The dashboard, `analytics:report` |
 | How to roll AI out to a GTM team safely | Autonomy earned per kind of decision, on measured agreement: agents recommend, the operator decides, and no kind acts on its own yet | [9 of 11 agreed](#measured-results) |
 
 ## The permission model
@@ -195,8 +195,8 @@ Built in stages, each decided, built step by step, and recorded as built. [Every
 | 4b — Finding companies | Company proposals and company reviews from the operator's AI assistant through [MCP](docs/mcp.md), against company preferences kept on the profile | 2026-11-10 |
 | 4c — Background, and fit read two ways | A background in three parts, each read only by what may use it; the ATS fit and the Background fit, through [MCP](docs/mcp.md) first, then in the app's own agents | 2026-11-12 |
 | 4d — Screen risk, and your links | Each role's must-haves read one by one, one the resume doesn't show capping the fit; the operator's own website and GitHub read free, and the lines that apply to each role read as extended background | 2026-11-18 |
-| 4e — The first major review of the pages | Tabs inside the detail pages, a role's fit first, the AI assistant's work in every record's history, and the lists ordered by application and fit, from the operator's own use | under way |
-| Next | 4f, a demo on made-up data, and a version of the app that's easier to run locally | |
+| 4e — The first major review of the pages | From the operator's own use: tabs inside the detail pages, a role's fit first, the AI assistant's work in every record's history, a check of every tracked company, a role added by its link alone, the dashboard and analytics in one page, check results in the audit log, and a top bar of tabs | 2026-11-26 |
+| Next | 4f, checks through the operator's own AI assistant, on their subscription; then Stage 5, a demo on made-up data and a version of the app that's easy to run locally | |
 
 ## Stack
 

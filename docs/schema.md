@@ -127,13 +127,15 @@ review_items  kind, company_id, subject (polymorphic: the company or one role),
               recommendation (jsonb: a recommended decision, one of the
               item's own actions with why, and what the operator then did)
 
-agent_credentials  actor, scopes, token_digest, purpose, issued_by,
+agent_credentials  actor, scopes, token_digest, purpose, issued_by (who asked
+                   for the run: the operator, or their AI assistant),
                    expires_at, revoked_at (one per agent run)
 
-check_runs    kind (role | company | all | describe | draft | review | fit),
-              company_id, posting_id, request (jsonb: what a draft, review or
-              fit was asked for), status (queued | running | done | failed),
-              requested_by, ceiling_usd, answer, summary, tally (jsonb),
+check_runs    kind (role | company | all | describe | draft | review | fit |
+              links), company_id, posting_id, request (jsonb: what a draft,
+              review or fit was asked for), status (queued | running | done |
+              failed), requested_by (the operator, or their AI assistant: the
+              dashboard's "Asked by"), ceiling_usd, answer, summary, tally (jsonb),
               cost_usd, run_id, total, error, started_at, finished_at
               (a check asked for from the pages, run in the background,
               which the page polls)
