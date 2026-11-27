@@ -65,10 +65,12 @@ module ProvenanceMcp
     Save the company preferences with save_company_preferences only on the person's word, as they said them. A
     proposal is tracked or declined only on their word, with track_or_archive_companies. A company's fit and a role's
     fit are two scores: never weigh one into the other.
-    Its save tools (save_draft, save_resume_review, save_contact, log_activity, suggest_roles, save_fit_score,
-    save_recommendation, suggest_companies, save_company_review, save_company_preferences, and the watch-list tools
-    above) save what you wrote, were told, weighed or recommend back to the record: use them only when the person asks
-    you to. Each save is recorded as yours, for them to edit, approve, accept, archive, undo or delete;
+    To add to an application's notes or set its pay expectation, use save_application_notes, only on the person's
+    word, with their reason: a note goes after theirs, dated as yours, never in its place.
+    Its save tools (save_draft, save_resume_review, save_contact, log_activity, save_application_notes, suggest_roles,
+    save_fit_score, save_recommendation, suggest_companies, save_company_review, save_company_preferences, and the
+    watch-list tools above) save what you wrote, were told, weighed or recommend back to the record:
+    use them only when the person asks you to. Each save is recorded as yours, for them to edit, approve, accept, archive, undo or delete;
     nothing is ever sent, no tool decides a review item, and no tool moves an application between stages.
   TEXT
 

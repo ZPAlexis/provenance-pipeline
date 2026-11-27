@@ -177,10 +177,15 @@
 <% end %>
 
 <%= tab_panel "notes" do %>
+<p class="muted small">
+  Yours to keep and edit. Your AI assistant adds to them only when you say: a dated note after what is here, never in its
+  place, and the pay expectation, which replaces the one before.
+  <% if @assistant_noted %><%= actor_badge("agent:assistant") %> last added on <%= @assistant_noted.to_date %>.<% end %>
+</p>
 <%= form_with url: note_application_path(@application), method: :patch, class: "add-form" do |form| %>
   <label>Pay expectation <%= form.text_field :comp_expectation, value: @application.comp_expectation, placeholder: "e.g. 25k a month",
                                                                  autocomplete: "off" %></label>
-  <label class="wide">Notes <%= form.text_area :notes, value: @application.notes, rows: 4,
+  <label class="wide">Notes <%= form.text_area :notes, id: "application-notes", value: @application.notes, rows: (@application.notes.to_s.lines.size + 2).clamp(4, 16),
                                                        placeholder: "Who you spoke to, what matters to them, what to ask next" %></label>
   <%= form.submit "Save notes", class: "btn small" %>
 <% end %>

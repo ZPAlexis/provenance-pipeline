@@ -18,7 +18,7 @@ AI agents do the legwork: they check at each employer's own careers page whether
 
 **Why "provenance":** every change on record says where it came from: who made it, under which permission, and why.
 
-> **Status:** in use for my own job search, running locally. Just finished: a review of every page, from my own use. Next: checks that can run through my own AI assistant instead of paid API calls, then a demo on made-up data, with a version of the app that's easy to run locally. [Build history](docs/build-stages.md).
+> **Status:** in use for my own job search, running locally. Now: checks that can run through my own AI assistant instead of paid API calls, and it adds to an application's notes when I say. Next: a demo on made-up data, with a version of the app that's easy to run locally. [Build history](docs/build-stages.md).
 
 **Contents:** [Why I built it](#why-i-built-it) · [How it was built](#how-it-was-built) · [At a glance](#at-a-glance) · [GTM mapping](#how-this-maps-to-gtm-work) · [The permission model](#the-permission-model) · [Measured results](#measured-results) · [How it works](#how-it-works) · [The first agent](#the-first-agent-verifying-roles-at-the-source) · [Design principles](#design-principles) · [Build stages](#build-stages) · [Stack](#stack) · [Quickstart](#quickstart) · [Tests](#tests) · [Documentation](#documentation) · [Note on data](#note-on-data)
 
@@ -36,13 +36,13 @@ So I built one, and I use it for my own job search.
 
 | | |
 |---|---|
-| **Agents** | 6 agents, plus the review queue's system grant: 17 permission types in all, and 8 decisions only the operator can make |
+| **Agents** | 6 agents, plus the review queue's system grant: 18 permission types in all, and 8 decisions only the operator can make |
 | **AI** | Claude through the Anthropic API: Haiku 4.5 reads pages, settles near-miss matches and weighs fit; Opus 5.5 writes drafts and resume reviews. Structured outputs, each prompt versioned, each call's cost on the record |
-| **MCP** | A server of 30 tools and 9 prompts, through which the operator's AI assistant reads the record and saves its work, under a credential for each call. Any MCP client should work; only Claude Desktop has been tested so far |
+| **MCP** | A server of 31 tools and 9 prompts, through which the operator's AI assistant reads the record and saves its work, under a credential for each call. Any MCP client should work; only Claude Desktop has been tested so far |
 | **Governance** | Permission sets and field-level security for AI agents: a credential per run, checked at every write down to the fields it sets; refused writes on the record; an append-only audit log, enforced by the database |
 | **Data** | Careers pages read in a real browser, robots.txt honored; five job boards read through their own feeds (Greenhouse, Lever, Ashby, Workday, Oracle Cloud) |
 | **Measured** | 58 of 59 verdicts right on fresh reads, and every role reported closed was closed (12 of 12); 87% of hidden careers pages found again ([AI evaluation](#measured-results)) |
-| **Quality** | 956 RSpec examples and 351 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
+| **Quality** | 962 RSpec examples and 351 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
 | **Stack** | Ruby on Rails 8.1, PostgreSQL 16, Python 3.13, the Claude API, MCP ([in full](#stack)) |
 
 ## How this maps to GTM work
@@ -77,7 +77,7 @@ The job search is the test bed; the patterns are the ones a RevOps or GTM team b
 | Review queue (a system grant) | Raise, restate and close what resolved (`review:keep`) | Decide an item |
 | Draft agent | A new draft or resume review as it wrote it (`drafts:write`, `resume_reviews:write`, one per run) | Edit or approve a draft, delete a review, send anything |
 | Fit scorer | A role's fit score (`fit:write`): each role scored 0 to 100 against the resume, with its matches by line, its gaps and why, by the [`fit` rules](workers/verifier/src/verifier/writing_rules.md#fit), its must-haves by [`must_haves`](workers/verifier/src/verifier/writing_rules.md#must_haves), and the Background fit beside it, by [`background_fit`](workers/verifier/src/verifier/writing_rules.md#background_fit); and the LLM call that weighed it | Touch a role, change a score, send anything |
-| AI assistant (the operator's own, Claude or another, through MCP) | Only the scopes of the save tool it calls, a credential per call: drafts and reviews, contacts and activities, role and company proposals, fit scores and company reviews, recommendations on the review queue; and, on the operator's word with their reason, the watch list and the company preferences | Change the watch list on its own judgment; set a verdict, or a company's name, careers page or kind; decide a review item; edit, approve or delete what it saved; move a stage; send anything |
+| AI assistant (the operator's own, Claude or another, through MCP) | Only the scopes of the save tool it calls, a credential per call: drafts and reviews, contacts and activities, role and company proposals, fit scores and company reviews, recommendations on the review queue; and, on the operator's word with their reason, the watch list, the company preferences, and an application's notes (a dated note added, never in place of theirs) and pay expectation | Change the watch list on its own judgment; set a verdict, or a company's name, careers page or kind; decide a review item; edit, approve or delete what it saved; move a stage; send anything |
 | **No agent** | Starting an application or moving it between stages; editing or approving a draft; deciding a review item; editing the search profile, the resume, or the background and its links (the company preferences aside, on the operator's word); naming a company; deleting a contact; issuing or revoking a credential; asking for a check that writes a verdict or spends API credit | **Human-only by design** |
 
 The last row is the point: the most consequential write is withheld from every agent. It is the code's own list (`Authority::HUMAN_ONLY`), shown on the Agents page.
@@ -127,7 +127,7 @@ Measured on the operator's real target list, which stays out of the repo; the te
 flowchart TB
     op(["Operator"]) --> pages["Rails pages (Hotwire)"]
     op --> desk["Claude Desktop<br/>the operator's own client"]
-    desk -- "stdio" --> mcp["MCP server<br/>30 tools · 9 prompts"]
+    desk -- "stdio" --> mcp["MCP server<br/>31 tools · 9 prompts"]
     pages --> services["Rails services"]
     mcp --> services
     services --> authority["Authority<br/>checks every agent write"]
@@ -196,7 +196,8 @@ Built in stages, each decided, built step by step, and recorded as built. [Every
 | 4c — Background, and fit read two ways | A background in three parts, each read only by what may use it; the ATS fit and the Background fit, through [MCP](docs/mcp.md) first, then in the app's own agents | 2026-11-12 |
 | 4d — Screen risk, and your links | Each role's must-haves read one by one, one the resume doesn't show capping the fit; the operator's own website and GitHub read free, and the lines that apply to each role read as extended background | 2026-11-18 |
 | 4e — The first major review of the pages | From the operator's own use: tabs inside the detail pages, a role's fit first, the AI assistant's work in every record's history, a check of every tracked company, a role added by its link alone, the dashboard and analytics in one page, check results in the audit log, and a top bar of tabs | 2026-11-26 |
-| Next | 4f, checks through the operator's own AI assistant, on their subscription; then Stage 5, a demo on made-up data and a version of the app that's easy to run locally | |
+| 4f — Checks through the AI assistant | A check of every tracked company with the AI's reading done by the operator's own AI assistant, on their subscription; first, the assistant adding to an application's notes on their word | under way |
+| Next | Stage 5, a demo on made-up data and a version of the app that's easy to run locally | |
 
 ## Stack
 

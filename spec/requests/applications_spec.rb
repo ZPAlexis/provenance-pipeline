@@ -50,6 +50,25 @@ RSpec.describe "Pipeline", type: :request do
       expect(application.reload).to have_attributes(stage: "interviewing", stage_changed_on: Date.new(2026, 10, 12))
     end
 
+    # 4f step 1: the AI assistant's note, dated after the operator's, and when it last added one, on the Notes tab.
+    it "shows the AI assistant's note after the operator's, and when it last added one" do
+      application.update_columns(notes: "Remote-first team.")
+      get application_path(application)
+      expect(response.body).to include("Your AI assistant adds to them only when you say")
+      expect(response.body).not_to include("last added on")
+      # A link to #notes opens the Notes tab: no field (the contact form's, the notes' own) takes its id first.
+      expect(response.body.scan('id="notes"').size).to eq(1)
+
+      travel_to Time.utc(2026, 11, 27, 15) do
+        Authority.run("agent:assistant", scopes: %w[applications:note], purpose: "spec") do
+          Pipeline.add_note!(application.reload, note: "Ask about on-call.", comp_expectation: nil, reason: "Asked.", actor: "agent:assistant")
+        end
+        get application_path(application)
+      end
+      expect(response.body).to include("Remote-first team.\n\nAdded by your AI assistant, 2026-11-27: Ask about on-call.",
+                                       "last added on 2026-11-27", 'class="badge by-assistant"')
+    end
+
     # Found 2026-10-19: a move on the same day as the stage before records no date, and the page broke on it.
     it "shows a move made the same day as the stage before, dated as that stage was" do
       started = Pipeline.start!(create(:posting, company: company, role_title: "GTM Engineer", tracking: "tracked"),

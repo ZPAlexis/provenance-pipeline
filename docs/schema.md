@@ -27,7 +27,8 @@ search_profiles  name, titles, excluded_words, places, work_modes, levels
                  to avoid); the words and the avoid list audited by a hash alone
 
 applications  posting_id (one per role), company_id, stage, stage_changed_on,
-              comp_expectation, notes (the operator's alone to start or move)
+              comp_expectation, notes (the operator's alone to start or move;
+              since 4f their AI assistant adds dated notes on their word)
 
 activities    application_id, kind, occurred_on, summary, logged_by,
               contact_id (whom it was with)

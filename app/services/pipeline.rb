@@ -1,8 +1,10 @@
 # The operator's applications (Stage 2a): started from a role on record, moved
-# between stages, and what happened along the way logged. Every write is audited
-# as the operator's; no agent scope allows any of it (Authority), so an agent
-# that tries is refused on the record. Stage dates are the operator's own (when
-# it happened, not when it was typed), kept in each change's audit event.
+# between stages, and what happened along the way logged. Every write is audited;
+# no agent scope allows starting or moving one (Authority), so an agent that
+# tries is refused on the record. The operator's own AI assistant logs what they
+# tell it (2e) and, since 4f, adds to an application's notes and sets its pay
+# expectation, on their word. Stage dates are the operator's own (when it
+# happened, not when it was typed), kept in each change's audit event.
 module Pipeline
   # One line of an application's timeline: a stage it reached, or an activity.
   Entry = Data.define(:on, :at, :stage, :from, :activity, :note, :actor)
@@ -56,6 +58,30 @@ module Pipeline
     ApplicationRecord.transaction do
       application.update!(notes: notes.to_s.strip.presence, comp_expectation: comp_expectation.to_s.strip.presence)
       AuditEvent.record_write!(application, actor: actor, reasoning: "Notes saved by hand.")
+    end
+    application
+  end
+
+  # How the operator's AI assistant's note is set down in an application's notes (4f): dated, and said to be its own.
+  NOTE_ENTRY = "Added by your AI assistant, %<on>s: %<note>s".freeze
+
+  # 4f: what the operator's own AI assistant adds on their word, with their reason: `note` after the application's notes
+  # as a dated entry, never in their place (Authority refuses notes that don't begin with the ones before), and
+  # `comp_expectation` set, replacing any there. Nil when nothing would change (the same pay expectation, no note).
+  def add_note!(application, note:, comp_expectation:, reason:, actor:, on: Date.current)
+    note = note.to_s.strip.presence
+    pay = comp_expectation.to_s.strip.presence
+    raise ArgumentError, "give a note to add, or a pay expectation" unless note || pay
+
+    application.notes = [ application.notes.presence, format(NOTE_ENTRY, on: on.iso8601, note: note) ].compact.join("\n\n") if note
+    application.comp_expectation = pay if pay
+    return unless application.changed?
+
+    said = [ ("a note added" if application.notes_changed?), ("its pay expectation set" if application.comp_expectation_changed?) ]
+    ApplicationRecord.transaction do
+      application.save!
+      AuditEvent.record_write!(application, actor: actor,
+                                            reasoning: "#{said.compact.join(' and ').upcase_first} on the operator's word. #{reason.to_s.strip}".strip)
     end
     application
   end

@@ -6,6 +6,6 @@
                              id: [ contact.id, "contact_kind" ].compact.join("_") %></label>
   <label>Email <%= form.email_field :email, value: contact.email, placeholder: "optional", autocomplete: "off" %></label>
   <label>LinkedIn <%= form.url_field :linkedin_url, value: contact.linkedin_url, placeholder: "optional", autocomplete: "off" %></label>
-  <label class="wide">Notes <%= form.text_area :notes, value: contact.notes, rows: 2, maxlength: 2_000, placeholder: "How you met, what they care about" %></label>
+  <label class="wide">Notes <%= form.text_area :notes, id: nil, value: contact.notes, rows: 2, maxlength: 2_000, placeholder: "How you met, what they care about" %></label>
   <%= form.submit submit, class: "btn primary small" %>
 <% end %>

@@ -49,6 +49,9 @@ module Authority
     run.kind == "company" && run.request == { "read" => "board" } && run.ceiling_usd.to_d.zero? &&
       run.requested_by == "agent:assistant" && run.status == "queued" && run.company&.tracked?
   end
+  # An application's notes as the operator's own client may leave them (4f): beginning with what was there, so a note is
+  # only ever added after it, never in its place. Notes left as they were pass (the pay expectation alone set).
+  NOTES_GROW = ->(application) { application.notes.to_s.start_with?(application.notes_in_database.to_s) }
   # A draft as the drafter wrote it: not approved, and not edited (Stage 2c).
   AS_WRITTEN = lambda do |draft|
     draft.status == "draft" && draft.approved_at.nil? && draft.edited_at.nil? && !draft.edited?
@@ -176,6 +179,14 @@ module Authority
              "or delete one.",
       rules: [ Rule.new(model: "CompanyReview", actions: %i[create], only_if: ->(review) { review.written_by == "agent:assistant" }) ]
     },
+    # 4f: an application's notes and pay expectation, on the operator's word: a note added after theirs, never in its
+    # place; the pay expectation set, or replaced, when they say. An application's stage stays theirs alone.
+    "applications:note" => {
+      about: "On the operator's word, with their reason: add a dated note after an application's notes, never in place " \
+             "of what is there, and set its pay expectation, replacing the one before. Never its stage, nor anything " \
+             "else of an application.",
+      rules: [ Rule.new(model: "Application", actions: %i[update], attributes: %w[notes comp_expectation], only_if: NOTES_GROW) ]
+    },
     "watchlist:curate" => {
       about: "On the operator's word, with their reason: track or archive a role or a company, add a role to a company " \
              "they track (tracked, its title given, never checked), or change a role's own page at the employer; and, on " \
@@ -227,12 +238,12 @@ module Authority
                                   "contacts, activities, the roles and companies it proposes, the fit it weighs, its reviews " \
                                   "of companies, the company preferences it is told, and what it recommends on the review " \
                                   "queue), and curates the watch list on the operator's word (tracks " \
-                                  "or archives roles and companies, adds a role, changes a role's own page), one credential per " \
-                                  "call holding only that tool's scopes. Decides, approves, deletes, moves a stage, and sends " \
-                                  "nothing.",
+                                  "or archives roles and companies, adds a role, changes a role's own page) and, on their word " \
+                                  "too, adds to an application's notes and sets its pay expectation, one credential per call " \
+                                  "holding only that tool's scopes. Decides, approves, deletes, moves a stage, and sends nothing.",
                            scopes: %w[drafts:write resume_reviews:write contacts:write activities:write postings:suggest fit:write
                                       review:recommend watchlist:curate companies:suggest company_reviews:write
-                                      company_preferences:write] }
+                                      company_preferences:write applications:note] }
   }.freeze
 
   # Bookkeeping worked out from the record, not an agent's judgment: a grant fixed in code, never a token.

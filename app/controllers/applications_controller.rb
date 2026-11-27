@@ -73,6 +73,9 @@ class ApplicationsController < ApplicationController
     @company_review = CompanyReviews.newest(@application.company)
     @profile = SearchProfile.current
     @history = RecordHistory.for(@application).order(occurred_at: :desc).includes(:credential)
+    # When the AI assistant last added to its notes or set its pay expectation (4f), said on the Notes tab.
+    @assistant_noted = @application.audit_events.where(actor: "agent:assistant", action: "update")
+                                   .where("changes_made ?| array['notes', 'comp_expectation']").maximum(:occurred_at)
   end
 
   def find_application
