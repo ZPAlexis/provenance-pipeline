@@ -432,6 +432,10 @@ def main(argv: list[str] | None = None) -> int:
     check = commands.add_parser("check", parents=[common], help="check one tracked role per target, its own page first")
     for command in (match, verify, check):
         command.add_argument("--no-llm", action="store_true", help="leave near-misses undecided")
+    for command in (verify, check):
+        command.add_argument(
+            "--free", action="store_true", help="call no LLM: pages that need reading are left unread, near-misses open"
+        )
     commands.add_parser("boards", parents=[common], help="find free boards listing the same roles as LLM-read pages")
     commands.add_parser("suggest", parents=[common], help="weigh stored roles against a search profile")
     commands.add_parser("related", parents=[common], help="propose titles in the same area as a profile's")
@@ -499,8 +503,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{summary.targets}/{len(targets)} roles weighed, est. ${summary.cost_usd:.4f}", file=sys.stderr)
         return _exit_code(summary)
 
-    from verifier.extract import LlmExtractor, LlmLinkPicker, LlmMatcher, LlmTitleProposer
+    from verifier.extract import FreeExtractor, LlmExtractor, LlmLinkPicker, LlmMatcher, LlmTitleProposer
     from verifier.match import Matcher
+
+    # A free check (4f): no LLM anywhere in it. Pages only a reader can list are left unread, and say so.
+    free = getattr(args, "free", False)
 
     if args.command == "related":
         # Nothing is fetched: one LLM call per profile.
@@ -535,7 +542,7 @@ def main(argv: list[str] | None = None) -> int:
                 http=http,
                 robots=RobotsPolicy(http),
                 throttle=HostThrottle(args.delay),
-                extractor=LlmExtractor(model=llm_model),
+                extractor=FreeExtractor() if free else LlmExtractor(model=llm_model),
             )
             if args.command == "resolve":
                 resolver = Resolver(ServicesReader(services), link_picker=LlmLinkPicker(model=llm_model))
@@ -550,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "portfolio":
                 summary = run_portfolio(targets, args.out, services)
             elif args.command in ("verify", "check"):
-                matcher = Matcher(adjudicator=None if args.no_llm else LlmMatcher(model=llm_model))
+                matcher = Matcher(adjudicator=None if args.no_llm or free else LlmMatcher(model=llm_model))
                 run_command = run_verify if args.command == "verify" else run_check
                 summary = run_command(targets, args.out, services, matcher)
             else:

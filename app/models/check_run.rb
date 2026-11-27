@@ -59,14 +59,15 @@ class CheckRun < ApplicationRecord
   def self.in_process_queue? = CheckNowJob.queue_adapter.is_a?(ActiveJob::QueueAdapters::AsyncAdapter)
 
   # The check of a role or a company already under way, or a new one queued, with
-  # what it could cost: one at a time per role and per company.
+  # what it could cost: one at a time per role and per company. With no API key set it is a free check (4f).
   def self.start_for!(record, requested_by: AuditEvent::OPERATOR)
     abandon_stale!
     role = record.is_a?(Posting)
     runs = role ? where(posting: record, kind: "role") : where(company: record, kind: "company")
     runs.active.first || create!(
       kind: role ? "role" : "company", company: role ? record.company : record, posting: (record if role),
-      requested_by: requested_by, ceiling_usd: Verifier::CheckNow.ceiling(record)
+      requested_by: requested_by, ceiling_usd: Verifier::CheckNow.ceiling(record),
+      request: Verifier::CheckNow.free_only? ? { "mode" => "free" } : {}
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
@@ -81,6 +82,9 @@ class CheckRun < ApplicationRecord
 
   # The read of a proposal's board on tracking it (4b), not a check of its roles.
   def board_read? = kind == "company" && request["read"] == "board"
+
+  # A free check (4f): no AI anywhere in it. Asked for as one, or run so because no API key is set.
+  def free? = request["mode"] == "free"
 
   # A role's description read (2b), or the read already under way: free, so no ceiling.
   def self.start_describe!(posting, requested_by: AuditEvent::OPERATOR)
@@ -129,11 +133,14 @@ class CheckRun < ApplicationRecord
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 
-  # Everything checked at once, or the run already under way: one at a time.
-  def self.start_all!(requested_by: AuditEvent::OPERATOR)
+  # Everything checked at once, or the run already under way: one at a time. `free` (4f): no AI anywhere, the pages
+  # that need reading left for the operator's own AI assistant; every check is free when no API key is set.
+  def self.start_all!(requested_by: AuditEvent::OPERATOR, free: false)
     abandon_stale!
+    free ||= Verifier::CheckNow.free_only?
     where(kind: "all").active.first || create!(
-      kind: "all", requested_by: requested_by, ceiling_usd: Verifier::CheckAll.plan.ceiling
+      kind: "all", requested_by: requested_by, ceiling_usd: free ? 0 : Verifier::CheckAll.plan.ceiling,
+      request: free ? { "mode" => "free" } : {}
     ).tap { |run| CheckNowJob.perform_later(run) }
   end
 

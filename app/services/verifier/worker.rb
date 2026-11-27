@@ -58,9 +58,17 @@ module Verifier
 
     attr_reader :run_dir
 
+    # The commands that can run as a free check (4f): a page only the LLM could list is left unread and says so
+    # (needs_reading), and near-misses stay undecided, instead of the run stopping.
+    FREE_CHECKS = %w[verify check].freeze
+
+    # Whether an API key is set for the worker at all (4f): without one, every check runs free.
+    def self.credential_set?(credential_file: CREDENTIAL_FILE) = new(run_dir: Rails.root.join("tmp"), credential_file:).credential?
+
     # `free: true` starts the worker with no API key at all, whatever the file holds or the shell has: nothing it
-    # runs can reach the LLM, so the run costs nothing by construction (4b: the read on tracking a proposal). A step
-    # that would need the LLM stops the run instead, as a missing key does.
+    # runs can reach the LLM, so the run costs nothing by construction (4b: the read on tracking a proposal). A check
+    # (FREE_CHECKS) runs as a free check, leaving what needs reading (4f); any other step that would need the LLM
+    # stops the run instead, as a missing key does.
     def initialize(run_dir:, model: nil, credential_file: CREDENTIAL_FILE, process: Process, free: false)
       @run_dir = Pathname.new(run_dir)
       @model = model
@@ -74,6 +82,10 @@ module Verifier
     end
 
     def free? = @free
+
+    # Never the key: a failing spec's diff, a log line or a console prints a worker by its inspect (found 2026-11-27,
+    # when a spec's failure printed one, key and all).
+    def inspect = "#<#{self.class.name} run_dir=#{@run_dir} model=#{@model.inspect} free=#{@free}>"
 
     # extract: targets are [{ id:, url:, label:, domain:, name: }], one PageResult each.
     # resolve: targets are [{ id:, label:, domain:, name:, known_url: }], one ResolutionResult each.
@@ -132,7 +144,7 @@ module Verifier
     def command_line(command, targets_path, results_path, flags)
       [ "uv", "run", "--quiet", "verifier", command,
         "--targets", targets_path.to_s, "--out", results_path.to_s,
-        *([ "--model", @model ] if @model), *flags ]
+        *([ "--model", @model ] if @model), *flags, *("--free" if @free && FREE_CHECKS.include?(command)) ]
     end
 
     # A nil value unsets the variable in the worker's environment.

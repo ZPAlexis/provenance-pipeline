@@ -17,6 +17,7 @@ from playwright.sync_api import Browser
 from verifier import ats
 from verifier.config import LISTINGS_MAX_AGE_DAYS, MAX_PAGES
 from verifier.contract import AtsBoard, Listing, PageResult, PreviousRead, Target
+from verifier.errors import NeedsReading
 from verifier.extract import ExtractionFailed, Extractor, input_truncated, link_url
 from verifier.links import link_key, link_prefix
 from verifier.politeness import HostThrottle
@@ -142,6 +143,10 @@ def check_page(
 
     try:
         extraction, usage = services.extractor.extract(page)
+    except NeedsReading as error:
+        # A free check (4f): the page was opened, and its roles are left for a reader; nothing was billed.
+        why = "Not read: its roles need reading, and a free check calls no AI."
+        return finish(outcome="error", reason=error.reason, method="render", ats=board, notes=why, **seen)
     except ExtractionFailed as error:
         return finish(outcome="error", reason=error.reason, method="render+llm", ats=board, llm=error.usage, **seen)
 

@@ -3,11 +3,16 @@ namespace :verifier do
   # results name real companies from the private target list.
   run_dir = ->(name) { Verifier::Worker.dir_for(name) }
 
-  # A name for a new timestamped run directory, or a directory to use as is.
-  build_worker = lambda do |name_or_dir|
+  # A free check (4f): asked for with FREE=1, or run so when no API key is set. No AI anywhere: a page that needs
+  # reading is left for the operator's own AI assistant (verifier:to_read lists them), near-misses stay undecided.
+  free_check = -> { ENV["FREE"].present? || Verifier::CheckNow.free_only? }
+  free_said = "A free check: no AI. A page that needs reading is left for your AI assistant (verifier:to_read lists them)."
+
+  # A name for a new timestamped run directory, or a directory to use as is. `free`: a free check's worker.
+  build_worker = lambda do |name_or_dir, free: false|
     dir = name_or_dir.is_a?(Pathname) ? name_or_dir : run_dir.call(name_or_dir)
-    worker = Verifier::Worker.new(run_dir: dir, model: ENV["MODEL"].presence)
-    unless worker.credential?
+    worker = Verifier::Worker.new(run_dir: dir, model: ENV["MODEL"].presence, free:)
+    unless free || worker.credential?
       puts "Note: no API key in #{Verifier::Worker::CREDENTIAL_FILE}. Pages on a known ATS still work;"
       puts "any page that needs the LLM will stop the run."
     end
@@ -267,8 +272,9 @@ namespace :verifier do
     end
 
     found = company.resolution_status == "resolved" ? "Reading its careers page" : "Finding its careers page and reading it"
-    puts format("#{found}: at most about $%.2f.", Verifier::CheckNow.ceiling(company))
-    outcome = Verifier::CheckNow.company(company, worker: build_worker.call("verify"), finder: build_worker.call("resolve"))
+    free = free_check.call
+    puts free ? free_said : format("#{found}: at most about $%.2f.", Verifier::CheckNow.ceiling(company))
+    outcome = Verifier::CheckNow.company(company, worker: build_worker.call("verify", free:), finder: build_worker.call("resolve"), free:)
     report_check.call(outcome, company.name)
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
@@ -308,9 +314,10 @@ namespace :verifier do
       abort why
     end
 
+    free = free_check.call
     ceiling = Verifier::CheckNow.ceiling(posting)
-    puts format("Checking it: its own page first; at most about $%.2f.", ceiling) if ceiling.positive?
-    outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check"), finder: build_worker.call("resolve"))
+    puts free ? free_said : format("Checking it: its own page first; at most about $%.2f.", ceiling) if free || ceiling.positive?
+    outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check", free:), finder: build_worker.call("resolve"), free:)
     report_check.call(outcome, "#{posting.company.name} / #{posting.reload.role_title}")
   rescue ArgumentError, ActiveRecord::RecordInvalid => e
     abort e.message.upcase_first
@@ -492,7 +499,8 @@ namespace :verifier do
   desc "Check all tracked companies, as the Roles page does: each one's watched page read, the verdicts on its postings " \
        "recorded, and suggestions brought up to date. Shows the plan and its estimated cost; runs only with GO=1, " \
        "backing up first. RESULTS=dir records a passing Test B run's reads instead of reading those pages again. " \
-       "[COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1]"
+       "FREE=1 (or no API key set) calls no AI: the pages that need reading are left for your AI assistant. " \
+       "[COMPANY=name] [LIMIT=n] [MODEL=...] [NO_LLM=1] [FREE=1]"
   task verify: :environment do
     # Every tracked company (4e), a role on record or not, as the Roles page's check reads them.
     companies = select_companies.call(Verifier::CheckAll.companies).to_a
@@ -526,9 +534,15 @@ namespace :verifier do
          "#{" (#{plan.without_roles} with no role on record yet, read for new ones)" if plan.without_roles.positive?}."
     puts "  #{plan.via_board} read through a confirmed board (free); #{plan.reusable} have earlier reads to reuse where " \
          "their role links are unchanged (free when they are, a full read every 14 days)."
-    puts format("Estimated cost: #{plan.known_cost? ? 'at most' : 'about'} $%.2f, what these pages cost when last read in full" \
-                "#{" (#{plan.unread} never read, priced at an average list: a long list costs more)" if plan.unread.positive?}; less for every page " \
-                "whose roles are unchanged, plus about a cent for near-miss checks.", plan.ceiling)
+    free = free_check.call
+    if free
+      puts "#{free_said} Up to #{plan.to_read} companies' pages may be left unread: those whose roles changed, or were " \
+           "last read in full more than 14 days ago."
+    else
+      puts format("Estimated cost: #{plan.known_cost? ? 'at most' : 'about'} $%.2f, what these pages cost when last read in full" \
+                  "#{" (#{plan.unread} never read, priced at an average list: a long list costs more)" if plan.unread.positive?}; less for every page " \
+                  "whose roles are unchanged, plus about a cent for near-miss checks.", plan.ceiling)
+    end
     next puts("\nNothing run. Run it with GO=1.") unless ENV["GO"].present?
 
     # From here on, verdicts are written: back up first.
@@ -540,10 +554,10 @@ namespace :verifier do
     record = ->(results, run_id) { Verifier::CheckAll.record(results, run_id, tally, invalid) }
 
     # The run's credential: verdicts and the evidence behind them, nothing else.
-    Authority.run(Verifier::Ingest::ACTOR, scopes: Verifier::CheckAll::SCOPES, purpose: "verifier:verify",
+    Authority.run(Verifier::Ingest::ACTOR, scopes: Verifier::CheckAll::SCOPES, purpose: "verifier:verify#{' (free)' if free}",
                                          ttl: Authority::BATCH) do
       saved.group_by(&:first).each { |run_id, pairs| record.call(pairs.map(&:last), run_id) }
-      run = build_worker.call("verify").run(targets, command: "verify", flags: flags) if targets.any?
+      run = build_worker.call("verify", free:).run(targets, command: "verify", flags: flags) if targets.any?
       record.call(run.results, run.id) if run
     end
 
@@ -556,6 +570,8 @@ namespace :verifier do
       Array(r["checks"]).sum { |check| check.dig("llm", "cost_usd").to_f } + r.dig("match_llm", "cost_usd").to_f
     end
     puts "Cost of the pages read now: est. $#{format('%.4f', cost)}#{"   (details: #{run.dir})" if run}"
+    left = Verifier::PagesToRead.left_by(run&.results)
+    puts "#{left} #{'page'.pluralize(left)} left unread: they need reading (verifier:to_read lists them)." if left.positive?
     report_stop.call(run) if run
 
     # A role whose own page a check moved has its description read again from the new page, free (4e).
@@ -567,6 +583,18 @@ namespace :verifier do
       refresh = Verifier::Suggestions.refresh!(companies)
       puts refresh.summary
       refresh.problems.each { |problem| puts "  #{problem}" }
+    end
+  end
+
+  desc "The careers pages a free check left unread (4f): each tracked company's page that needs reading, oldest " \
+       "first, for your AI assistant to read, or a check with the app's AI. Reads the record only."
+  task to_read: :environment do
+    pages = Verifier::PagesToRead.list
+    next puts("No page is waiting to be read: every tracked company's list was read at its latest check.") if pages.empty?
+
+    puts "#{pages.size} #{'page'.pluralize(pages.size)} left unread, oldest first:"
+    pages.each do |page|
+      puts "  #{page.company.name} (#{page.company.id}): #{page.url}, left #{page.since.utc.strftime('%Y-%m-%d %H:%M')} UTC"
     end
   end
 
@@ -599,7 +627,8 @@ namespace :verifier do
   end
 
   desc "Check one role now: its own page at the employer first, then its company's careers page. Records the " \
-       "verdict like any check; backs up first. Usage: bin/rails \"verifier:check[posting_id]\" [MODEL=...]"
+       "verdict like any check; backs up first. FREE=1 (or no API key set) calls no AI, leaving a page that needs " \
+       "reading for your AI assistant. Usage: bin/rails \"verifier:check[posting_id]\" [MODEL=...] [FREE=1]"
   task :check, [ :id ] => :environment do |_task, args|
     posting = Posting.includes(:company).find_by(id: args[:id]) or
       abort "No posting #{args[:id].inspect}. Its id is in verifier:status."
@@ -609,10 +638,15 @@ namespace :verifier do
 
     puts "Checking #{posting.company.name} / #{posting.role_title}: " \
          "#{posting.job_url ? "its own page first, #{posting.job_url}" : 'no page of its own on record'}."
+    free = free_check.call
     ceiling = Verifier::CheckNow.ceiling(posting)
-    puts format("At most about $%.2f, if its careers page has changed and must be read again.", ceiling) if ceiling.positive?
+    if free
+      puts free_said
+    elsif ceiling.positive?
+      puts format("At most about $%.2f, if its careers page has changed and must be read again.", ceiling)
+    end
     puts "Backed up to #{DatabaseBackup.call}"
-    outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check"))
+    outcome = Verifier::CheckNow.role(posting, worker: build_worker.call("check", free:), free:)
 
     answer = { "verified_live" => "STILL LISTED", "not_found" => "NO LONGER LISTED" }.fetch(outcome.answer, "COULDN'T CONFIRM")
     puts "\n#{posting.role_title}: #{outcome.finished? ? answer : 'STOPPED'}"

@@ -9,8 +9,9 @@ module Verifier
     # What a run would read, and the most it could cost, from the record: a page read
     # through its confirmed board is free; a page whose role links are unchanged
     # reuses its earlier read for nothing; any other costs what it cost when last
-    # read in full, or an average read when it never was.
-    Plan = Data.define(:targets, :via_board, :reusable, :ceiling, :unread) do
+    # read in full, or an average read when it never was. A free check (4f) pays for none: `to_read` is how many
+    # companies' pages it may leave for the operator's own AI assistant (those not reused, their roles changed).
+    Plan = Data.define(:targets, :via_board, :reusable, :ceiling, :unread, :to_read) do
       def companies = targets.size
 
       def roles = targets.sum { |target| target[:postings].size }
@@ -57,20 +58,21 @@ module Verifier
       known = paid.to_h { |target| [ target[:id], Targets.full_read_cost(by_id[target[:id]]) ] }
       Plan.new(targets: targets, via_board: targets.count { |target| target[:board] },
                reusable: paid.count { |target| target[:previous].any? },
-               ceiling: known.values.sum { |cost| cost || per_page }, unread: known.values.count(&:nil?))
+               ceiling: known.values.sum { |cost| cost || per_page }, unread: known.values.count(&:nil?), to_read: paid.size)
     end
 
     # Runs it for `check_run`, whose run id and size are kept from the start so
-    # the page can show its progress. Backs up first: it writes many verdicts.
-    def run!(check_run, worker: Worker.new(run_dir: Worker.dir_for("verify")))
+    # the page can show its progress. Backs up first: it writes many verdicts. A free check (4f) calls no AI: the
+    # pages that need reading are left for the operator's own AI assistant (PagesToRead), and the summary says how many.
+    def run!(check_run, worker: Worker.new(run_dir: Worker.dir_for("verify"), free: check_run.free?))
       list = companies.to_a
       targets = plan(list).targets
       check_run.update!(run_id: worker.run_dir.basename.to_s, total: targets.size)
       DatabaseBackup.call
       tally = Hash.new(0)
       invalid = []
-      run = Authority.run(Ingest::ACTOR, scopes: SCOPES, purpose: "check all tracked companies", ttl: Authority::BATCH,
-                                         issued_by: check_run.requested_by) do
+      run = Authority.run(Ingest::ACTOR, scopes: SCOPES, purpose: "check all tracked companies#{' (free)' if check_run.free?}",
+                                         ttl: Authority::BATCH, issued_by: check_run.requested_by) do
         worker.run(targets, command: "verify").tap { |done| record(done.results, done.id, tally, invalid) }
       end
       refresh = Suggestions.refresh!(list) if SearchProfile.current
@@ -90,11 +92,14 @@ module Verifier
 
     def summary(run, tally, invalid, refresh)
       count = run.results.size - invalid.size
-      read = "#{count} #{'company'.pluralize(count)} read#{" (stopped: #{run.stopped})" if run.stopped}."
+      left = PagesToRead.left_by(run.results)
+      read = "#{count} #{'company'.pluralize(count)} #{left.positive? ? 'checked' : 'read'}#{" (stopped: #{run.stopped})" if run.stopped}."
       verdicts = "Verdicts: #{tally[:written]} changed, #{tally[:unchanged]} confirmed, " \
                  "#{tally[:inconclusive]} without an answer."
       contract = ("#{invalid.size} not recorded: they break the result contract." if invalid.any?)
-      [ read, verdicts, contract, refresh&.summary ].compact.join(" ")
+      unread = ("#{left} #{'page'.pluralize(left)} left unread: #{left == 1 ? 'it needs' : 'they need'} reading, which a free " \
+                "check leaves for your AI assistant." if left.positive?)
+      [ read, verdicts, unread, contract, refresh&.summary ].compact.join(" ")
     end
 
     def cost(results)

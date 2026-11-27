@@ -134,7 +134,7 @@ agent_credentials  actor, scopes, token_digest, purpose, issued_by (who asked
 
 check_runs    kind (role | company | all | describe | draft | review | fit |
               links), company_id, posting_id, request (jsonb: what a draft,
-              review or fit was asked for), status (queued | running | done |
+              review or fit was asked for; mode free for a free check, 4f), status (queued | running | done |
               failed), requested_by (the operator, or their AI assistant: the
               dashboard's "Asked by"), ceiling_usd, answer, summary, tally (jsonb),
               cost_usd, run_id, total, error, started_at, finished_at

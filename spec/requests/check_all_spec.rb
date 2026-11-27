@@ -31,6 +31,31 @@ RSpec.describe "Check all tracked companies", type: :request do
                                      "Lists last read: 1 more than 14 days ago, the oldest", "1 never", "data-turbo-confirm")
   end
 
+  # 4f: a free check beside it, no AI anywhere; the only one with no API key set; and the pages a free check left unread.
+  it "offers a free check beside it, starts one as asked, and lists the pages it left unread" do
+    get check_all_path
+    expect(response.body).to include("Check all tracked companies", "Check free", "up to\n            1 company' pages", "left for your AI assistant")
+
+    expect { post check_all_path, params: { mode: "free" } }.to have_enqueued_job(CheckNowJob)
+    expect(CheckRun.sole).to have_attributes(request: { "mode" => "free" }, ceiling_usd: 0)
+    expect(flash[:notice]).to start_with("A free check of all tracked companies")
+
+    CheckRun.sole.update!(status: "done", finished_at: Time.current, summary: "1 company read.")
+    create(:page_check, company: company, purpose: "verification", step: nil, url: company.careers_page_url, outcome: "error",
+                        reason: "needs_reading", read_via: "render", checked_at: 1.hour.ago)
+    get check_all_path
+    expect(response.body).to include("1 page left unread by a free check: it needs", "acme.example/…", "left <time", "about 1 hour ago</time>")
+  end
+
+  it "offers only the free check when no API key is set, and runs every check free" do
+    without_api_key
+    get check_all_path
+    expect(response.body).to include("Free: no API key is set").and not_include("Check free", "data-turbo-confirm=\"Check all tracked companies:")
+
+    post check_all_path
+    expect(CheckRun.sole).to have_attributes(request: { "mode" => "free" }, ceiling_usd: 0)
+  end
+
   it "says when there is nothing to check" do
     company.update!(tracking: "dismissed")
     get check_all_path

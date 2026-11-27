@@ -26,6 +26,17 @@ RSpec.describe "verifier: and postings: commands" do
     expect(company.reload.name).to eq("Acme Labs")
   end
 
+  # 4f: the pages a free check left unread, for the AI assistant to read.
+  it "lists the pages a free check left unread, oldest first" do
+    expect(run_task("verifier:to_read").out).to start_with("No page is waiting to be read")
+
+    create(:page_check, company: company, purpose: "verification", step: nil, url: company.careers_page_url, outcome: "error",
+                        reason: "needs_reading", read_via: "render", checked_at: Time.utc(2026, 11, 27, 12))
+
+    expect(run_task("verifier:to_read").out).to eq("1 page left unread, oldest first:\n" \
+                                                   "  Acme (#{company.id}): #{company.careers_page_url}, left 2026-11-27 12:00 UTC\n")
+  end
+
   # 4a: a company archived with its roles in play, and tracked again with them, each refusal before the backup.
   it "archives a company with its roles, and tracks it again with them, refusing before the backup" do
     expect(run_task("verifier:dismiss_company", company.id).aborted).to eq('Say why: NOTE="..." becomes the audit reasoning.')
@@ -90,7 +101,7 @@ RSpec.describe "verifier: and postings: commands" do
 
     expect(checked.out).to include("Checking Acme / Sales Engineer: its own page first, https://acme.example/jobs/1.",
                                    "Sales Engineer: STILL LISTED", "Its own page is up and shows the role.", "Cost: est. $0.0000")
-    expect(Verifier::CheckNow).to have_received(:role).with(role, worker: an_instance_of(Verifier::Worker))
+    expect(Verifier::CheckNow).to have_received(:role).with(role, worker: an_instance_of(Verifier::Worker), free: false)
     expect(run_task("verifier:check", "nope").aborted).to start_with('No posting "nope"')
   end
 

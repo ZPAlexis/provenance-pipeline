@@ -14,7 +14,14 @@ module Verifier
     FINDING = %w[companies:enrich evidence:write].freeze
     CHECKING = %w[postings:verify evidence:write].freeze
 
+    # What a check says of a page it left unread, a free check calling no AI (4f).
+    LEFT_UNREAD = "its careers page needs reading, which a free check leaves for your AI assistant".freeze
+
     module_function
+
+    # Whether every check is a free one (4f): no API key is set, so nothing can reach the AI. A page that needs reading
+    # is left for the operator's own AI assistant, and a careers page is never searched for (that takes the AI).
+    def free_only? = !Worker.credential_set?
 
     # Why a role or company cannot be checked now; nil when it can.
     def refusal(record)
@@ -31,6 +38,9 @@ module Verifier
         "#{company.name} has a careers page waiting for you: confirm, reject, or set it first."
       elsif Resolution.anonymised?(company)
         "#{company.name} is not a company: the employer is withheld."
+      elsif company.resolution_status != "resolved" && free_only?
+        "#{company.name} has no careers page on record, and finding one takes the app's AI: no API key is set. Set it " \
+          "by hand on its page."
       end
     end
 
@@ -40,6 +50,8 @@ module Verifier
     # page costs on average when it has none yet. A free board costs nothing, nor (4e) a watched page on an ATS board,
     # read never before or not.
     def ceiling(record)
+      return 0.0 if free_only? # nothing can reach the AI (4f)
+
       company = record.is_a?(Posting) ? record.company : record
       # A role added without a title, on the company's own site, may need one LLM read of its page to be named.
       naming = record.is_a?(Posting) && record.title_pending? && !Capture.board(record.job_url.to_s) ? average_read : 0.0
@@ -53,6 +65,7 @@ module Verifier
     # read free, or for nothing when last read in full, and the role named with no AI read (its title given, or its own
     # page on an ATS). An estimate of nothing, from a record with no reads to average, is not enough.
     def free?(record)
+      return true if free_only?
       return false if record.is_a?(Posting) && record.title_pending? && !Capture.board(record.job_url.to_s)
 
       known_cost?(record) && ceiling(record).zero?
@@ -84,25 +97,40 @@ module Verifier
     end
 
     # `issued_by` (4e step 12): who asked for the check, recorded on each credential its runs hold: the operator, or
-    # their AI assistant (only ever for a free board read, on their word).
-    def role(posting, worker: Worker.new(run_dir: Worker.dir_for("check")), finder: nil, issued_by: AuditEvent::OPERATOR)
-      with_page(posting.company, finder, issued_by:) do
+    # their AI assistant (only ever for a free board read, on their word). `free` (4f): a free check, calling no AI; a
+    # page that needs reading is left for the operator's own AI assistant.
+    def role(posting, worker: nil, finder: nil, issued_by: AuditEvent::OPERATOR, free: false)
+      worker ||= Worker.new(run_dir: Worker.dir_for("check"), free:)
+      with_page(posting.company, finder, issued_by:, free:) do
         start = -> { worker.run([ Targets.check(posting) ], command: "check") }
-        record(start, purpose: "check now: #{posting.role_title} at #{posting.company.name}", issued_by:) do |result, verdicts|
+        record(start, purpose: "check now: #{posting.role_title} at #{posting.company.name}#{' (free)' if free}", issued_by:) do |result, verdicts|
           verdict = verdicts.first
-          [ verdict&.dig("verdict"), verdict ? verdict["reasoning"] : "The check failed (#{result['reason']}); nothing was written." ]
+          [ verdict&.dig("verdict"), verdict ? verdict["reasoning"] : "#{unread(result) || "The check failed (#{result['reason']})"}; nothing was written." ]
         end
       end
     end
 
-    def company(company, worker: Worker.new(run_dir: Worker.dir_for("verify")), finder: nil, issued_by: AuditEvent::OPERATOR)
-      with_page(company, finder, issued_by:) { read_list(company, worker, issued_by:) }
+    def company(company, worker: nil, finder: nil, issued_by: AuditEvent::OPERATOR, free: false)
+      worker ||= Worker.new(run_dir: Worker.dir_for("verify"), free:)
+      with_page(company, finder, issued_by:, free:) { read_list(company, worker, issued_by:, free:) }
+    end
+
+    # What a result left unread for a reader (4f), said as a sentence; nil when it left nothing.
+    def unread(result)
+      left = PagesToRead.left_by([ result ])
+      return if left.zero?
+
+      left == 1 ? LEFT_UNREAD.upcase_first : "#{left} pages of its careers page need reading, which a free check leaves for your AI assistant"
     end
 
     # The check, once the company has a watched page: found first when it has none
     # (one just added, say), and the check said after what finding it found.
-    def with_page(company, finder, issued_by: AuditEvent::OPERATOR)
+    def with_page(company, finder, issued_by: AuditEvent::OPERATOR, free: false)
       return yield if company.resolution_status == "resolved"
+      if free # finding a careers page takes the AI
+        return Outcome.new(summary: "#{company.name} has no careers page on record, and a free check doesn't look for one: " \
+                                    "set it by hand on its page.", tally: {}, cost_usd: 0.0, stopped: "no careers page")
+      end
 
       found = find_page(company, finder || Worker.new(run_dir: Worker.dir_for("resolve")), issued_by:)
       return found unless company.resolution_status == "resolved"
@@ -144,11 +172,16 @@ module Verifier
       Outcome.new(summary: summary, tally: {}, cost_usd: cost(result), run_id: run.id, run_dir: run.dir, stopped: run.stopped)
     end
 
-    def read_list(company, worker, issued_by: AuditEvent::OPERATOR)
+    def read_list(company, worker, issued_by: AuditEvent::OPERATOR, free: false)
       start = -> { worker.run([ Targets.verify(company) ], command: "verify") }
-      record(start, purpose: "check now: #{company.name}", issued_by:) do |result, verdicts|
+      record(start, purpose: "check now: #{company.name}#{' (free)' if free}", issued_by:) do |result, verdicts|
         found = verdicts.map { |v| v["verdict"] || "inconclusive" }.tally
-        read = result["outcome"] == "ok" ? "#{result['listing_count']} roles read#{', the whole list' if result['complete']}" : "Not read (#{result['reason']})"
+        left = unread(result)
+        read = if result["outcome"] == "ok"
+          "#{result['listing_count']} roles read#{', the whole list' if result['complete']}#{"; #{left.downcase_first}" if left}"
+        else
+          left ? "Not read: #{left.downcase_first}" : "Not read (#{result['reason']})"
+        end
         roles = found.map { |state, count| "#{count} #{Posting::ANSWER_LABELS.fetch(state, 'no answer').downcase}" }
         [ nil, [ "#{read}.", roles.any? ? "Roles on record: #{roles.join(', ')}." : "No role on record here yet." ].join(" ") ]
       end

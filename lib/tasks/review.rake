@@ -2,13 +2,14 @@ namespace :review do
   # From the command line a check runs now, in the foreground: there is no server to run it in the background.
   foreground_check = lambda do |item|
     lambda do |record|
-      build = ->(name) { Verifier::Worker.new(run_dir: Verifier::Worker.dir_for(name)) }
+      free = Verifier::CheckNow.free_only? # no API key set: a free check (4f)
+      build = ->(name) { Verifier::Worker.new(run_dir: Verifier::Worker.dir_for(name), free:) }
       ceiling = Verifier::CheckNow.ceiling(record)
       puts format("Checking it now: at most about $%.2f.", ceiling) if ceiling.positive?
       outcome = if record.is_a?(Posting)
-        Verifier::CheckNow.role(record, worker: build.call("check"), finder: build.call("resolve"))
+        Verifier::CheckNow.role(record, worker: build.call("check"), finder: build.call("resolve"), free:)
       else
-        Verifier::CheckNow.company(record, worker: build.call("verify"), finder: build.call("resolve"))
+        Verifier::CheckNow.company(record, worker: build.call("verify"), finder: build.call("resolve"), free:)
       end
       format("%s%s Cost: est. $%.4f. The item is %s.   (details: %s)", outcome.finished? ? "" : "Stopped. ", outcome.summary,
              outcome.cost_usd, item.reload.status == "open" ? "still open" : "closed", outcome.run_dir)

@@ -37,7 +37,8 @@ RSpec.describe Verifier::CheckAll do
       read = create(:page_check, company: company, purpose: "verification", step: nil, url: company.careers_page_url)
       create(:llm_call, page_check: read, cost_usd: 0.02)
 
-      expect(described_class.plan).to have_attributes(companies: 3, roles: 2, without_roles: 1, via_board: 1, reusable: 1, ceiling: 0.04)
+      expect(described_class.plan).to have_attributes(companies: 3, roles: 2, without_roles: 1, via_board: 1, reusable: 1, ceiling: 0.04,
+                                                      to_read: 2) # 4f: the pages a free check may leave for the AI assistant
     end
   end
 
@@ -61,6 +62,28 @@ RSpec.describe Verifier::CheckAll do
       expect(AuditEvent.find_by!(target: role, action: "update").credential.reload).to have_attributes(
         purpose: "check all tracked companies", scopes: %w[postings:verify evidence:write], issued_by: "human:operator", status: "revoked"
       )
+    end
+
+    # 4f: a free check calls no AI. A page that needs reading is left unread, no verdict written, and the run says so.
+    it "runs a free check with a free worker, writing no verdict from a page left unread, and says how many it left" do
+      check_run = create(:check_run, kind: "all", company: nil, request: { "mode" => "free" })
+      unread = { "kind" => "verification", "target_id" => company.id, "url" => company.careers_page_url, "outcome" => "error",
+                 "reason" => "needs_reading", "complete" => false, "verdicts" => [],
+                 "checks" => [ { "url" => company.careers_page_url, "checked_at" => "2026-11-27T12:00:00+00:00", "outcome" => "error",
+                                 "reason" => "needs_reading", "method" => "render" } ] }
+      worker = worker_class.new(Pathname.new("tmp/verifier/20261127T120000Z-verify"), [ unread ])
+      allow(Verifier::Worker).to receive(:new).and_return(worker)
+
+      outcome = described_class.run!(check_run)
+
+      expect(Verifier::Worker).to have_received(:new).with(hash_including(free: true))
+      expect(outcome.summary).to eq("1 company checked. Verdicts: 0 changed, 0 confirmed, 0 without an answer. 1 page left unread: " \
+                                    "it needs reading, which a free check leaves for your AI assistant.")
+      expect(outcome.cost_usd).to eq(0)
+      expect(role.reload.verification_state).to eq("pending")
+      expect(company.page_checks.sole).to have_attributes(outcome: "error", reason: "needs_reading", read_via: "render")
+      expect(Verifier::PagesToRead.list.map(&:url)).to eq([ company.careers_page_url ])
+      expect(AgentCredential.sole).to have_attributes(purpose: "check all tracked companies (free)")
     end
 
     it "sets aside a result that breaks the contract, and says so" do

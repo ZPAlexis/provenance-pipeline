@@ -6,6 +6,7 @@ import pytest
 
 from verifier import pipeline
 from verifier.contract import AtsBoard, Listing, PreviousRead, Target, TrackedPosting, VerifyTarget
+from verifier.extract import FreeExtractor
 from verifier.links import link_key
 from verifier.match import Matcher
 from verifier.pipeline import _reused, read_all
@@ -365,3 +366,39 @@ def test_an_oracle_role_link_names_the_role_whatever_language_its_page_is_in():
     assert link_key("https://emfg.fa.em4.oraclecloud.com/hcmUI/CandidateExperience/pt-BR/sites/CX_4001/job/41966/") == (
         link_key(english)
     )
+
+
+# A free check (4f): no LLM anywhere. A page only a reader can list is left unread, and says so; nothing is billed.
+
+
+def test_a_free_check_leaves_a_page_that_needs_reading_unread_and_writes_no_verdict(services, site):
+    services.extractor = FreeExtractor()
+    company = VerifyTarget(id="c1", url=site.url("static.html"), postings=postings("RevOps Engineer"))
+
+    result = verify_company(company, services, Matcher())
+
+    assert (result.outcome, result.reason, result.verdicts) == ("error", "needs_reading", [])
+    (check,) = result.checks
+    assert (check.outcome, check.reason, check.method, check.llm) == ("error", "needs_reading", "render", None)
+    assert check.content_hash.startswith("sha256:")
+    assert "a free check calls no AI" in check.notes
+
+
+def test_a_free_check_still_reuses_an_unchanged_page_and_reads_its_roles_whole(services, site):
+    (first,), _, _ = read_all(target(site, "static.html"), services)
+    services.extractor = FreeExtractor()
+
+    checks, listings, complete = read_all(target(site, "static.html"), services, previous=[previous(first)])
+
+    assert (checks[0].method, complete) == ("reused", True)
+    assert listings == first.listings
+
+
+def test_a_free_check_reads_a_list_only_as_far_as_its_pages_were_read_before(services, site):
+    first_pages, _, _ = read_all(target(site, "paged/1.html"), services)
+    services.extractor = FreeExtractor()
+
+    checks, listings, complete = read_all(target(site, "paged/1.html"), services, previous=[previous(first_pages[0])])
+
+    assert [(check.method, check.reason) for check in checks] == [("reused", None), ("render", "needs_reading")]
+    assert (len(listings), complete) == (2, False)

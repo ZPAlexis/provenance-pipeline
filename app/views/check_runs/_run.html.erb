@@ -16,7 +16,7 @@
     <% elsif run.status == "queued" %>
       <span class="spinner" aria-hidden="true"></span> Waiting for the check before it to finish…
     <% elsif run.status == "running" && run.kind == "all" %>
-      <span class="spinner" aria-hidden="true"></span> Checking all tracked companies:
+      <span class="spinner" aria-hidden="true"></span> Checking all tracked companies<%= ", free" if run.free? %>:
       <%= run.total ? "#{run.progress.to_i} of #{pluralize(run.total, 'company')} read" : "working out what to read" %>,
       started <%= ago(run.started_at) %>…
     <% elsif run.status == "running" && run.kind == "describe" %>

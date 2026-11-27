@@ -11,7 +11,7 @@ RSpec.describe CheckNowJob do
   before { allow(DatabaseBackup).to receive(:daily) }
 
   it "runs the check, backed up at most daily, and keeps what it found on the run" do
-    allow(Verifier::CheckNow).to receive(:role).with(run.posting, issued_by: "human:operator").and_return(outcome)
+    allow(Verifier::CheckNow).to receive(:role).with(run.posting, issued_by: "human:operator", free: false).and_return(outcome)
 
     described_class.perform_now(run)
 
@@ -34,11 +34,22 @@ RSpec.describe CheckNowJob do
 
   it "checks a company's whole careers page for a company run" do
     company_run = create(:check_run, company: company)
-    allow(Verifier::CheckNow).to receive(:company).with(company, issued_by: "human:operator").and_return(outcome)
+    allow(Verifier::CheckNow).to receive(:company).with(company, issued_by: "human:operator", free: false).and_return(outcome)
 
     described_class.perform_now(company_run)
 
     expect(company_run.reload.status).to eq("done")
+  end
+
+  # 4f: a run started with no API key set is a free check, and runs as one.
+  it "runs a free check for a run started with no API key set" do
+    without_api_key
+    free_run = CheckRun.start_for!(company)
+    allow(Verifier::CheckNow).to receive(:company).with(company, issued_by: "human:operator", free: true).and_return(outcome)
+
+    described_class.perform_now(free_run)
+
+    expect(free_run.reload).to have_attributes(status: "done", request: { "mode" => "free" }, ceiling_usd: 0)
   end
 
   it "checks everything for a run over everything, backed up in full by the check itself" do
@@ -55,7 +66,7 @@ RSpec.describe CheckNowJob do
 
   # 4e: a check that found a role's own posting moved its link there; what the page before said is read again from it.
   it "reads again the descriptions of the roles a check read whose own page moved, and says so after what it found" do
-    allow(Verifier::CheckNow).to receive(:role).with(run.posting, issued_by: "human:operator").and_return(outcome)
+    allow(Verifier::CheckNow).to receive(:role).with(run.posting, issued_by: "human:operator", free: false).and_return(outcome)
     allow(Verifier::Descriptions).to receive(:reread_moved!)
       .and_return("One role's own page moved, so its description was read again from it (free): 1 another text.")
 

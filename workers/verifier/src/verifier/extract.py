@@ -29,7 +29,7 @@ from verifier.config import (
     estimate_cost,
 )
 from verifier.contract import EmploymentType, LlmUsage, WorkMode
-from verifier.errors import CreditExhausted, ExtractionFailed, LlmConfigError
+from verifier.errors import CreditExhausted, ExtractionFailed, LlmConfigError, NeedsReading
 from verifier.render import RenderedPage
 
 SYSTEM_PROMPT = """You read the rendered text of a company's careers page and list the job openings it shows.
@@ -263,6 +263,14 @@ class _LlmCaller:
             except anthropic.AnthropicError as error:
                 raise LlmConfigError("no API credential available") from error
         return self._client
+
+
+class FreeExtractor:
+    """A free check's extractor (4f): it never calls the LLM. A page it would have had read is left unread, and its
+    check says so (`needs_reading`), for the operator's own AI assistant, or a check that pays, to read."""
+
+    def extract(self, page: RenderedPage) -> tuple[PageExtraction, LlmUsage]:
+        raise NeedsReading()
 
 
 class LlmExtractor(_LlmCaller):

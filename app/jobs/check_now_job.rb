@@ -33,13 +33,14 @@ class CheckNowJob < ApplicationJob
         Verifier::Descriptions.read!(missing, purpose: "fit: descriptions to weigh", issued_by: check_run.requested_by) if missing.any?
         FitScores.weigh!(roles, issued_by: check_run.requested_by)
       when "links" then ProfileLinks.read!(SearchProfile.current&.profile_links.to_a, issued_by: check_run.requested_by)
-      # Each credential its runs hold says who asked (4e step 12): the operator, or their AI assistant.
-      when "role" then Verifier::CheckNow.role(check_run.posting, issued_by: check_run.requested_by)
+      # Each credential its runs hold says who asked (4e step 12): the operator, or their AI assistant. A free check (4f)
+      # calls no AI: a page that needs reading is left for their assistant.
+      when "role" then Verifier::CheckNow.role(check_run.posting, issued_by: check_run.requested_by, free: check_run.free?)
       else
         if check_run.board_read?
           Verifier::BoardRead.run!(check_run.company, issued_by: check_run.requested_by)
         else
-          Verifier::CheckNow.company(check_run.company, issued_by: check_run.requested_by)
+          Verifier::CheckNow.company(check_run.company, issued_by: check_run.requested_by, free: check_run.free?)
         end
       end
     moved = reread_moved(check_run) if check_run.kind.in?(%w[all role company])

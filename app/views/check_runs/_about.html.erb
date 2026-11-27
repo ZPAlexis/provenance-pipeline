@@ -1,6 +1,9 @@
 <%# What "Check now" reads, and what it could cost: at most what its page cost when last read in full, or about an
-    average list's cost for a page never read (4e). %>
-<% if role && record.company.resolution_status != "resolved" %>
+    average list's cost for a page never read (4e). Free when no API key is set (4f). %>
+<% if Verifier::CheckNow.free_only? %>
+  Free: no API key is set, so no AI reads a page<%= ": its own page first, then its company's careers page" if role %>. A
+  careers page that needs reading is left for your AI assistant.
+<% elsif role && record.company.resolution_status != "resolved" %>
   Finds <%= record.company.name %>'s careers page first, then checks the role, its own page first: <%= check_cost(ceiling, record) %>.
 <% elsif role %>
   Its own page first, free. <%= ceiling.positive? ? "#{check_cost(ceiling, record).upcase_first} if its company's careers page must be read again." : "Its company's careers page is free to read too." %>

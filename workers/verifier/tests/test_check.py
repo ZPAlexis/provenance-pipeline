@@ -4,6 +4,7 @@ import pytest
 from verifier import check as check_module
 from verifier.check import CLOSED, check_posting
 from verifier.contract import TrackedPosting, VerifyTarget
+from verifier.extract import FreeExtractor
 from verifier.match import Matcher
 
 
@@ -172,3 +173,17 @@ def test_a_role_whose_heading_names_only_the_company_is_named_by_one_llm_read(se
     assert "as the LLM read it" in verdict.reasoning
     assert len(services.extractor.calls) == 1
     assert result.checks[0].method == "render+llm" and result.checks[0].llm is not None
+
+
+def test_a_free_check_never_names_a_role_with_the_llm_and_leaves_its_careers_page_for_a_reader(services, site):
+    services.extractor = FreeExtractor()
+    target = role(site, "(title pending)", "jobs/untitled-role.html", title_from_page=True)
+    target = target.model_copy(update={"name": "Example Co"})
+
+    result = check_posting(target, services, Matcher())
+
+    own = result.checks[-1]
+    assert (own.reason, own.method, own.llm) == ("role_not_named", "render", None)
+    assert "a free check calls no AI to read it" in own.notes
+    assert result.verdicts == []  # its company's page, read next, needs reading too
+    assert result.checks[0].reason == "needs_reading"

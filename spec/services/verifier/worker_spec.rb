@@ -94,6 +94,16 @@ RSpec.describe Verifier::Worker do
       expect(process.spawned[:command]).to include("own_board")
     end
 
+    # Found 2026-11-27: a failing spec's diff printed a worker by its inspect, key and all.
+    it "is never printed when a worker is" do
+      credential_file.write("ANTHROPIC_API_KEY=sk-test-123\n")
+      read = worker(fake_process)
+      read.credential?
+
+      expect(read.inspect).not_to include("sk-test")
+      expect(read.inspect).to include("free=false")
+    end
+
     it "is simply absent when there is no credential file" do
       process = fake_process
 
@@ -101,6 +111,28 @@ RSpec.describe Verifier::Worker do
       worker(process).run(targets)
       expect(process.spawned[:env]).to eq({})
     end
+
+    # 4f: without a key set at all, every check is a free one.
+    it "says whether a key is set at all" do
+      allow(described_class).to receive(:credential_set?).and_call_original
+
+      expect(described_class.credential_set?(credential_file:)).to be(false)
+      credential_file.write("ANTHROPIC_API_KEY=sk-test-123\n")
+      expect(described_class.credential_set?(credential_file:)).to be(true)
+    end
+  end
+
+  # 4f: a free worker runs a check as a free check, leaving what needs reading; any other command it runs as before.
+  it "runs a check as a free check when it is free, and only a check" do
+    %w[verify check own_board].each do |command|
+      process = fake_process
+      worker(process, free: true).run(targets, command:)
+      expect(process.spawned[:command].include?("--free")).to eq(command != "own_board")
+    end
+
+    process = fake_process
+    worker(process).run(targets, command: "verify")
+    expect(process.spawned[:command]).not_to include("--free")
   end
 
   it "keeps the finished results of a run that stopped because credit ran out" do

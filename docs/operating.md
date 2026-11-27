@@ -32,7 +32,7 @@ The worker lives in [`workers/verifier`](../workers/verifier) (Python, managed w
 cd workers/verifier && uv sync && uv run playwright install chromium
 ```
 
-It calls the Anthropic API with a key kept outside the repo, in `~/.config/provenance-pipeline/anthropic.env` (mode 600, one line: `ANTHROPIC_API_KEY=...`). Rails reads it and hands it to the worker process alone; it is never exported to the shell. Tests never call the API.
+It calls the Anthropic API with a key kept outside the repo, in `~/.config/provenance-pipeline/anthropic.env` (mode 600, one line: `ANTHROPIC_API_KEY=...`). Rails reads it and hands it to the worker process alone; it is never exported to the shell. Tests never call the API. Without a key, every check is a free one (4f): no AI anywhere, a careers page that needs reading left unread for the operator's own AI assistant, and a company with no careers page set by hand (finding one takes the AI).
 
 Everything runs through rake. Each run writes its targets and results under `tmp/verifier/` (ignored) and records what it found through the one audited write path:
 
@@ -43,11 +43,12 @@ bin/rails "verifier:confirm[company_id]"         # or verifier:reject, verifier:
 COMPANY_NAME="..." bin/rails "verifier:rename[company_id]"  # rename a company, audited as you
 bin/rails "verifier:status[company name or id]"  # one company: its page, checks, postings, history
 bin/rails "verifier:extract[https://...]"        # read one careers page and list what it shows; records nothing (MODEL=)
-bin/rails verifier:verify                        # check all tracked companies: the plan and its cost; GO=1 runs it
+bin/rails verifier:verify                        # check all tracked companies: the plan and its cost; GO=1 runs it (FREE=1: no AI)
+bin/rails verifier:to_read                       # the careers pages a free check left unread, oldest first (4f)
 bin/rails verifier:changes                       # what changed since the check before the latest (FROM=), as the audit log's Check results
 bin/rails "verifier:describe[posting_id]"        # read a role's description (ROLES=applications|tracked for many); free
 bin/rails verifier:find_boards                   # free boards listing the same roles as LLM-read pages (no API cost)
-bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's
+bin/rails "verifier:check[posting_id]"           # is this role still listed? its own page first, then its company's (FREE=1)
 bin/rails "verifier:track[posting_id]"           # or verifier:dismiss (archive it): your watch list, with NOTE="why"
 bin/rails "verifier:dismiss_company[company_id]" # archive a company and its roles in play (NOTE=); verifier:track_company undoes it (ROLES=0 leaves its roles)
 bin/rails verifier:proposals                     # the companies your own AI assistant proposed (4b): track one (verifier:track_company reads its board then, free) or decline it (verifier:dismiss_company)
@@ -123,7 +124,7 @@ It serves the operator's pages at `http://localhost:3000`. The top bar holds the
 
 - **Dashboard:** three tabs, each with what stands now in tiles and how it has gone under them, since a day if set. The pipeline: applications by stage, each with its median days there, how far they get, how long they sit, how they end. The watch: the tracked roles by listing, how fresh their answers are, the companies, how old their lists are, how long roles stay listed, answers week by week. The agents: API credit, the runs asked for lately and who asked, AI cost, agreement on the review queue, writes and refusals.
 - **Pipeline:** the applications by stage, each with a page to move it, log what happened and with whom, keep its contacts and notes (the AI assistant adds a dated note there on the operator's word, never in place of theirs), write and approve its drafts, and read its timeline, with its role's own page and its company's site and careers page linked.
-- **Roles:** tracked, suggested with why, archived, filtered by listing and by fit, sorted by fit; the unscored, or those weighed before the background, weighed from there. "Add by link" adds a role by its own page (since 4e a role's ATS board is watched at once and the role checked right after when that costs nothing, never a check that could spend unasked). "Check all tracked companies" shows its plan and what it could cost ("at most" what the pages cost when last read in full, "about" when some were never read, priced at an average list), then its progress. Each role's page holds its fit (the ATS fit and the Background fit), its description (read again from its own page, free, when a check moves that page), and its checks and history.
+- **Roles:** tracked, suggested with why, archived, filtered by listing and by fit, sorted by fit; the unscored, or those weighed before the background, weighed from there. "Add by link" adds a role by its own page (since 4e a role's ATS board is watched at once and the role checked right after when that costs nothing, never a check that could spend unasked). "Check all tracked companies" shows its plan and what it could cost ("at most" what the pages cost when last read in full, "about" when some were never read, priced at an average list), then its progress; "Check free" beside it (4f, the only one when no API key is set) calls no AI, leaving the pages that need reading for the AI assistant, listed under it until a later check reads them. Each role's page holds its fit (the ATS fit and the Background fit), its description (read again from its own page, free, when a check moves that page), and its checks and history.
 - **Companies:** tracked, proposed or archived, narrowed to those with no careers page yet, a page to confirm, no role tracked, or roles tracked none of which is still listed; each with its domain, careers page, roles and application, and a page of its own with its review and its contacts.
 - **Review:** the questions waiting for the operator, by kind, each naming its company (its domain linked) and role and decided with a button; a check asked from one is followed on the item until it says whether it settled it.
 - **Audit log:** every write on record, narrowed by who made it, the kind of record, the action, the days, one record or credential, and an attribute it changed; and, in its Check results tab, what a check of all tracked companies found and since, in one table, what needs you marked.

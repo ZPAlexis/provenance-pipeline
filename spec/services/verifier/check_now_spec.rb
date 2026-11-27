@@ -138,6 +138,36 @@ RSpec.describe Verifier::CheckNow do
     end
   end
 
+  # 4f: with no API key set, every check is a free one: nothing to pay, a careers page never searched for (that takes the
+  # AI), and a page that needs reading left for the operator's AI assistant, said so.
+  describe "a free check" do
+    it "costs nothing and asks nothing with no API key set, and refuses to look for a careers page" do
+      create(:llm_call, page_check: create(:page_check, company: company, purpose: "verification", step: nil), cost_usd: 0.02)
+      without_api_key
+
+      expect([ described_class.free_only?, described_class.ceiling(role), described_class.free?(role) ]).to eq([ true, 0.0, true ])
+      expect(described_class.refusal(role)).to be_nil
+      expect(described_class.refusal(create(:company, name: "Contoso"))).to eq(
+        "Contoso has no careers page on record, and finding one takes the app's AI: no API key is set. Set it by hand on its page."
+      )
+    end
+
+    it "says when it left its company's careers page unread, and writes no verdict" do
+      unread = verification(verdicts: []).merge("outcome" => "error", "reason" => "needs_reading",
+                                                "checks" => [ { "url" => company.careers_page_url, "checked_at" => "2026-11-27T12:00:00+00:00",
+                                                                "outcome" => "error", "reason" => "needs_reading", "method" => "render" } ])
+
+      role_outcome = described_class.role(role, worker: worker_class.new([ unread ]), free: true)
+      company_outcome = described_class.company(company, worker: worker_class.new([ unread ]), free: true)
+
+      expect(role_outcome).to have_attributes(answer: nil, cost_usd: 0.0)
+      expect(role_outcome.summary).to start_with("Its careers page needs reading, which a free check leaves for your AI assistant; nothing was written.")
+      expect(company_outcome.summary).to start_with("Not read: its careers page needs reading, which a free check leaves for your AI assistant.")
+      expect(role.reload.verification_state).to eq("pending")
+      expect(AgentCredential.where(purpose: "check now: Acme (free)")).to exist
+    end
+  end
+
   describe ".ceiling" do
     it "is nothing through a free board, what the page cost when last read in full, or an average read" do
       create(:llm_call, cost_usd: 0.02)

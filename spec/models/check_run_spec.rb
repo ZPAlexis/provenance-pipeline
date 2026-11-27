@@ -45,7 +45,7 @@ RSpec.describe CheckRun do
 
   describe "a check of all tracked companies" do
     it "needs no company, and is one at a time" do
-      allow(Verifier::CheckAll).to receive(:plan).and_return(Verifier::CheckAll::Plan.new(targets: [], via_board: 0, reusable: 0, ceiling: 0.42, unread: 0))
+      allow(Verifier::CheckAll).to receive(:plan).and_return(Verifier::CheckAll::Plan.new(targets: [], via_board: 0, reusable: 0, ceiling: 0.42, unread: 0, to_read: 0))
 
       first = described_class.start_all!
 

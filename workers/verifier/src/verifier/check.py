@@ -35,7 +35,7 @@ from verifier.contract import (
     VerificationResult,
     VerifyTarget,
 )
-from verifier.errors import ExtractionFailed
+from verifier.errors import ExtractionFailed, NeedsReading
 from verifier.links import same_job
 from verifier.match import Matcher
 from verifier.pipeline import Services, board_read
@@ -215,6 +215,8 @@ def _name(page: RenderedPage, target: VerifyTarget, services: Services) -> tuple
         return Listing(title=title, url=url), "as its heading names it", None
     try:
         extraction, usage = services.extractor.extract(page)
+    except NeedsReading:
+        return None, "its heading is unclear, and a free check calls no AI to read it", None
     except ExtractionFailed as error:
         return None, f"the LLM could not read it: {error.reason}", error.usage
     if not extraction.listings:

@@ -42,7 +42,7 @@ So I built one, and I use it for my own job search.
 | **Governance** | Permission sets and field-level security for AI agents: a credential per run, checked at every write down to the fields it sets; refused writes on the record; an append-only audit log, enforced by the database |
 | **Data** | Careers pages read in a real browser, robots.txt honored; five job boards read through their own feeds (Greenhouse, Lever, Ashby, Workday, Oracle Cloud) |
 | **Measured** | 58 of 59 verdicts right on fresh reads, and every role reported closed was closed (12 of 12); 87% of hidden careers pages found again ([AI evaluation](#measured-results)) |
-| **Quality** | 962 RSpec examples and 351 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
+| **Quality** | 975 RSpec examples and 355 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
 | **Stack** | Ruby on Rails 8.1, PostgreSQL 16, Python 3.13, the Claude API, MCP ([in full](#stack)) |
 
 ## How this maps to GTM work
@@ -221,7 +221,7 @@ bin/rails db:create db:migrate
 bin/rails server    # http://localhost:3000
 ```
 
-The AI steps read a key kept outside the repo, in `~/.config/provenance-pipeline/anthropic.env` (one line: `ANTHROPIC_API_KEY=...`), handed to the worker process alone. Without it, what needs no model still works (job-board feeds, suggestions, descriptions, the pages), and through MCP the operator's own AI assistant does the model's work, on their own subscription.
+The AI steps read a key kept outside the repo, in `~/.config/provenance-pipeline/anthropic.env` (one line: `ANTHROPIC_API_KEY=...`), handed to the worker process alone. Without it, what needs no model still works (job-board feeds, suggestions, descriptions, the pages), every check runs free (a careers page that needs reading is left unread, and says so), and through MCP the operator's own AI assistant does the model's work, on their own subscription.
 
 There is no demo data yet: the record is built from the operator's own target list, imported or added by link, and kept out of the repo. A made-up dataset comes with the demo. Every command, the import, backups and the pages: [Running it](docs/operating.md). Connecting an AI assistant: [the MCP server](docs/mcp.md).
 
