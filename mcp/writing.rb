@@ -211,7 +211,8 @@ module ProvenanceMcp
     # Tags that fence the record's text as data; a tag of these inside the text itself is taken out. Every tool keeps
     # its own framing (counts, ids, what to do next) outside them, and puts what came from the record or a page read
     # (names, titles, places, notes, bodies, reasoning) inside.
-    FENCES = %w[role_description resume background links profile notes contacts contact review evidence record draft].freeze
+    FENCES = %w[role_description resume background links profile notes contacts contact review evidence record draft page_text
+                page_links].freeze
 
     # Said after a description read from a page that is no longer its role's own (4e): a check found the role's own
     # posting since, and the page before may have described another role, or none.

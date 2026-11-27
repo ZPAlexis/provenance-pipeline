@@ -64,6 +64,26 @@ RSpec.describe Verifier::ResultContract do
     expect(described_class.page_errors(check(listings_read_at: "last week"))).to include("listings_read_at must be an ISO 8601 time")
   end
 
+  # 4f: a careers page opened for the AI assistant to read.
+  describe ".render_errors" do
+    def render(**overrides)
+      { "kind" => "render", "target_id" => "c1", "url" => "https://acme.example/careers", "outcome" => "ok", "text" => "",
+        "links" => [ [ "RevOps Engineer", "https://acme.example/jobs/1" ] ], "content_hash" => "sha256:#{'b' * 64}",
+        "checked_at" => "2026-11-27T12:00:00+00:00" }.merge(overrides.transform_keys(&:to_s))
+    end
+
+    it "accepts a page opened (an empty text too), and one that wasn't, which carries no page" do
+      expect(described_class.render_errors(render)).to be_empty
+      expect(described_class.render_errors(render(outcome: "blocked", text: nil, links: nil, content_hash: nil))).to be_empty
+    end
+
+    it "refuses links that aren't pairs, a page with no hash, and what isn't a render" do
+      expect(described_class.render_errors(render(links: [ "https://acme.example/jobs/1" ], content_hash: "x", kind: "page", outcome: "ok")))
+        .to eq([ "kind must be render", "links must be [link text, address] pairs", "content_hash must be a sha256" ])
+      expect(described_class.render_errors(render(outcome: "maybe"))).to eq([ "unknown outcome \"maybe\"" ])
+    end
+  end
+
   describe ".board_errors" do
     def board(**overrides)
       { "kind" => "board", "target_id" => "c1", "outcome" => "adopted", "board" => { "vendor" => "ashby", "board" => "acme" },

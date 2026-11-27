@@ -275,3 +275,22 @@ def test_suggest_weighs_stored_roles_without_a_browser_and_counts_what_fits(tmp_
         ("c2", 0, []),
     ]
     assert "2/2 companies, 1 fit (1 new)" in capfd.readouterr().err
+
+
+# 4f: pages opened for the operator's own AI assistant to read, never by the LLM; what they say stays out of the log.
+def test_read_writes_one_render_per_page_counting_never_quoting_what_it_says(services, site, tmp_path):
+    from verifier.cli import run_read
+    from verifier.contract import RenderResult
+
+    out = tmp_path / "renders.jsonl"
+    log = io.StringIO()
+
+    summary = run_read(targets(site, "static.html", "private/page.html"), out, services, log=log)
+
+    results = [RenderResult.model_validate_json(line) for line in out.read_text().splitlines()]
+    assert [result.outcome for result in results] == ["ok", "blocked"]
+    assert results[0].text and results[0].links
+    assert summary.outcomes == {"ok": 1, "blocked": 1}
+    assert f"{len(results[0].text)} characters, {len(results[0].links)} links" in log.getvalue()
+    assert results[0].text[:40] not in log.getvalue()
+    assert services.extractor.calls == []

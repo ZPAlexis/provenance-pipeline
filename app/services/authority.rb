@@ -75,8 +75,8 @@ module Authority
       ]
     },
     "evidence:write" => {
-      about: "Page checks, LLM calls, roles' descriptions, and (4d) the pages the operator's own links show: what was " \
-             "read, how, and what it cost.",
+      about: "Page checks, LLM calls, roles' descriptions, (4d) the pages the operator's own links show, and (4f) a " \
+             "careers page rendered for their AI assistant to read: what was read, how, and what it cost.",
       rules: [
         Rule.new(model: "PageCheck", actions: %i[create]),
         Rule.new(model: "PageCheck", actions: %i[update], attributes: %w[matches complete]),
@@ -84,6 +84,7 @@ module Authority
         Rule.new(model: "RoleDescription", actions: %i[create]),
         Rule.new(model: "RoleDescription", actions: %i[update], attributes: %w[last_read_at]),
         Rule.new(model: "LinkPage", actions: %i[create]),
+        Rule.new(model: "PageRender", actions: %i[create]),
         Rule.new(model: "LinkPage", actions: %i[update], attributes: %w[last_read_at]),
         # What a read of a link found, never the link itself: its label and address are the operator's alone.
         Rule.new(model: "ProfileLink", actions: %i[update], attributes: %w[read_at read_outcome read_reason read_skipped])

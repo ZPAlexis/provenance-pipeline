@@ -51,7 +51,8 @@ module ProvenanceMcp
 
           suggested = as_assistant { up.map { |candidate, why| [ Verifier::Suggestions.propose!(candidate, why: why, actor: ASSISTANT), candidate ] } }
           reads = Verifier::Descriptions.keep!(suggested.map { |posting, candidate| [ posting, peeked.results.fetch(candidate.key) ] },
-                                               run_id: peeked.run_id, purpose: "mcp: suggest_roles, the descriptions read")
+                                               run_id: peeked.run_id, purpose: "mcp: suggest_roles, the descriptions read",
+                                               issued_by: ASSISTANT)
           ProvenanceMcp.text(
             "Read #{candidates.size} #{candidates.one? ? "role's own page" : "roles' own pages"} first (free): suggested " \
             "#{suggested.size} still up, as yours, among the suggested roles in the app, each with its description read:",

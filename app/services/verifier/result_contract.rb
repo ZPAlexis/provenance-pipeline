@@ -139,6 +139,30 @@ module Verifier
       errors
     end
 
+    RENDER_OUTCOMES = %w[ok blocked inaccessible error].freeze
+
+    # A careers page opened for the operator's own AI assistant to read (4f): on ok, its text (empty or not), its links
+    # as [link text, address] pairs, a hash naming it, and when; never anything the LLM read.
+    def render_errors(result)
+      return [ "not an object" ] unless result.is_a?(Hash)
+
+      errors = []
+      errors << "kind must be render" unless result["kind"] == "render"
+      errors << "target_id is missing" if result["target_id"].blank?
+      errors << "url must be a web address" unless web_url?(result["url"])
+      outcome = result["outcome"]
+      errors << "unknown outcome #{outcome.inspect}" unless RENDER_OUTCOMES.include?(outcome)
+      return errors unless outcome == "ok"
+
+      errors << "text must be text" unless result["text"].is_a?(String)
+      unless result["links"].is_a?(Array) && result["links"].all? { |link| link.is_a?(Array) && link.size == 2 && link.all?(String) }
+        errors << "links must be [link text, address] pairs"
+      end
+      errors << "content_hash must be a sha256" unless result["content_hash"].to_s.match?(/\Asha256:\h{64}\z/)
+      errors << "checked_at must be an ISO 8601 time" unless iso8601?(result["checked_at"])
+      errors
+    end
+
     # What one of the operator's links showed (4d): each page's address, text, hash and how it was read.
     def portfolio_errors(result)
       return [ "not an object" ] unless result.is_a?(Hash)

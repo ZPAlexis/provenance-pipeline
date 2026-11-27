@@ -32,6 +32,9 @@ fit      weighs each role against the resume, from its description and the
 portfolio reads each of the operator's own links (4d): a GitHub account or repo
          through its public API, any other site rendered with its same-site pages
          one level deep. One PortfolioResult per link; never calls the LLM.
+read     opens each careers page for another reader (4f), the operator's own AI
+         assistant: its text and numbered links, as the extractor would see them.
+         One RenderResult per page; never calls the LLM.
 
 Reads the targets Rails wrote, works through them one at a time, and appends
 one JSON result per target as it goes, so a run that stops early still leaves
@@ -76,6 +79,7 @@ from verifier.contract import (
     PortfolioTarget,
     RelatedResult,
     RelateTarget,
+    RenderResult,
     ResolutionResult,
     ResolveTarget,
     ReviewResult,
@@ -112,6 +116,7 @@ _NO_PAGES = (
     ReviewResult,
     FitResult,
     PortfolioResult,
+    RenderResult,
 )
 _OWN_CALL = (MatchResult, RelatedResult, DraftResult, ReviewResult, FitResult)
 _OWN_REASON = (
@@ -123,6 +128,7 @@ _OWN_REASON = (
     ReviewResult,
     FitResult,
     PortfolioResult,
+    RenderResult,
 )
 
 Result = (
@@ -138,6 +144,7 @@ Result = (
     | ReviewResult
     | FitResult
     | PortfolioResult
+    | RenderResult
 )
 
 
@@ -299,6 +306,15 @@ def run_portfolio(targets: list[PortfolioTarget], out_path: Path, services: Serv
     return _run(targets, out_path, lambda target: read_link(target, services), failed, log)
 
 
+def run_read(targets: list[Target], out_path: Path, services: Services, log=sys.stderr) -> RunSummary:
+    from verifier.reading import read_page
+
+    def failed(target: Target, reason: str) -> RenderResult:
+        return RenderResult(target_id=target.id, url=target.url, outcome="error", reason=reason)
+
+    return _run(targets, out_path, lambda target: read_page(target, services), failed, log)
+
+
 def _run(targets: list, out_path: Path, work: Callable, failed: Callable, log) -> RunSummary:
     summary = RunSummary()
     outage_streak = 0
@@ -358,6 +374,10 @@ def _describe(target: Target | ResolveTarget | OwnBoardTarget | BoardTarget | Su
         read = f"{len(result.pages)} pages, {sum(len(page.text) for page in result.pages)} characters"
         read += f", {result.skipped} left unread" if result.skipped else ""
         said = read if result.outcome == "ok" else result.reason
+        return f"{target.label or target.id}: {result.outcome}, {said} {timing}"
+    if isinstance(result, RenderResult):  # counts only: what the page says is for its reader
+        opened = f"{len(result.text or '')} characters, {len(result.links)} links"
+        said = opened if result.outcome == "ok" else result.reason
         return f"{target.label or target.id}: {result.outcome}, {said} {timing}"
     if isinstance(result, DescriptionResult):
         read = f"{len(result.text or '')} characters via {result.read_via}" if result.outcome == "ok" else result.reason
@@ -446,6 +466,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("review", parents=[common], help="review the resume against an application's role")
     commands.add_parser("fit", parents=[common], help="weigh roles against the resume, from their descriptions")
     commands.add_parser("portfolio", parents=[common], help="read the operator's own links; never calls the LLM")
+    commands.add_parser("read", parents=[common], help="open careers pages for another reader; never calls the LLM")
     args = parser.parse_args(argv)
     llm_model = args.model or (DRAFT_MODEL if args.command in ("draft", "review") else DEFAULT_MODEL)
 
@@ -507,7 +528,7 @@ def main(argv: list[str] | None = None) -> int:
     from verifier.match import Matcher
 
     # A free check (4f): no LLM anywhere in it. Pages only a reader can list are left unread, and say so.
-    free = getattr(args, "free", False)
+    free = getattr(args, "free", False) or args.command == "read"
 
     if args.command == "related":
         # Nothing is fetched: one LLM call per profile.
@@ -556,6 +577,8 @@ def main(argv: list[str] | None = None) -> int:
                 summary = run_describe(targets, args.out, services)
             elif args.command == "portfolio":
                 summary = run_portfolio(targets, args.out, services)
+            elif args.command == "read":
+                summary = run_read(targets, args.out, services)
             elif args.command in ("verify", "check"):
                 matcher = Matcher(adjudicator=None if args.no_llm or free else LlmMatcher(model=llm_model))
                 run_command = run_verify if args.command == "verify" else run_check

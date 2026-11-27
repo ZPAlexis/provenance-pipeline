@@ -453,6 +453,33 @@ class DescriptionResult(BaseModel):
     duration_ms: int = 0
 
 
+class RenderResult(BaseModel):
+    """A careers page opened for another reader (4f): the operator's own AI assistant, through MCP. Never the LLM here.
+
+    ok           opened: `text` and `links` as the extractor would see them (cut where its are), links in page order
+    blocked      robots.txt keeps us off it
+    inaccessible the site refused or failed us (a bot challenge, an error status, a page that never loaded)
+    error        our own failure
+    """
+
+    schema_version: int = RESULT_SCHEMA_VERSION
+    kind: Literal["render"] = "render"
+    target_id: str
+    url: str
+    outcome: Literal["ok", "blocked", "inaccessible", "error"]
+    reason: str | None = None
+    final_url: str | None = None
+    http_status: int | None = None
+    title: str | None = None
+    text: str | None = None
+    text_truncated: bool = False
+    links: list[tuple[str, str]] = Field(default_factory=list)  # (link text, absolute URL), numbered from 1 by order
+    links_truncated: bool = False
+    content_hash: str | None = None
+    checked_at: str | None = None
+    duration_ms: int = 0
+
+
 DraftKind = Literal["cover_letter", "outreach"]
 
 

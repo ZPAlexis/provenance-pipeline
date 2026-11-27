@@ -284,3 +284,14 @@ def test_the_match_request_numbers_listings_as_the_page_does():
     assert "[2] Sales Engineer, Latin America — Remote" in content
     assert "Designer" not in content
     assert usage.purpose == "match"
+
+
+# 4f: the reading rules live in reading_rules.md, shared with the MCP server; moving them changed no word of the
+# prompt, so its version stands. A change to the rules is a new version, made on purpose.
+def test_reads_its_rules_from_the_shared_file_word_for_word():
+    from verifier.extract import EXTRACT_PROMPT_VERSION, READING_RULES_FILE, SYSTEM_PROMPT
+
+    assert SYSTEM_PROMPT.startswith("You read the rendered text of a company's careers page")
+    assert SYSTEM_PROMPT.endswith("- notes: one or two plain sentences on what the page showed.")
+    assert SYSTEM_PROMPT in READING_RULES_FILE.read_text(encoding="utf-8")
+    assert EXTRACT_PROMPT_VERSION == "c165633c47dd"

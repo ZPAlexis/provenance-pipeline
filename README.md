@@ -38,11 +38,11 @@ So I built one, and I use it for my own job search.
 |---|---|
 | **Agents** | 6 agents, plus the review queue's system grant: 18 permission types in all, and 8 decisions only the operator can make |
 | **AI** | Claude through the Anthropic API: Haiku 4.5 reads pages, settles near-miss matches and weighs fit; Opus 5.5 writes drafts and resume reviews. Structured outputs, each prompt versioned, each call's cost on the record |
-| **MCP** | A server of 31 tools and 9 prompts, through which the operator's AI assistant reads the record and saves its work, under a credential for each call. Any MCP client should work; only Claude Desktop has been tested so far |
+| **MCP** | A server of 33 tools and 9 prompts, through which the operator's AI assistant reads the record and saves its work, under a credential for each call. Any MCP client should work; only Claude Desktop has been tested so far |
 | **Governance** | Permission sets and field-level security for AI agents: a credential per run, checked at every write down to the fields it sets; refused writes on the record; an append-only audit log, enforced by the database |
 | **Data** | Careers pages read in a real browser, robots.txt honored; five job boards read through their own feeds (Greenhouse, Lever, Ashby, Workday, Oracle Cloud) |
 | **Measured** | 58 of 59 verdicts right on fresh reads, and every role reported closed was closed (12 of 12); 87% of hidden careers pages found again ([AI evaluation](#measured-results)) |
-| **Quality** | 975 RSpec examples and 355 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
+| **Quality** | 984 RSpec examples and 360 worker tests; RuboCop, Brakeman, bundler-audit and ruff; CI on every push |
 | **Stack** | Ruby on Rails 8.1, PostgreSQL 16, Python 3.13, the Claude API, MCP ([in full](#stack)) |
 
 ## How this maps to GTM work
@@ -127,7 +127,7 @@ Measured on the operator's real target list, which stays out of the repo; the te
 flowchart TB
     op(["Operator"]) --> pages["Rails pages (Hotwire)"]
     op --> desk["Claude Desktop<br/>the operator's own client"]
-    desk -- "stdio" --> mcp["MCP server<br/>31 tools · 9 prompts"]
+    desk -- "stdio" --> mcp["MCP server<br/>33 tools · 9 prompts"]
     pages --> services["Rails services"]
     mcp --> services
     services --> authority["Authority<br/>checks every agent write"]

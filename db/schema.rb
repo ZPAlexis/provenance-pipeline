@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_17_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -349,6 +349,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_000002) do
     t.index ["run_id"], name: "index_page_checks_on_run_id"
   end
 
+  create_table "page_renders", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "company_id", null: false
+    t.uuid "page_check_id"
+    t.string "run_id", null: false
+    t.string "url", null: false
+    t.string "final_url"
+    t.integer "http_status"
+    t.string "title"
+    t.text "text", null: false
+    t.boolean "text_truncated", default: false, null: false
+    t.jsonb "links", default: [], null: false
+    t.boolean "links_truncated", default: false, null: false
+    t.string "content_hash", null: false
+    t.datetime "rendered_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_page_renders_on_company_id"
+    t.index ["page_check_id", "rendered_at"], name: "index_page_renders_on_page_check_id_and_rendered_at"
+  end
+
   create_table "postings", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "company_id", null: false
     t.string "role_title", null: false
@@ -511,6 +531,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_17_000002) do
   add_foreign_key "llm_calls", "page_checks"
   add_foreign_key "page_checks", "companies"
   add_foreign_key "page_checks", "page_checks", column: "reused_from_id", on_delete: :nullify
+  add_foreign_key "page_renders", "companies"
+  add_foreign_key "page_renders", "page_checks"
   add_foreign_key "postings", "companies"
   add_foreign_key "profile_links", "search_profiles", on_delete: :cascade
   add_foreign_key "resume_reviews", "applications", on_delete: :cascade

@@ -175,7 +175,8 @@ RSpec.describe ProvenanceMcp do
       expect(client.tools.map(&:name)).to include("get_company_status", "get_application_materials", "save_draft", "save_resume_review",
                                                    "list_contacts", "save_contact", "log_activity", "query_audit_log", "get_analytics",
                                                    "get_company_preferences", "save_company_preferences", "check_company",
-                                                   "suggest_companies", "save_company_review", "save_application_notes")
+                                                   "suggest_companies", "save_company_review", "save_application_notes",
+                                                   "get_pages_to_read", "read_careers_page")
 
       response = client.call_tool(name: "get_company_status", arguments: { company: "no-such-company.example" })
       expect(response.dig("result", "isError")).to be(true)

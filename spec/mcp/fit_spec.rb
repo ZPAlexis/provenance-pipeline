@@ -118,8 +118,9 @@ RSpec.describe "Finding and weighing roles through MCP" do
                               "- Solutions Consultant at Acme: Its board or its page no longer has it (http_404). Its company's next check takes it off the list.",
                               "- #{read.id}:1: Recruiter at Acme is on record already (#{taken.tracking})", "- nonsense: no role",
                               "get_roles_to_weigh: #{suggested.id}")
-      expect(AgentCredential.order(:created_at).map { |credential| [ credential.actor, credential.scopes, credential.status ] })
-        .to eq([ [ "agent:assistant", %w[postings:suggest], "revoked" ], [ "agent:verifier", %w[evidence:write], "revoked" ] ])
+      expect(AgentCredential.order(:created_at).map { |credential| [ credential.actor, credential.scopes, credential.status, credential.issued_by ] })
+        .to eq([ [ "agent:assistant", %w[postings:suggest], "revoked", "human:operator" ],
+                 [ "agent:verifier", %w[evidence:write], "revoked", "agent:assistant" ] ]) # 4f: the read, as asked by the assistant
     end
 
     it "suggests none when every page is gone, writing nothing" do
@@ -140,7 +141,7 @@ RSpec.describe "Finding and weighing roles through MCP" do
 
       text = said(call(:ReadDescriptions, roles: [ role.id, "not-an-id" ]))
 
-      expect(Verifier::Descriptions).to have_received(:read!).with([ role ], purpose: "mcp: read_descriptions")
+      expect(Verifier::Descriptions).to have_received(:read!).with([ role ], purpose: "mcp: read_descriptions", issued_by: "agent:assistant")
       expect(text).to include("Read 1 of 1; between markers", "<record>\n- Customer Engineer at Acme (#{role.id}): read, 412 words")
       expect(said(call(:ReadDescriptions, roles: [ "not-an-id" ]))).to start_with("No role by those ids")
     end

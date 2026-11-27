@@ -1,6 +1,7 @@
 class Company < ApplicationRecord
   has_many :postings, dependent: :destroy
   has_many :page_checks, dependent: :destroy
+  has_many :page_renders, dependent: :destroy # pages rendered for the AI assistant to read (4f)
   has_many :check_runs, dependent: :destroy
   has_many :review_items, dependent: :destroy
   has_many :applications, dependent: :restrict_with_exception

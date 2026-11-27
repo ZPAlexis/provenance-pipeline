@@ -141,6 +141,13 @@ check_runs    kind (role | company | all | describe | draft | review | fit |
               (a check asked for from the pages, run in the background,
               which the page polls)
 
+page_renders  company_id, page_check_id (the check that left it unread), run_id,
+              url, final_url, http_status, title, text, text_truncated,
+              links (jsonb: [link text, address] pairs in page order),
+              links_truncated, content_hash, rendered_at (4f: a careers page a
+              free check left unread, opened for the operator's AI assistant to
+              read, as the extractor would see it, never by the AI here)
+
 llm_calls     page_check_id, run_id, purpose (extract | resolve | match | relate | draft |
               review | fit), model,
               settings, prompt_version, input_tokens, output_tokens, cost_usd,

@@ -49,6 +49,23 @@ module Verifier
     # company's board, or none, changes nothing: the company has no page yet, for Check now to find.
     def own_board(result) = resolution(result, applied: %w[resolved candidate])
 
+    # A careers page opened for the operator's own AI assistant to read (4f): kept as evidence when it opened, for what
+    # the assistant saves of it to be checked against. Returns the PageRender, or nil when the page could not be opened
+    # (the result says why). Raises InvalidResult, writing nothing, for a result that breaks the contract.
+    def render(result, company:, page_check: nil)
+      errors = ResultContract.render_errors(result)
+      raise InvalidResult, "#{result.try(:[], 'target_id') || '(no target)'}: #{errors.join('; ')}" if errors.any?
+      return unless result["outcome"] == "ok"
+
+      company.page_renders.create!(
+        page_check: page_check, run_id: @run_id, url: result["url"], final_url: result["final_url"],
+        http_status: result["http_status"], title: result["title"], text: result["text"],
+        text_truncated: result["text_truncated"] || false, links: result["links"],
+        links_truncated: result["links_truncated"] || false, content_hash: result["content_hash"],
+        rendered_at: result["checked_at"]
+      )
+    end
+
     # Returns counts of what happened to the postings: written, unchanged, inconclusive.
     def verification(result)
       errors = ResultContract.verification_errors(result)
